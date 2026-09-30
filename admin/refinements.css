@@ -29,3 +29,5 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 @media(max-width:460px){.team-actions{flex-wrap:wrap}.team-actions button{flex:1 1 auto}}
 
 .danger-button{margin-right:auto;color:#a76052;border-color:rgba(167,96,82,.3)}.danger-button:hover{background:#a76052!important;border-color:#a76052!important;color:#fff!important}.danger-button:disabled{opacity:.5;cursor:wait}
+
+.lead-status{min-height:14px;margin-top:5px;color:#6f8384;font-size:9px}.lead-status[data-tone="error"]{color:#a76052}.lead-status[data-tone="success"]{color:#4f8b70}
