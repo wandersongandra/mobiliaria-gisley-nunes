@@ -28,6 +28,10 @@ test('rotas públicas essenciais respondem com contrato esperado', async () => {
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), { ok: true, service: 'morada' });
 
+    const ready = await fetch(`${origin}/_app/ready`);
+    assert.equal(ready.status, 503);
+    assert.deepEqual(await ready.json(), { ok: false, database: 'not_configured' });
+
     const catalog = await fetch(`${origin}/api/properties`);
     assert.equal(catalog.status, 200);
     const catalogBody = await catalog.json();
