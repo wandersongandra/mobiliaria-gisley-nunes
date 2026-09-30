@@ -8,7 +8,7 @@ import { escapeLd, organizationLd, propertyLd } from '../server/seo.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'dist-preview');
-const previewOrigin = process.env.PREVIEW_ORIGIN || 'https://preview.gisleynunes.invalid';
+const previewOrigin = process.env.PREVIEW_ORIGIN || 'https://mobiliaria-gisley-nunes.gandratecnologia.workers.dev';
 
 const site = {
   name: 'Gisley Nunes Imóveis',
@@ -69,7 +69,63 @@ const assets = {
   css: entry.css?.[0] ? '/' + entry.css[0] : ''
 };
 
-const properties = seedRows().filter((item) => item.status === 'published');
+const previewGallery = {
+  'apartamento-solar': [
+    'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=1600&q=88'
+  ],
+  'casa-ipe': [
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=88'
+  ],
+  'cobertura-horizonte': [
+    'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1600&q=88'
+  ],
+  'loft-harmonia': [
+    'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600210491369-e753d80a41f3?auto=format&fit=crop&w=1600&q=88'
+  ],
+  'casa-cedro': [
+    'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1600&q=88'
+  ],
+  'apartamento-mirante': [
+    'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1600&q=88',
+    'https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=1600&q=88'
+  ]
+};
+
+const properties = seedRows()
+  .filter((item) => item.status === 'published')
+  .map((item) => {
+    const urls = previewGallery[item.slug] || [item.cover_url];
+    return {
+      ...item,
+      photos: urls.map((url, index) => ({
+        id: `preview-${item.slug}-${index + 1}`,
+        property_id: item.id,
+        storage_path: `preview/${item.slug}/${index + 1}`,
+        url,
+        alt_text: `${item.title} — foto ${index + 1}`,
+        sort_order: index,
+        is_cover: index === 0 ? 1 : 0,
+        created_at: null
+      }))
+    };
+  });
 
 await render('home.ejs', 'index.html', {
   assets,
