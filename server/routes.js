@@ -25,6 +25,7 @@ import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireSameOrigin } from './security.js';
 import { safeFileName, storageGetSignedUrl, storagePresign } from './storage.js';
 import { normalizeContactLead, normalizeTestimonial } from './validation.js';
+import { publicProperties, publicProperty } from './presenters.js';
 
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth' });
 const contactLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 8, namespace: 'contact' });
@@ -65,7 +66,7 @@ export function registerRoutes(app) {
 
   app.get('/api/properties', async (req, res, next) => {
     try {
-      const properties = await listProperties({ publicOnly: true });
+      const properties = publicProperties(await listProperties({ publicOnly: true }));
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       res.json({ properties, source: hasDatabase() ? 'database' : 'fallback' });
     } catch (error) {
@@ -78,7 +79,7 @@ export function registerRoutes(app) {
       const property = await getPropertyBySlug(req.params.slug);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-      return res.json({ property, source: hasDatabase() ? 'database' : 'fallback' });
+      return res.json({ property: publicProperty(property), source: hasDatabase() ? 'database' : 'fallback' });
     } catch (error) {
       return next(error);
     }
