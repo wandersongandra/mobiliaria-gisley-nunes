@@ -14,6 +14,8 @@ test('normalizePropertyInput exige localização e cria preço exibido', () => {
   assert.throws(() => normalizePropertyInput({ title: 'Sem endereço' }), /LOCATION_REQUIRED/);
   const data = normalizePropertyInput({ title: 'Casa', location: 'Lourdes · Belo Horizonte', price: 2480000 });
   assert.equal(data.priceLabel, 'R$ 2.480.000');
+  const rental = normalizePropertyInput({ title: 'Cobertura', location: 'Savassi · Belo Horizonte', purpose: 'Alugar', price: 18500 });
+  assert.equal(rental.priceLabel, 'R$ 18.500 / mês');
 });
 
 test('normalizeSiteSettings bloqueia URL fora do Instagram', () => {
