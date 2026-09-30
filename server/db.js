@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { adminEmails, hasDatabase } from './config.js';
+import { adminEmails, hasDatabase, isProduction } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
 import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
@@ -152,7 +152,8 @@ export async function migrate() {
       AND (city = 'São Paulo' OR location LIKE '%São Paulo%' OR description LIKE '%Pinheiros%' OR description LIKE '%Jardins%')`);
 
   const [[{ count }]] = await db.query('SELECT COUNT(*) AS count FROM morada_properties');
-  if (Number(count) === 0) {
+  const allowDemoSeed = !isProduction && process.env.SEED_DEMO_DATA !== 'false';
+  if (Number(count) === 0 && allowDemoSeed) {
     const { randomUUID } = await import('node:crypto');
     for (const item of demoProperties) {
       const id = randomUUID();
@@ -193,14 +194,17 @@ async function hydratePhotos(rows) {
 }
 
 export async function listProperties({ publicOnly = false } = {}) {
-  if (!hasDatabase()) return publicOnly ? seedRows().filter((item) => item.status === 'published') : seedRows();
+  if (!hasDatabase()) {
+    if (isProduction) return [];
+    return publicOnly ? seedRows().filter((item) => item.status === 'published') : seedRows();
+  }
   const db = getPool();
   const [rows] = await db.query(propertyQuery(publicOnly ? "WHERE p.status = 'published' ORDER BY p.is_featured DESC, p.updated_at DESC" : 'ORDER BY p.updated_at DESC'));
   return hydratePhotos(rows);
 }
 
 export async function getProperty(id) {
-  if (!hasDatabase()) return seedRows().find((row) => row.id === id) || null;
+  if (!hasDatabase()) return isProduction ? null : (seedRows().find((row) => row.id === id) || null);
   const db = getPool();
   const [rows] = await db.execute(propertyQuery('WHERE p.id = ? LIMIT 1'), [id]);
   if (!rows[0]) return null;
@@ -209,7 +213,7 @@ export async function getProperty(id) {
 }
 
 export async function getPropertyBySlug(slug) {
-  if (!hasDatabase()) return seedRows().find((row) => row.slug === slug && row.status === 'published') || null;
+  if (!hasDatabase()) return isProduction ? null : (seedRows().find((row) => row.slug === slug && row.status === 'published') || null);
   const db = getPool();
   const [rows] = await db.execute(propertyQuery("WHERE p.slug = ? AND p.status = 'published' LIMIT 1"), [String(slug || '').slice(0, 180)]);
   if (!rows[0]) return null;
