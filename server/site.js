@@ -15,9 +15,7 @@ export const defaultSiteInfo = {
   instagramUrl: 'https://instagram.com/gisleynunesimoveis'
 };
 
-export const defaultTestimonials = [
-  { id: 'demo-testimonial-1', author: 'Marina & André', quote: 'O cuidado da Gisley Nunes foi muito além da negociação. Eles entenderam o que a gente procurava antes mesmo de a gente conseguir colocar em palavras.', location: 'Casa em Belvedere', year: '2024' }
-];
+export const defaultTestimonials = [];
 
 const mapping = { phone_display: 'phoneDisplay', whatsapp: 'whatsapp', email: 'email', address: 'address', crci: 'crci', area: 'area', instagram_url: 'instagramUrl', instagram_display: 'instagramDisplay' };
 
@@ -43,9 +41,9 @@ export async function getTestimonials() {
   if (!hasDatabase()) return defaultTestimonials;
   try {
     const rows = await listTestimonials();
-    if (!rows.length) return defaultTestimonials;
+    if (!rows.length) return [];
     return rows.map((row) => ({ id: row.id, author: row.author, quote: row.quote, location: row.location, year: row.year }));
   } catch {
-    return defaultTestimonials;
+    return [];
   }
 }
