@@ -106,22 +106,58 @@ async function archiveProperty() {
   }
 }
 
+async function imageDimensions(file) {
+  if ('createImageBitmap' in window) {
+    const bitmap = await createImageBitmap(file);
+    const dimensions = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return dimensions;
+  }
+
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const dimensions = { width: image.naturalWidth, height: image.naturalHeight };
+      URL.revokeObjectURL(url);
+      resolve(dimensions);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('INVALID_IMAGE'));
+    };
+    image.src = url;
+  });
+}
+
 async function uploadPendingFiles(propertyId) {
   const existingPhotoCount = state.editing?.photos?.length || 0;
   for (let index = 0; index < state.pendingFiles.length; index += 1) {
     const file = state.pendingFiles[index];
     toast(`Enviando foto ${index + 1} de ${state.pendingFiles.length}…`);
-    const presign = await request('/api/admin/uploads/presign', { method: 'POST', body: JSON.stringify({ propertyId, fileName: file.name, contentType: file.type, size: file.size }) });
+    const dimensions = await imageDimensions(file);
+    const presign = await request('/api/admin/uploads/presign', {
+      method: 'POST',
+      body: JSON.stringify({
+        propertyId,
+        fileName: file.name,
+        contentType: file.type,
+        size: file.size
+      })
+    });
     const upload = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
     if (!upload.ok) throw new Error('UPLOAD_FAILED');
     await request(`/api/admin/properties/${propertyId}/photos`, {
       method: 'POST',
       body: JSON.stringify({
         storagePath: presign.storagePath,
-        assetUrl: presign.assetUrl,
         altText: file.name.replace(/\.[^.]+$/, ''),
         sortOrder: existingPhotoCount + index,
-        isCover: existingPhotoCount === 0 && index === 0
+        isCover: existingPhotoCount === 0 && index === 0,
+        contentType: file.type,
+        size: file.size,
+        width: dimensions.width,
+        height: dimensions.height
       })
     });
   }
