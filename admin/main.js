@@ -54,7 +54,8 @@ function showDashboard() {
 function renderProperties() {
   const published = state.properties.filter((item) => item.status === 'published').length;
   const drafts = state.properties.filter((item) => item.status === 'draft').length;
-  $('#metric-total').textContent = String(state.properties.length).padStart(2, '0');
+  const active = state.properties.filter((item) => item.status !== 'archived').length;
+  $('#metric-total').textContent = String(active).padStart(2, '0');
   $('#metric-published').textContent = String(published).padStart(2, '0');
   $('#metric-draft').textContent = String(drafts).padStart(2, '0');
   const query = String(state.search || '').trim().toLowerCase();
@@ -105,7 +106,26 @@ async function archiveProperty() {
   }
 }
 
-async function uploadPendingFiles(propertyId) { for (let index = 0; index < state.pendingFiles.length; index += 1) { const file = state.pendingFiles[index]; toast(`Enviando foto ${index + 1} de ${state.pendingFiles.length}…`); const presign = await request('/api/admin/uploads/presign', { method: 'POST', body: JSON.stringify({ propertyId, fileName: file.name, contentType: file.type, size: file.size }) }); const upload = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file }); if (!upload.ok) throw new Error('UPLOAD_FAILED'); await request(`/api/admin/properties/${propertyId}/photos`, { method: 'POST', body: JSON.stringify({ storagePath: presign.storagePath, assetUrl: presign.assetUrl, altText: file.name.replace(/\.[^.]+$/, ''), sortOrder: index, isCover: index === 0 }) }); } }
+async function uploadPendingFiles(propertyId) {
+  const existingPhotoCount = state.editing?.photos?.length || 0;
+  for (let index = 0; index < state.pendingFiles.length; index += 1) {
+    const file = state.pendingFiles[index];
+    toast(`Enviando foto ${index + 1} de ${state.pendingFiles.length}…`);
+    const presign = await request('/api/admin/uploads/presign', { method: 'POST', body: JSON.stringify({ propertyId, fileName: file.name, contentType: file.type, size: file.size }) });
+    const upload = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+    if (!upload.ok) throw new Error('UPLOAD_FAILED');
+    await request(`/api/admin/properties/${propertyId}/photos`, {
+      method: 'POST',
+      body: JSON.stringify({
+        storagePath: presign.storagePath,
+        assetUrl: presign.assetUrl,
+        altText: file.name.replace(/\.[^.]+$/, ''),
+        sortOrder: existingPhotoCount + index,
+        isCover: existingPhotoCount === 0 && index === 0
+      })
+    });
+  }
+}
 async function removePhoto(id) { if (!state.editing) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
 
 async function movePhoto(id, direction) {
