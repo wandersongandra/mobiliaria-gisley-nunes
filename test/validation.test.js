@@ -3,11 +3,17 @@ import assert from 'node:assert/strict';
 import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings } from '../server/validation.js';
 
 test('normalizePropertyInput limita números negativos e texto', () => {
-  const data = normalizePropertyInput({ title: ' Casa Ipê ', price: -10, bedrooms: 999, purpose: 'Outro' });
+  const data = normalizePropertyInput({ title: ' Casa Ipê ', location: 'Belvedere · Belo Horizonte', price: -10, bedrooms: 999, purpose: 'Outro' });
   assert.equal(data.title, 'Casa Ipê');
   assert.equal(data.price, 0);
   assert.equal(data.bedrooms, 50);
   assert.equal(data.purpose, 'Comprar');
+});
+
+test('normalizePropertyInput exige localização e cria preço exibido', () => {
+  assert.throws(() => normalizePropertyInput({ title: 'Sem endereço' }), /LOCATION_REQUIRED/);
+  const data = normalizePropertyInput({ title: 'Casa', location: 'Lourdes · Belo Horizonte', price: 2480000 });
+  assert.equal(data.priceLabel, 'R$ 2.480.000');
 });
 
 test('normalizeSiteSettings bloqueia URL fora do Instagram', () => {
