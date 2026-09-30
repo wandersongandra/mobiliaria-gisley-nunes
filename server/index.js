@@ -28,13 +28,20 @@ function originFrom(req) {
 }
 
 app.use(async (req, res, next) => {
+  const skipPageLocals = req.path.startsWith('/api/')
+    || req.path.startsWith('/_app/')
+    || req.path.startsWith('/admin')
+    || req.path === '/sitemap.xml'
+    || req.path === '/llms.txt';
+  if (skipPageLocals) return next();
+
   try {
     res.locals.assets = assets();
     res.locals.site = await getSiteInfo();
     res.locals.testimonials = await getTestimonials();
     res.locals.siteLd = escapeLd(organizationLd(res.locals.site, originFrom(req)));
-    next();
-  } catch (error) { next(error); }
+    return next();
+  } catch (error) { return next(error); }
 });
 
 registerRoutes(app);
