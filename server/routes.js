@@ -24,7 +24,15 @@ import { hasDatabase, isAllowedEmail } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin, requireManager } from './auth.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireSameOrigin } from './security.js';
-import { safeFileName, storageGetSignedUrl, storagePresign } from './storage.js';
+import {
+  safeFileName,
+  storageAssetUrl,
+  storageDelete,
+  storageGetSignedUrl,
+  storageObjectExists,
+  storagePresign,
+  storageProviderName
+} from './storage.js';
 import { normalizeContactLead, normalizeTestimonial } from './validation.js';
 import { publicProperties, publicProperty } from './presenters.js';
 
@@ -89,6 +97,17 @@ export function registerRoutes(app) {
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       return res.json({ property: publicProperty(property), source: hasDatabase() ? 'database' : 'fallback' });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get(/^\/media\/(.+)$/, async (req, res, next) => {
+    try {
+      const key = String(req.params[0] || '').replace(/^\/+/, '');
+      const signedUrl = await storageGetSignedUrl(key);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      return res.redirect(307, signedUrl);
     } catch (error) {
       return next(error);
     }
@@ -188,7 +207,12 @@ export function registerRoutes(app) {
 
       const storagePath = `morada/properties/${propertyId}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
       const uploadUrl = await storagePresign(storagePath);
-      return res.json({ uploadUrl, storagePath, assetUrl: `/manus-storage/${storagePath}` });
+      return res.json({
+        uploadUrl,
+        storagePath,
+        assetUrl: storageAssetUrl(storagePath),
+        provider: storageProviderName()
+      });
     } catch (error) {
       return next(error);
     }
@@ -196,23 +220,62 @@ export function registerRoutes(app) {
 
   app.post('/api/admin/properties/:id/photos', async (req, res, next) => {
     try {
-      const { storagePath, assetUrl, altText, sortOrder, isCover } = req.body || {};
+      const {
+        storagePath,
+        altText,
+        sortOrder,
+        isCover,
+        contentType,
+        size,
+        width,
+        height
+      } = req.body || {};
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
 
       const expectedPrefix = `morada/properties/${req.params.id}/`;
-      if (!storagePath || assetUrl !== `/manus-storage/${storagePath}` || !String(storagePath).startsWith(expectedPrefix)) {
+      const parsedSize = Number(size || 0);
+      const parsedWidth = Number(width || 0);
+      const parsedHeight = Number(height || 0);
+      const extensions = mimeExtensions[String(contentType || '').toLowerCase()];
+      const extension = extensionOf(storagePath);
+
+      if (
+        !storagePath
+        || !String(storagePath).startsWith(expectedPrefix)
+        || !extensions
+        || !extensions.has(extension)
+        || !Number.isFinite(parsedSize)
+        || parsedSize <= 0
+        || parsedSize > 12 * 1024 * 1024
+        || !Number.isFinite(parsedWidth)
+        || !Number.isFinite(parsedHeight)
+        || parsedWidth <= 0
+        || parsedHeight <= 0
+        || parsedWidth > 20000
+        || parsedHeight > 20000
+      ) {
         return res.status(400).json({ error: 'INVALID_ASSET' });
+      }
+
+      if (!(await storageObjectExists(storagePath))) {
+        return res.status(400).json({ error: 'ASSET_NOT_UPLOADED' });
       }
 
       const photos = await addPhoto({
         id: crypto.randomUUID(),
         propertyId: req.params.id,
         storagePath,
-        url: assetUrl,
+        url: storageAssetUrl(storagePath),
         altText: altText || `Foto de ${property.title}`,
         sortOrder: Number(sortOrder || 0),
-        isCover: Boolean(isCover)
+        isCover: Boolean(isCover),
+        storageProvider: storageProviderName(),
+        mimeType: contentType,
+        fileSize: parsedSize,
+        width: parsedWidth,
+        height: parsedHeight,
+        uploadedBy: req.admin.email
       });
       return res.status(201).json({ photos });
     } catch (error) {
@@ -223,7 +286,13 @@ export function registerRoutes(app) {
   app.delete('/api/admin/photos/:id', async (req, res, next) => {
     try {
       const removed = await removePhoto(req.params.id);
-      return removed ? res.status(204).end() : res.status(404).json({ error: 'NOT_FOUND' });
+      if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
+      try {
+        await storageDelete(removed.storage_path);
+      } catch (error) {
+        console.warn('[storage] orphan cleanup deferred:', error.message);
+      }
+      return res.status(204).end();
     } catch (error) {
       return next(error);
     }
