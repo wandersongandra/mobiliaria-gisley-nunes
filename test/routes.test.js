@@ -61,6 +61,22 @@ test('rotas administrativas e mutações bloqueiam acesso indevido', async () =>
     });
     assert.equal(crossSite.status, 403);
     assert.deepEqual(await crossSite.json(), { error: 'CROSS_SITE_REQUEST_BLOCKED' });
+
+    const bot = await fetch(`${origin}/api/contact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: origin },
+      body: JSON.stringify({ name: 'Bot', email: 'bot@example.com', message: 'spam', website: 'https://spam.example' })
+    });
+    assert.equal(bot.status, 201);
+    assert.deepEqual(await bot.json(), { ok: true });
+
+    const legitimate = await fetch(`${origin}/api/contact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: origin },
+      body: JSON.stringify({ name: 'Ana', email: 'ana@example.com', message: 'Tenho interesse', interest: 'Quero comprar um imóvel' })
+    });
+    assert.equal(legitimate.status, 503);
+    assert.deepEqual(await legitimate.json(), { error: 'CONTACT_UNAVAILABLE' });
   });
 });
 
