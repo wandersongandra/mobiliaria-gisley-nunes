@@ -31,7 +31,8 @@ export function normalizePropertyInput(input = {}) {
   const city = text(input.city || 'Belo Horizonte', 120);
   if (!location) throw new Error('LOCATION_REQUIRED');
   const price = nonNegativeNumber(input.price, 999999999999.99);
-  const priceLabel = text(input.priceLabel, 100) || (price > 0 ? `R$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : 'Sob consulta');
+  const automaticPrice = price > 0 ? `R$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}${purpose === 'Alugar' ? ' / mês' : ''}` : 'Sob consulta';
+  const priceLabel = text(input.priceLabel, 100) || automaticPrice;
 
   return {
     title,
