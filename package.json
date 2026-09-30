@@ -10,7 +10,8 @@
     "start": "cross-env NODE_ENV=production node server/index.js",
     "preview": "cross-env NODE_ENV=production node server/index.js",
     "test": "node --test",
-    "build:preview": "node scripts/build-pages-preview.mjs"
+    "build:preview": "node scripts/build-pages-preview.mjs",
+    "deploy:preview": "npx wrangler@latest deploy"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
