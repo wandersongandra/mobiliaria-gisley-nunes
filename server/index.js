@@ -33,6 +33,7 @@ app.use(async (req, res, next) => {
     || req.path.startsWith('/_app/')
     || req.path.startsWith('/admin')
     || req.path === '/sitemap.xml'
+    || req.path === '/robots.txt'
     || req.path === '/llms.txt';
   if (skipPageLocals) return next();
 
@@ -47,14 +48,15 @@ app.use(async (req, res, next) => {
 
 registerRoutes(app);
 
-function pageMeta(req, { title, description, path: pathname, ogImage }) {
+function pageMeta(req, { title, description, path: pathname, ogImage, robots = 'index,follow,max-image-preview:large' }) {
   const origin = originFrom(req);
   return {
     title,
     description,
     canonical: `${origin}${pathname}`,
     ogImage: ogImage ? (ogImage.startsWith('http') ? ogImage : `${origin}${ogImage}`) : `${origin}/images/gisley-nunes-imoveis-logo.jpeg`,
-    ogType: 'website'
+    ogType: 'website',
+    robots
   };
 }
 
@@ -102,7 +104,7 @@ app.get('/imoveis/:slug', async (req, res, next) => {
   try {
     const property = await getPropertyBySlug(req.params.slug);
     if (!property) return res.status(404).render('404', {
-      page: pageMeta(req, { title: 'Imóvel não encontrado — Gisley Nunes Imóveis', description: 'O imóvel procurado não está disponível. Veja outros imóveis selecionados pela Gisley Nunes.', path: req.path })
+      page: pageMeta(req, { title: 'Imóvel não encontrado — Gisley Nunes Imóveis', description: 'O imóvel procurado não está disponível. Veja outros imóveis selecionados pela Gisley Nunes.', path: req.path, robots: 'noindex,nofollow' })
     });
     const visibleProperty = publicProperty(property);
     const description = visibleProperty.description || `Conheça ${visibleProperty.title} em ${visibleProperty.location}.`;
@@ -113,6 +115,18 @@ app.get('/imoveis/:slug', async (req, res, next) => {
       extraHead: `<script nonce="${res.locals.cspNonce}" type="application/ld+json">${escapeLd(propertyLd(visibleProperty, originFrom(req)))}</script>`
     });
   } catch (error) { next(error); }
+});
+
+app.get('/robots.txt', (req, res) => {
+  const origin = originFrom(req);
+  res.type('text/plain; charset=utf-8').send([
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /api/',
+    'Disallow: /admin',
+    'Disallow: /_app/',
+    `Sitemap: ${origin}/sitemap.xml`
+  ].join('\n'));
 });
 
 app.get('/sitemap.xml', async (req, res, next) => {
@@ -179,7 +193,8 @@ async function start() {
         page: pageMeta(req, {
           title: 'Página não encontrada — Gisley Nunes Imóveis',
           description: 'A página procurada não foi encontrada. Continue navegando pelos imóveis da Gisley Nunes.',
-          path: req.path
+          path: req.path,
+          robots: 'noindex,nofollow'
         })
       });
     }
