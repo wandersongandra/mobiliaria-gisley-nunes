@@ -2,10 +2,20 @@
   <body data-page="sobre">
     <%- include('partials/header') %>
     <main id="conteudo">
-      <section class="page-hero shell">
-        <p class="eyebrow"><span class="eyebrow-dot"></span> a Gisley Nunes</p>
-        <h1>Encontrar lugar é<br /><em>encontrar ritmo de vida.</em></h1>
-        <p class="page-lead">Atendimento próximo e especializado para quem busca um imóvel com intenção em <%= site.area %>.</p>
+      <section class="page-hero shell about-hero">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> a Gisley Nunes</p>
+          <h1>Encontrar lugar é<br /><em>encontrar ritmo de vida.</em></h1>
+        </div>
+        <div class="about-hero-note">
+          <span class="about-number">GN</span>
+          <p>Atendimento próximo e especializado para quem busca um imóvel com intenção em <%= site.area %>.</p>
+        </div>
+      </section>
+
+      <section class="about-visual shell" aria-label="Arquitetura e estilo de vida em Belo Horizonte">
+        <div class="about-visual-image"><img src="https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=85" alt="Interior contemporâneo com luz natural" loading="lazy" decoding="async" /></div>
+        <div class="about-visual-copy"><span>Nosso olhar</span><p>Um bom imóvel não é apenas metragem, endereço ou acabamento. É a combinação certa entre espaço, momento e forma de viver.</p></div>
       </section>
 
       <section class="experience-section" aria-labelledby="experience-title">
