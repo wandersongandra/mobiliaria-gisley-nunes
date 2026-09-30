@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { configuredAdminOrigin, configuredPublicOrigin } from '../server/config.js';
-import { requestHostOrigin, requestOrigin } from '../server/security.js';
+import { requestHostOrigin, requestOrigin, requireAdminOrigin } from '../server/security.js';
 
 function mockRequest({ host = 'localhost:3000', proto = '' } = {}) {
   return {
@@ -47,4 +47,37 @@ test('configuredAdminOrigin normaliza o subdomínio do painel', () => {
   process.env.ADMIN_ORIGIN = 'https://painel.gisley.test/admin?x=1';
   assert.equal(configuredAdminOrigin(), 'https://painel.gisley.test');
   process.env.ADMIN_ORIGIN = previous;
+});
+
+
+test('requireAdminOrigin redireciona login iniciado no domínio público', () => {
+  const previousAdmin = process.env.ADMIN_ORIGIN;
+  const previousPublic = process.env.PUBLIC_ORIGIN;
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+
+  const req = {
+    method: 'GET',
+    originalUrl: '/api/auth/login',
+    path: '/login',
+    secure: true,
+    headers: { 'x-forwarded-proto': 'https' },
+    get(name) { return name.toLowerCase() === 'host' ? 'www.gisley.test' : ''; }
+  };
+  const res = {
+    statusCode: 200,
+    location: '',
+    redirect(code, location) { this.statusCode = code; this.location = location; return this; },
+    status(code) { this.statusCode = code; return this; },
+    json() { return this; }
+  };
+  let nextCalled = false;
+  requireAdminOrigin(req, res, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, false);
+  assert.equal(res.statusCode, 307);
+  assert.equal(res.location, 'https://painel.gisley.test/api/auth/login');
+
+  if (previousAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = previousAdmin;
+  if (previousPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = previousPublic;
 });
