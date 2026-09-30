@@ -8,7 +8,7 @@ import {
   storage
 } from './config.js';
 
-const assetPrefix = 'morada/properties/';
+const assetPrefixes = ['gisley/properties/', 'morada/properties/'];
 
 export function safeFileName(value) {
   return String(value || 'imagem')
@@ -22,7 +22,7 @@ export function safeFileName(value) {
 
 function assertStorageKey(filePath) {
   const key = String(filePath || '').replace(/^\/+/, '').slice(0, 500);
-  if (!key.startsWith(assetPrefix) || key.includes('..') || key.includes('\0')) throw new Error('INVALID_ASSET');
+  if (!assetPrefixes.some((prefix) => key.startsWith(prefix)) || key.includes('..') || key.includes('\0')) throw new Error('INVALID_ASSET');
   return key;
 }
 
