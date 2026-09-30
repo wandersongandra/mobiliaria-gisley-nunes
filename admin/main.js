@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, properties: [], leads: [], editing: null, pendingFiles: [], search: '' };
+const state = { user: null, properties: [], leads: [], team: [], editing: null, pendingFiles: [], search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -36,6 +36,13 @@ function showDashboard() {
   loginScreen.hidden = true;
   dashboard.hidden = false;
   $('#user-name').textContent = state.user?.name?.split(' ')[0] || 'equipe';
+  const manager = state.user?.role === 'manager';
+  document.querySelectorAll('[data-manager-only]').forEach((element) => { element.hidden = !manager; });
+  const roleChip = $('#user-role');
+  if (roleChip) {
+    roleChip.textContent = manager ? 'Gestor' : 'Corretor / Editor';
+    roleChip.dataset.role = manager ? 'manager' : 'editor';
+  }
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
   const title = $('#page-title');
@@ -98,7 +105,9 @@ async function makeCover(id) {
 
 const siteForm = $('#site-settings-form');
 const testimonialForm = $('#testimonial-form');
+const teamForm = $('#team-form');
 let siteLoaded = false;
+let teamLoaded = false;
 
 function siteNotify(message, tone = 'success') { const status = $('#site-status'); status.textContent = message; status.dataset.tone = tone; }
 
@@ -106,6 +115,7 @@ function switchView(name) {
   document.querySelectorAll('.admin-view').forEach((view) => { view.hidden = view.id !== name; });
   document.querySelectorAll('.side-nav a[data-view]').forEach((link) => { link.classList.toggle('active', link.dataset.view === name); });
   if (name === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
+  if (name === 'team-view' && state.user?.role === 'manager' && !teamLoaded) { teamLoaded = true; loadTeam(); }
 }
 
 function renderTestimonials(items = []) {
@@ -151,6 +161,74 @@ async function removeTestimonial(id) {
     renderTestimonials(data.testimonials);
     siteNotify('Depoimento removido.');
   } catch { siteNotify('Não foi possível remover o depoimento.', 'error'); }
+}
+
+function teamNotify(message, tone = 'success') {
+  const status = $('#team-status');
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.tone = tone;
+}
+
+function renderTeam() {
+  const list = $('#team-list');
+  if (!list) return;
+  const selfEmail = String(state.user?.email || '').toLowerCase();
+  list.innerHTML = state.team.length ? state.team.map((member) => {
+    const isSelf = String(member.email).toLowerCase() === selfEmail;
+    const roleLabel = member.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
+    return `<article class="team-row">
+      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a></div></div>
+      <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${isSelf ? '<small>você</small>' : ''}</div>
+      <div class="team-actions">
+        ${!isSelf ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
+      </div>
+    </article>`;
+  }).join('') : '<div class="empty-properties compact"><span>◎</span><h4>Nenhum acesso adicional.</h4><p>Adicione um corretor ou outro gestor para começar.</p></div>';
+
+  list.querySelectorAll('[data-team-role]').forEach((button) => button.addEventListener('click', async () => {
+    try {
+      const email = button.dataset.teamRole;
+      await request(`/api/admin/team/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify({ role: button.dataset.nextRole }) });
+      await loadTeam();
+      teamNotify('Permissão atualizada.');
+    } catch (error) {
+      teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser rebaixado.' : 'Não foi possível alterar a permissão.', 'error');
+    }
+  }));
+
+  list.querySelectorAll('[data-team-remove]').forEach((button) => button.addEventListener('click', async () => {
+    try {
+      await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamRemove)}`, { method: 'DELETE' });
+      await loadTeam();
+      teamNotify('Acesso removido.');
+    } catch (error) {
+      teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser removido.' : 'Não foi possível remover o acesso.', 'error');
+    }
+  }));
+}
+
+async function loadTeam() {
+  try {
+    state.team = (await request('/api/admin/team')).team || [];
+    renderTeam();
+  } catch {
+    const list = $('#team-list');
+    if (list) list.innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar a equipe agora.</p></div>';
+  }
+}
+
+async function addTeamMember(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(teamForm));
+  try {
+    await request('/api/admin/team', { method: 'POST', body: JSON.stringify(data) });
+    teamForm.reset();
+    await loadTeam();
+    teamNotify('Acesso adicionado. A pessoa já pode entrar com esse e-mail.');
+  } catch (error) {
+    teamNotify(error.message === 'INVALID_TEAM_MEMBER' ? 'Confira nome e e-mail.' : 'Não foi possível adicionar este acesso.', 'error');
+  }
 }
 
 function ensureLeadsPanel() {
@@ -221,7 +299,8 @@ form.addEventListener('submit', saveProperty);
 $('#photo-input').addEventListener('change', (event) => { state.pendingFiles = [...state.pendingFiles, ...Array.from(event.target.files)]; $('#photo-grid').innerHTML = state.pendingFiles.map((file, index) => `<div class="photo-tile pending"><img src="${URL.createObjectURL(file)}" alt="${escapeHTML(file.name)}" /><span>${index === 0 ? 'nova capa' : 'nova'}</span></div>`).join(''); });
 dialog.addEventListener('close', () => { state.pendingFiles = []; });
 document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); switchView(link.dataset.view); }));
-siteForm.addEventListener('submit', saveSite);
-testimonialForm.addEventListener('submit', addTestimonial);
+siteForm?.addEventListener('submit', saveSite);
+testimonialForm?.addEventListener('submit', addTestimonial);
+teamForm?.addEventListener('submit', addTeamMember);
 $('#property-search')?.addEventListener('input', (event) => { state.search = event.target.value; renderProperties(); });
 init();
