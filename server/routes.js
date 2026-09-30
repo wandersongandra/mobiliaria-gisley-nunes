@@ -207,7 +207,7 @@ export function registerRoutes(app) {
       const property = await getProperty(propertyId);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
 
-      const storagePath = `morada/properties/${propertyId}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
+      const storagePath = `gisley/properties/${propertyId}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
       const uploadUrl = await storagePresign(storagePath);
       return res.json({
         uploadUrl,
@@ -235,7 +235,7 @@ export function registerRoutes(app) {
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
 
-      const expectedPrefix = `morada/properties/${req.params.id}/`;
+      const expectedPrefix = `gisley/properties/${req.params.id}/`;
       const parsedSize = Number(size || 0);
       const parsedWidth = Number(width || 0);
       const parsedHeight = Number(height || 0);
