@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
-import { addPhoto, getProperty, getPropertyBySlug, listProperties, removePhoto, saveProperty, softDeleteProperty } from './db.js';
+import { addPhoto, addTestimonial, getProperty, getPropertyBySlug, listProperties, removePhoto, removeTestimonial, saveProperty, saveSiteSettings, softDeleteProperty } from './db.js';
 import { hasDatabase } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin } from './auth.js';
+import { getSiteInfo, getTestimonials } from './site.js';
 import { safeFileName, storagePresign } from './storage.js';
 
 export function registerRoutes(app) {
@@ -24,6 +25,12 @@ export function registerRoutes(app) {
       const property = await getPropertyBySlug(req.params.slug);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       res.json({ property, source: hasDatabase() ? 'database' : 'fallback' });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/site', async (req, res, next) => {
+    try {
+      res.json({ site: await getSiteInfo(), testimonials: await getTestimonials() });
     } catch (error) { next(error); }
   });
 
@@ -55,6 +62,11 @@ export function registerRoutes(app) {
     } catch (error) { next(error); }
   });
   app.delete('/api/admin/photos/:id', async (req, res, next) => { try { await removePhoto(req.params.id); res.status(204).end(); } catch (error) { next(error); } });
+
+  app.get('/api/admin/site', async (req, res, next) => { try { res.json({ site: await getSiteInfo(), testimonials: await getTestimonials() }); } catch (error) { next(error); } });
+  app.put('/api/admin/site', async (req, res, next) => { try { await saveSiteSettings(req.body || {}); res.json({ site: await getSiteInfo() }); } catch (error) { next(error); } });
+  app.post('/api/admin/testimonials', async (req, res, next) => { try { const { author, quote } = req.body || {}; if (!author || !quote) return res.status(400).json({ error: 'INVALID_TESTIMONIAL' }); res.status(201).json({ testimonials: await addTestimonial({ author, quote, location: req.body.location, year: req.body.year, sortOrder: req.body.sortOrder }) }); } catch (error) { next(error); } });
+  app.delete('/api/admin/testimonials/:id', async (req, res, next) => { try { await removeTestimonial(req.params.id); res.status(204).end(); } catch (error) { next(error); } });
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'NOT_FOUND' }));
 }

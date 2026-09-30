@@ -7,7 +7,7 @@ import { isProduction, port } from './config.js';
 import { getPropertyBySlug, listProperties, migrate } from './db.js';
 import { registerRoutes } from './routes.js';
 import { assets } from './assets.js';
-import { siteInfo } from './site.js';
+import { getSiteInfo, getTestimonials } from './site.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -17,7 +17,14 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(root, 'views'));
 app.use(express.json({ limit: '3mb' }));
 app.use(cookieParser());
-app.use((req, res, next) => { res.locals.assets = assets(); res.locals.site = siteInfo; next(); });
+app.use(async (req, res, next) => {
+  try {
+    res.locals.assets = assets();
+    res.locals.site = await getSiteInfo();
+    res.locals.testimonials = await getTestimonials();
+    next();
+  } catch (error) { next(error); }
+});
 
 registerRoutes(app);
 

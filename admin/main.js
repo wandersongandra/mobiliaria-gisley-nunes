@@ -46,6 +46,63 @@ async function saveProperty(event) { if (event.submitter?.value === 'cancel') re
 async function uploadPendingFiles(propertyId) { for (let index = 0; index < state.pendingFiles.length; index += 1) { const file = state.pendingFiles[index]; toast(`Enviando foto ${index + 1} de ${state.pendingFiles.length}…`); const presign = await request('/api/admin/uploads/presign', { method: 'POST', body: JSON.stringify({ propertyId, fileName: file.name, contentType: file.type, size: file.size }) }); const upload = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file }); if (!upload.ok) throw new Error('UPLOAD_FAILED'); await request(`/api/admin/properties/${propertyId}/photos`, { method: 'POST', body: JSON.stringify({ storagePath: presign.storagePath, assetUrl: presign.assetUrl, altText: file.name.replace(/\.[^.]+$/, ''), sortOrder: index, isCover: index === 0 }) }); } }
 async function removePhoto(id) { if (!state.editing) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
 
+const siteForm = $('#site-settings-form');
+const testimonialForm = $('#testimonial-form');
+let siteLoaded = false;
+
+function siteNotify(message, tone = 'success') { const status = $('#site-status'); status.textContent = message; status.dataset.tone = tone; }
+
+function switchView(name) {
+  document.querySelectorAll('.admin-view').forEach((view) => { view.hidden = view.id !== name; });
+  document.querySelectorAll('.side-nav a[data-view]').forEach((link) => { link.classList.toggle('active', link.dataset.view === name); });
+  if (name === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
+}
+
+function renderTestimonials(items = []) {
+  const list = $('#testimonial-list');
+  list.innerHTML = items.length ? items.map((item) => `<article class="testimonial-row"><div><strong>${escapeHTML(item.author)}</strong><p>${escapeHTML(item.quote)}</p><small>${escapeHTML(item.location || '')}${item.year ? ' · ' + escapeHTML(item.year) : ''}</small></div><button data-testimonial-remove="${item.id}" type="button" aria-label="Remover depoimento">×</button></article>`).join('') : '<div class="photo-empty"><span>✦</span><p>Nenhum depoimento ainda.</p></div>';
+  list.querySelectorAll('[data-testimonial-remove]').forEach((button) => button.addEventListener('click', () => removeTestimonial(button.dataset.testimonialRemove)));
+}
+
+async function loadSite() {
+  try {
+    const data = await request('/api/admin/site');
+    const values = { whatsapp: data.site.whatsapp, phoneDisplay: data.site.phoneDisplay, email: data.site.email, address: data.site.address, crci: data.site.crci, area: data.site.area, instagramUrl: data.site.instagramUrl, instagramDisplay: data.site.instagramDisplay };
+    for (const [key, value] of Object.entries(values)) { if (siteForm.elements[key]) siteForm.elements[key].value = value ?? ''; }
+    renderTestimonials(data.testimonials);
+  } catch { siteNotify('Não foi possível carregar os dados do site.', 'error'); }
+}
+
+async function saveSite(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(siteForm));
+  try {
+    await request('/api/admin/site', { method: 'PUT', body: JSON.stringify(data) });
+    siteNotify('Dados do site salvos com sucesso.');
+  } catch { siteNotify('Não foi possível salvar. Tente novamente.', 'error'); }
+}
+
+async function addTestimonial(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(testimonialForm));
+  if (!data.author || !data.quote) { siteNotify('Preencha nome e depoimento.', 'error'); return; }
+  try {
+    const result = await request('/api/admin/testimonials', { method: 'POST', body: JSON.stringify({ author: data.author, quote: data.quote, location: data.location, year: data.year, sortOrder: 0 }) });
+    renderTestimonials(result.testimonials);
+    testimonialForm.reset();
+    siteNotify('Depoimento adicionado.');
+  } catch { siteNotify('Não foi possível adicionar o depoimento.', 'error'); }
+}
+
+async function removeTestimonial(id) {
+  try {
+    await request(`/api/admin/testimonials/${id}`, { method: 'DELETE' });
+    const data = await request('/api/admin/site');
+    renderTestimonials(data.testimonials);
+    siteNotify('Depoimento removido.');
+  } catch { siteNotify('Não foi possível remover o depoimento.', 'error'); }
+}
+
 async function init() { try { const session = await request('/api/admin/session'); if (!session.authenticated) return showLogin(); state.user = session.user; showDashboard(); state.properties = (await request('/api/admin/properties')).properties; renderProperties(); } catch (error) { if (error.message !== 'AUTH_REQUIRED') showLogin(); } }
 
 $('#new-property')?.addEventListener('click', () => openEditor());
@@ -54,4 +111,7 @@ $('#logout-button').addEventListener('click', async () => { await fetch('/api/au
 form.addEventListener('submit', saveProperty);
 $('#photo-input').addEventListener('change', (event) => { state.pendingFiles = [...state.pendingFiles, ...Array.from(event.target.files)]; $('#photo-grid').innerHTML = state.pendingFiles.map((file, index) => `<div class="photo-tile pending"><img src="${URL.createObjectURL(file)}" alt="${escapeHTML(file.name)}" /><span>${index === 0 ? 'nova capa' : 'nova'}</span></div>`).join(''); });
 dialog.addEventListener('close', () => { state.pendingFiles = []; });
+document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); switchView(link.dataset.view); }));
+siteForm.addEventListener('submit', saveSite);
+testimonialForm.addEventListener('submit', addTestimonial);
 init();

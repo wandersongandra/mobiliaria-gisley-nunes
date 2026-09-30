@@ -76,6 +76,27 @@ export async function migrate() {
       await db.execute('INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover) VALUES (?,?,?,?,?,?,?)', [randomUUID(), id, `demo/${item.slug}`, item.coverUrl, item.title, 0, 1]);
     }
   }
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_site_settings (
+    id TINYINT PRIMARY KEY DEFAULT 1,
+    phone_display VARCHAR(50),
+    whatsapp VARCHAR(30),
+    email VARCHAR(120),
+    address VARCHAR(180),
+    crci VARCHAR(30),
+    area VARCHAR(120),
+    instagram_url VARCHAR(200),
+    instagram_display VARCHAR(60),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_testimonials (
+    id CHAR(36) PRIMARY KEY,
+    author VARCHAR(120) NOT NULL,
+    quote TEXT NOT NULL,
+    location VARCHAR(120),
+    year VARCHAR(10),
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   return { configured: true };
 }
 
@@ -163,4 +184,44 @@ export async function findAdmin(openId) {
   const db = getPool();
   const [rows] = await db.execute('SELECT open_id,email,name FROM morada_admin_users WHERE open_id=? LIMIT 1', [openId]);
   return rows[0] || null;
+}
+
+export async function getSiteSettings() {
+  const db = getPool();
+  const [rows] = await db.query('SELECT * FROM morada_site_settings WHERE id = 1 LIMIT 1');
+  return rows[0] || null;
+}
+
+export async function saveSiteSettings(input = {}) {
+  const db = getPool();
+  const values = [
+    String(input.phoneDisplay ?? '').trim(),
+    String(input.whatsapp ?? '').trim(),
+    String(input.email ?? '').trim(),
+    String(input.address ?? '').trim(),
+    String(input.crci ?? '').trim(),
+    String(input.area ?? '').trim(),
+    String(input.instagramUrl ?? '').trim(),
+    String(input.instagramDisplay ?? '').trim()
+  ];
+  await db.execute('INSERT INTO morada_site_settings (id, phone_display, whatsapp, email, address, crci, area, instagram_url, instagram_display) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE phone_display=VALUES(phone_display), whatsapp=VALUES(whatsapp), email=VALUES(email), address=VALUES(address), crci=VALUES(crci), area=VALUES(area), instagram_url=VALUES(instagram_url), instagram_display=VALUES(instagram_display)', values);
+  return getSiteSettings();
+}
+
+export async function listTestimonials() {
+  const db = getPool();
+  const [rows] = await db.query('SELECT id, author, quote, location, year, sort_order FROM morada_testimonials ORDER BY sort_order ASC, created_at DESC');
+  return rows;
+}
+
+export async function addTestimonial({ author, quote, location = '', year = '', sortOrder = 0 }) {
+  const db = getPool();
+  const { randomUUID } = await import('node:crypto');
+  await db.execute('INSERT INTO morada_testimonials (id, author, quote, location, year, sort_order) VALUES (?,?,?,?,?,?)', [randomUUID(), String(author || '').trim(), String(quote || '').trim(), String(location || '').trim(), String(year || '').trim(), Number(sortOrder || 0)]);
+  return listTestimonials();
+}
+
+export async function removeTestimonial(id) {
+  const db = getPool();
+  await db.execute('DELETE FROM morada_testimonials WHERE id=?', [id]);
 }

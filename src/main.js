@@ -166,7 +166,20 @@ function initPropertyDetail() {
   });
 }
 
+function initTestimonials() {
+  const features = document.querySelectorAll('.testimonial-feature');
+  if (!features.length) return;
+  const prev = document.querySelector('[data-quote-prev]');
+  const next = document.querySelector('[data-quote-next]');
+  let index = 0;
+  const show = (i) => { features.forEach((feature, j) => { feature.hidden = j !== i; }); };
+  if (prev) prev.addEventListener('click', () => { index = (index - 1 + features.length) % features.length; show(index); });
+  if (next) next.addEventListener('click', () => { index = (index + 1) % features.length; show(index); });
+  show(0);
+}
+
 initMobileMenu();
 initListing();
 initPropertyDetail();
 initContactForm();
+initTestimonials();
