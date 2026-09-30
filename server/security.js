@@ -118,7 +118,8 @@ export function requireAdminOrigin(req, res, next) {
   const currentOrigin = requestHostOrigin(req);
   if (currentOrigin === adminOrigin) return next();
 
-  if (req.method === 'GET' && req.path === '/api/auth/login') {
+  const originalPath = String(req.originalUrl || '').split('?')[0];
+  if (req.method === 'GET' && originalPath === '/api/auth/login') {
     return res.redirect(307, `${adminOrigin}${req.originalUrl}`);
   }
 
