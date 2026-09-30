@@ -1,0 +1,10 @@
+{
+  "routes": [
+    { "path": "/", "title": "Gisley Nunes Imóveis — encontre seu próximo lugar" },
+    { "path": "/imoveis", "title": "Imóveis — Gisley Nunes Imóveis" },
+    { "path": "/sobre", "title": "Sobre — Gisley Nunes Imóveis" },
+    { "path": "/contato", "title": "Contato — Gisley Nunes Imóveis" },
+    { "path": "/privacidade", "title": "Política de privacidade — Gisley Nunes Imóveis" },
+    { "path": "/admin", "title": "Painel administrativo — Gisley Nunes Imóveis" }
+  ]
+}

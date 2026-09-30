@@ -1,0 +1,39 @@
+<%- include('partials/head') %>
+  <body data-page="privacidade">
+    <%- include('partials/header') %>
+    <main id="conteudo">
+      <section class="page-hero shell">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> privacidade</p>
+        <h1>Política de<br /><em>privacidade.</em></h1>
+        <p class="page-lead">Como a <%= site.name %> trata os dados que você compartilha conosco.</p>
+      </section>
+
+      <section class="shell legal-section">
+        <p>Última atualização: setembro de 2026. Esta política descreve como coletamos, usamos e protegemos suas informações pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).</p>
+
+        <h2>1. Dados que coletamos</h2>
+        <p>Quando você preenche o formulário de contato, coletamos as informações que você fornece voluntariamente, como nome, e-mail e a mensagem enviada.</p>
+
+        <h2>2. Como usamos esses dados</h2>
+        <p>Usamos suas informações exclusivamente para responder à sua solicitação, agendar visitas e prestar atendimento relacionado a imóveis. Não vendemos nem compartilhamos seus dados com terceiros para fins de marketing sem o seu consentimento.</p>
+
+        <h2>3. Compartilhamento</h2>
+        <p>Seus dados podem ser tratados por ferramentas de e-mail e atendimento utilizadas pela imobiliária, sempre limitadas ao necessário para concluir o atendimento solicitado.</p>
+
+        <h2>4. Armazenamento e segurança</h2>
+        <p>Adotamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda ou alteração, armazenando-os apenas pelo tempo necessário à finalidade do atendimento.</p>
+
+        <h2>5. Seus direitos</h2>
+        <p>Você pode, a qualquer momento, solicitar acesso, correção ou exclusão dos seus dados pessoais, além da revogação de consentimento, entrando em contato pelo e-mail <a href="mailto:<%= site.email %>"><%= site.email %></a>.</p>
+
+        <h2>6. Cookies</h2>
+        <p>Este site utiliza cookies essenciais para funcionamento e, quando aplicável, ferramentas de medição de audiência. Você pode gerenciar cookies nas configurações do seu navegador.</p>
+
+        <h2>7. Contato do responsável</h2>
+        <p>Para dúvidas sobre privacidade ou exercício dos seus direitos, escreva para <a href="mailto:<%= site.email %>"><%= site.email %></a>.</p>
+      </section>
+    </main>
+    <%- include('partials/footer') %>
+    <script type="module" src="<%= assets.js %>"></script>
+  </body>
+</html>
