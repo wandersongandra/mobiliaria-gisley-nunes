@@ -1,0 +1,33 @@
+export function escapeLd(value) {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+export function organizationLd(site, origin) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'RealEstateAgent',
+    name: site.name,
+    url: `${origin}/`,
+    email: site.email,
+    telephone: site.phoneDisplay,
+    areaServed: site.area,
+    address: { '@type': 'PostalAddress', addressLocality: 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' }
+  };
+}
+
+export function propertyLd(property, origin) {
+  const ld = {
+    '@context': 'https://schema.org',
+    '@type': 'RealEstateListing',
+    name: property.title,
+    url: `${origin}/imoveis/${property.slug}`,
+    offers: { '@type': 'Offer', price: Number(property.price || 0), priceCurrency: 'BRL' },
+    address: { '@type': 'PostalAddress', addressLocality: property.city || 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' }
+  };
+  if (property.description) ld.description = property.description;
+  if (property.cover_url) ld.image = property.cover_url;
+  if (Number(property.bedrooms || 0)) ld.numberOfBedrooms = Number(property.bedrooms);
+  if (Number(property.bathrooms || 0)) ld.numberOfBathroomsTotal = Number(property.bathrooms);
+  if (Number(property.area_m2 || 0)) ld.floorSize = { '@type': 'QuantitativeValue', value: Number(property.area_m2), unitCode: 'MTK' };
+  return ld;
+}
