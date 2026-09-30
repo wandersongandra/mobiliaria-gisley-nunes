@@ -11,8 +11,8 @@ export const defaultSiteInfo = {
   phoneDisplay: '(31) 9155-4677',
   whatsapp: '553191554677',
   email: 'Gisleynunesimoveis@gmail.com',
-  instagramDisplay: '@gisleynunesimoveis',
-  instagramUrl: 'https://instagram.com/gisleynunesimoveis'
+  instagramDisplay: '',
+  instagramUrl: ''
 };
 
 export const defaultTestimonials = [];
