@@ -23,7 +23,7 @@ import { hasDatabase, isAllowedEmail } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin, requireManager } from './auth.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireSameOrigin } from './security.js';
-import { safeFileName, storagePresign } from './storage.js';
+import { safeFileName, storageGetSignedUrl, storagePresign } from './storage.js';
 import { normalizeContactLead, normalizeTestimonial } from './validation.js';
 
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth' });
@@ -79,6 +79,20 @@ export function registerRoutes(app) {
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       return res.json({ property, source: hasDatabase() ? 'database' : 'fallback' });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get(/^\/manus-storage\/(.+)$/, async (req, res, next) => {
+    try {
+      const key = String(req.params[0] || '').replace(/^\/+/, '');
+      if (!key.startsWith('morada/properties/') || key.includes('..') || key.includes('\\0')) {
+        return res.status(400).json({ error: 'INVALID_ASSET' });
+      }
+      const signedUrl = await storageGetSignedUrl(key);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      return res.redirect(307, signedUrl);
     } catch (error) {
       return next(error);
     }
@@ -298,6 +312,9 @@ export function registerRoutes(app) {
     try {
       const email = String(req.params.email || '').trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
+      if (email === req.admin.email && ((req.body?.role && req.body.role !== req.admin.role) || req.body?.active === false)) {
+        return res.status(400).json({ error: 'CANNOT_CHANGE_SELF_ACCESS' });
+      }
       if (isAllowedEmail(email) && req.body?.role && req.body.role !== 'manager') {
         return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
       }
