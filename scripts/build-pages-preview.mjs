@@ -17,7 +17,7 @@ const site = {
   address: 'Belo Horizonte, MG',
   phoneDisplay: '(31) 9155-4677',
   whatsapp: '553191554677',
-  email: 'contato@gisleynunesimoveis.com.br',
+  email: 'Gisleynunesimoveis@gmail.com',
   instagramDisplay: '@gisleynunesimoveis',
   instagramUrl: 'https://instagram.com/gisleynunesimoveis'
 };
