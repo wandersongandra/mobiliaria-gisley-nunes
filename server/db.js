@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { hasDatabase } from './config.js';
+import { adminEmails, hasDatabase } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
 import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
@@ -31,6 +31,26 @@ export async function migrate() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_staff_access (
+    email VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'editor',
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    invited_by VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_morada_staff_role_active (role, active)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  for (const email of adminEmails()) {
+    await db.execute(
+      `INSERT INTO morada_staff_access (email,name,role,active,invited_by)
+       VALUES (?,?, 'manager', 1, 'environment')
+       ON DUPLICATE KEY UPDATE role='manager', active=1, updated_at=CURRENT_TIMESTAMP`,
+      [email, email]
+    );
+  }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_properties (
     id CHAR(36) PRIMARY KEY,
@@ -294,6 +314,46 @@ export async function findAdmin(openId) {
   const db = getPool();
   const [rows] = await db.execute('SELECT open_id,email,name FROM morada_admin_users WHERE open_id=? LIMIT 1', [openId]);
   return rows[0] || null;
+}
+
+export async function findStaffAccess(email) {
+  const db = getPool();
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const [rows] = await db.execute(
+    'SELECT email,name,role,active,invited_by,created_at,updated_at FROM morada_staff_access WHERE email=? LIMIT 1',
+    [normalized]
+  );
+  return rows[0] || null;
+}
+
+export async function listStaffAccess() {
+  const db = getPool();
+  const [rows] = await db.query(
+    "SELECT email,name,role,active,invited_by,created_at,updated_at FROM morada_staff_access ORDER BY CASE role WHEN 'manager' THEN 0 ELSE 1 END, name ASC, email ASC"
+  );
+  return rows;
+}
+
+export async function saveStaffAccess({ email, name, role = 'editor', active = true, invitedBy = null }) {
+  const db = getPool();
+  const normalizedEmail = String(email || '').trim().toLowerCase().slice(0, 255);
+  const normalizedName = String(name || normalizedEmail).trim().slice(0, 255);
+  const normalizedRole = role === 'manager' ? 'manager' : 'editor';
+  await db.execute(
+    `INSERT INTO morada_staff_access (email,name,role,active,invited_by)
+     VALUES (?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE name=VALUES(name),role=VALUES(role),active=VALUES(active),invited_by=COALESCE(VALUES(invited_by),invited_by),updated_at=CURRENT_TIMESTAMP`,
+    [normalizedEmail, normalizedName, normalizedRole, active ? 1 : 0, invitedBy ? String(invitedBy).slice(0, 255) : null]
+  );
+  return findStaffAccess(normalizedEmail);
+}
+
+export async function removeStaffAccess(email) {
+  const db = getPool();
+  const normalized = String(email || '').trim().toLowerCase();
+  const [result] = await db.execute('DELETE FROM morada_staff_access WHERE email=?', [normalized]);
+  return result.affectedRows > 0;
 }
 
 export async function getSiteSettings() {
