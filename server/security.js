@@ -15,16 +15,17 @@ function safeHost(value) {
   return /^[a-z0-9.-]+(?::\d{1,5})?$/.test(host) ? host : '';
 }
 
-export function requestOrigin(req) {
-  const configured = configuredPublicOrigin();
-  if (configured) return configured;
-
+export function requestHostOrigin(req) {
   const host = safeHost(req.get('host'));
   if (!host) return '';
 
   const forwardedProto = firstHeader(req.headers['x-forwarded-proto']);
   const proto = forwardedProto === 'https' || req.secure ? 'https' : 'http';
   return `${proto}://${host}`;
+}
+
+export function requestOrigin(req) {
+  return configuredPublicOrigin() || requestHostOrigin(req);
 }
 
 export function securityHeaders(req, res, next) {
@@ -61,7 +62,7 @@ export function securityHeaders(req, res, next) {
 export function requireSameOrigin(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
 
-  const expected = requestOrigin(req);
+  const expected = requestHostOrigin(req);
   const origin = String(req.get('origin') || '').trim();
   const fetchSite = String(req.get('sec-fetch-site') || '').trim().toLowerCase();
 
@@ -114,7 +115,7 @@ export function requireAdminOrigin(req, res, next) {
   const adminOrigin = configuredAdminOrigin();
   if (!adminOrigin) return next();
 
-  const currentOrigin = requestOrigin(req);
+  const currentOrigin = requestHostOrigin(req);
   if (currentOrigin === adminOrigin) return next();
 
   if (req.method === 'GET' && req.path === '/api/auth/login') {
