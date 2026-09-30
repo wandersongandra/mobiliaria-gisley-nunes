@@ -84,7 +84,11 @@ export async function migrate() {
     'ALTER TABLE morada_properties ADD COLUMN condo_fee DECIMAL(10,2) NOT NULL DEFAULT 0',
     'ALTER TABLE morada_properties ADD COLUMN iptu DECIMAL(12,2) NOT NULL DEFAULT 0'
   ]) {
-    try { await db.query(statement); } catch {}
+    try {
+      await db.query(statement);
+    } catch (error) {
+      if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
   }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_property_photos (
@@ -136,20 +140,22 @@ export async function migrate() {
     INDEX idx_morada_contact_leads_status_created (status, created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 
-  await db.execute(`UPDATE morada_properties SET
-    location = CASE slug
-      WHEN 'apartamento-solar' THEN 'Lourdes · Belo Horizonte'
-      WHEN 'casa-ipe' THEN 'Belvedere · Belo Horizonte'
-      WHEN 'cobertura-horizonte' THEN 'Savassi · Belo Horizonte'
-      WHEN 'loft-harmonia' THEN 'Buritis · Belo Horizonte'
-      WHEN 'casa-cedro' THEN 'Lourdes · Belo Horizonte'
-      WHEN 'apartamento-mirante' THEN 'Savassi · Belo Horizonte'
-      ELSE location
-    END,
-    city = 'Belo Horizonte',
-    description = REPLACE(REPLACE(description, 'Pinheiros', 'Lourdes'), 'Jardins', 'Savassi')
-    WHERE slug IN ('apartamento-solar','casa-ipe','cobertura-horizonte','loft-harmonia','casa-cedro','apartamento-mirante')
-      AND (city = 'São Paulo' OR location LIKE '%São Paulo%' OR description LIKE '%Pinheiros%' OR description LIKE '%Jardins%')`);
+  if (!isProduction) {
+    await db.execute(`UPDATE morada_properties SET
+      location = CASE slug
+        WHEN 'apartamento-solar' THEN 'Lourdes · Belo Horizonte'
+        WHEN 'casa-ipe' THEN 'Belvedere · Belo Horizonte'
+        WHEN 'cobertura-horizonte' THEN 'Savassi · Belo Horizonte'
+        WHEN 'loft-harmonia' THEN 'Buritis · Belo Horizonte'
+        WHEN 'casa-cedro' THEN 'Lourdes · Belo Horizonte'
+        WHEN 'apartamento-mirante' THEN 'Savassi · Belo Horizonte'
+        ELSE location
+      END,
+      city = 'Belo Horizonte',
+      description = REPLACE(REPLACE(description, 'Pinheiros', 'Lourdes'), 'Jardins', 'Savassi')
+      WHERE slug IN ('apartamento-solar','casa-ipe','cobertura-horizonte','loft-harmonia','casa-cedro','apartamento-mirante')
+        AND (city = 'São Paulo' OR location LIKE '%São Paulo%' OR description LIKE '%Pinheiros%' OR description LIKE '%Jardins%')`);
+  }
 
   const [[{ count }]] = await db.query('SELECT COUNT(*) AS count FROM morada_properties');
   const allowDemoSeed = !isProduction && process.env.SEED_DEMO_DATA !== 'false';
