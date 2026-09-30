@@ -24,7 +24,7 @@ test('R2 gera URL S3 assinada e usa domínio de mídia somente para leitura', as
     process.env.MANUS_API_URL = '';
     process.env.MANUS_API_KEY = '';
     const storage = await import('./server/storage.js');
-    const key = 'morada/properties/property-id/sala-principal.webp';
+    const key = 'gisley/properties/property-id/sala-principal.webp';
     const uploadUrl = await storage.storagePresign(key);
     process.stdout.write(JSON.stringify({
       uploadUrl,
@@ -39,11 +39,11 @@ test('R2 gera URL S3 assinada e usa domínio de mídia somente para leitura', as
   const result = JSON.parse(output);
   const signed = new URL(result.uploadUrl);
   assert.equal(signed.hostname, 'abc123.r2.cloudflarestorage.com');
-  assert.equal(signed.pathname, '/gisley-nunes-imoveis/morada/properties/property-id/sala-principal.webp');
+  assert.equal(signed.pathname, '/gisley-nunes-imoveis/gisley/properties/property-id/sala-principal.webp');
   assert.equal(signed.searchParams.get('X-Amz-Algorithm'), 'AWS4-HMAC-SHA256');
   assert.equal(signed.searchParams.get('X-Amz-SignedHeaders'), 'host');
   assert.ok(signed.searchParams.get('X-Amz-Signature'));
-  assert.equal(result.assetUrl, 'https://media.gisley.test/morada/properties/property-id/sala-principal.webp');
+  assert.equal(result.assetUrl, 'https://media.gisley.test/gisley/properties/property-id/sala-principal.webp');
   assert.equal(result.provider, 'r2');
   assert.equal(result.uploadUrl.includes('secret-test'), false);
 });
