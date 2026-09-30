@@ -164,6 +164,19 @@ async function start() {
     const vite = await createViteServer({ root, server: { middlewareMode: true, host: '127.0.0.1' }, appType: 'custom' });
     app.use(vite.middlewares);
   }
+  app.use((req, res) => {
+    if (req.accepts('html')) {
+      return res.status(404).render('404', {
+        page: pageMeta(req, {
+          title: 'Página não encontrada — Gisley Nunes Imóveis',
+          description: 'A página procurada não foi encontrada. Continue navegando pelos imóveis da Gisley Nunes.',
+          path: req.path
+        })
+      });
+    }
+    return res.status(404).json({ error: 'NOT_FOUND' });
+  });
+
   app.listen(port, '0.0.0.0', () => console.log(`[morada] listening on 0.0.0.0:${port} · database:${migration.configured ? 'ready' : 'fallback'}`));
 }
 
