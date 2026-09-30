@@ -3,6 +3,7 @@ import {
   addPhoto,
   addTestimonial,
   createContactLead,
+  databaseReady,
   getProperty,
   getPropertyBySlug,
   listContactLeads,
@@ -50,6 +51,14 @@ function adminApiGuard(req, res, next) {
 
 export function registerRoutes(app) {
   app.get('/_app/health', (req, res) => res.json({ ok: true, service: 'morada' }));
+  app.get('/_app/ready', async (req, res, next) => {
+    try {
+      const database = await databaseReady();
+      return res.status(database.ok ? 200 : 503).json({ ok: database.ok, database: database.reason });
+    } catch (error) {
+      return next(error);
+    }
+  });
 
   app.get('/api/auth/login', loginLimiter, login);
   app.get('/api/auth/callback', loginLimiter, callback);
