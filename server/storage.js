@@ -22,3 +22,20 @@ export async function storagePresign(filePath) {
   if (!response.ok || !body.url) throw new Error(body.error || `STORAGE_PRESIGN_${response.status}`);
   return body.url;
 }
+
+
+export async function storageGetSignedUrl(filePath) {
+  if (!hasStorage()) throw new Error('STORAGE_NOT_CONFIGURED');
+  const key = String(filePath || '').replace(/^\/+/, '').slice(0, 500);
+  if (!key.startsWith('morada/properties/')) throw new Error('INVALID_ASSET');
+
+  const base = storage.apiUrl.replace(/\/$/, '');
+  const url = `${base}/v1/storage/presign/get?path=${encodeURIComponent(key)}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${storage.apiKey}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(10000)
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !body.url) throw new Error(body.error || `STORAGE_GET_${response.status}`);
+  return body.url;
+}
