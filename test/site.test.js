@@ -18,10 +18,8 @@ test('getSiteInfo retorna o fallback quando não há banco', async () => {
   assert.ok(site.email);
 });
 
-test('getTestimonials retorna uma lista com autor e texto', async () => {
+test('getTestimonials não inventa depoimentos quando não há banco', async () => {
   const testimonials = await getTestimonials();
   assert.ok(Array.isArray(testimonials));
-  assert.ok(testimonials.length >= 1);
-  assert.ok(testimonials[0].author);
-  assert.ok(testimonials[0].quote);
+  assert.deepEqual(testimonials, []);
 });
