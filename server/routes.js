@@ -23,7 +23,7 @@ import {
 import { hasDatabase, isAllowedEmail } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin, requireManager } from './auth.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { createRateLimiter, requireSameOrigin } from './security.js';
+import { createRateLimiter, requireAdminOrigin, requireSameOrigin } from './security.js';
 import {
   safeFileName,
   storageAssetUrl,
@@ -58,6 +58,8 @@ function adminApiGuard(req, res, next) {
 }
 
 export function registerRoutes(app) {
+  app.use(['/api/auth', '/api/admin'], requireAdminOrigin);
+
   app.get('/_app/health', (req, res) => res.json({ ok: true, service: 'morada' }));
   app.get('/_app/ready', async (req, res, next) => {
     try {
