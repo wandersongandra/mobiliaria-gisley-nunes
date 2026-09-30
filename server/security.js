@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { isIP } from 'node:net';
 import { configuredPublicOrigin, isProduction } from './config.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -69,10 +70,18 @@ export function requireSameOrigin(req, res, next) {
   return res.status(403).json({ error: 'CROSS_SITE_REQUEST_BLOCKED' });
 }
 
+function clientAddress(req) {
+  if (process.env.TRUST_PROXY_MODE === 'cloudflare') {
+    const candidate = firstHeader(req.headers['cf-connecting-ip']);
+    if (isIP(candidate)) return candidate;
+  }
+  return String(req.socket?.remoteAddress || 'unknown');
+}
+
 export function createRateLimiter({ windowMs, max, namespace = 'default' }) {
   return (req, res, next) => {
     const now = Date.now();
-    const remote = String(req.socket?.remoteAddress || 'unknown');
+    const remote = clientAddress(req);
     const key = `${namespace}:${remote}`;
     const current = rateBuckets.get(key);
 
