@@ -7,17 +7,20 @@ import {
   getPropertyBySlug,
   listContactLeads,
   listProperties,
+  listStaffAccess,
   removePhoto,
+  removeStaffAccess,
   removeTestimonial,
   reorderPhotos,
   saveProperty,
   saveSiteSettings,
+  saveStaffAccess,
   setPhotoCover,
   softDeleteProperty,
   updateContactLeadStatus
 } from './db.js';
-import { hasDatabase } from './config.js';
-import { callback, currentAdmin, login, logout, requireAdmin } from './auth.js';
+import { hasDatabase, isAllowedEmail } from './config.js';
+import { callback, currentAdmin, login, logout, requireAdmin, requireManager } from './auth.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireSameOrigin } from './security.js';
 import { safeFileName, storagePresign } from './storage.js';
@@ -227,7 +230,7 @@ export function registerRoutes(app) {
     try { res.json({ site: await getSiteInfo(), testimonials: await getTestimonials() }); } catch (error) { next(error); }
   });
 
-  app.put('/api/admin/site', async (req, res, next) => {
+  app.put('/api/admin/site', requireManager(), async (req, res, next) => {
     try {
       await saveSiteSettings(req.body || {});
       res.json({ site: await getSiteInfo() });
@@ -236,7 +239,7 @@ export function registerRoutes(app) {
     }
   });
 
-  app.post('/api/admin/testimonials', async (req, res, next) => {
+  app.post('/api/admin/testimonials', requireManager(), async (req, res, next) => {
     try {
       const data = normalizeTestimonial(req.body || {});
       res.status(201).json({ testimonials: await addTestimonial(data) });
@@ -245,7 +248,7 @@ export function registerRoutes(app) {
     }
   });
 
-  app.delete('/api/admin/testimonials/:id', async (req, res, next) => {
+  app.delete('/api/admin/testimonials/:id', requireManager(), async (req, res, next) => {
     try {
       const removed = await removeTestimonial(req.params.id);
       return removed ? res.status(204).end() : res.status(404).json({ error: 'NOT_FOUND' });
@@ -262,6 +265,64 @@ export function registerRoutes(app) {
     try {
       const updated = await updateContactLeadStatus(req.params.id, String(req.body?.status || ''));
       return updated ? res.json({ ok: true }) : res.status(404).json({ error: 'NOT_FOUND' });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get('/api/admin/team', requireManager(), async (req, res, next) => {
+    try {
+      const team = await listStaffAccess();
+      res.json({ team });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/admin/team', requireManager(), async (req, res, next) => {
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const name = String(req.body?.name || '').trim();
+      const role = req.body?.role === 'manager' ? 'manager' : 'editor';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !name || name.length > 255) {
+        return res.status(400).json({ error: 'INVALID_TEAM_MEMBER' });
+      }
+      const member = await saveStaffAccess({ email, name, role, active: true, invitedBy: req.admin.email });
+      return res.status(201).json({ member });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.patch('/api/admin/team/:email', requireManager(), async (req, res, next) => {
+    try {
+      const email = decodeURIComponent(String(req.params.email || '')).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
+      if (isAllowedEmail(email) && req.body?.role && req.body.role !== 'manager') {
+        return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
+      }
+      const current = (await listStaffAccess()).find((item) => item.email === email);
+      if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
+      const member = await saveStaffAccess({
+        email,
+        name: String(req.body?.name ?? current.name).trim(),
+        role: isAllowedEmail(email) ? 'manager' : (req.body?.role === 'manager' ? 'manager' : (req.body?.role === 'editor' ? 'editor' : current.role)),
+        active: typeof req.body?.active === 'boolean' ? req.body.active : Boolean(current.active),
+        invitedBy: current.invited_by || req.admin.email
+      });
+      return res.json({ member });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.delete('/api/admin/team/:email', requireManager(), async (req, res, next) => {
+    try {
+      const email = decodeURIComponent(String(req.params.email || '')).trim().toLowerCase();
+      if (email === req.admin.email) return res.status(400).json({ error: 'CANNOT_REMOVE_SELF' });
+      if (isAllowedEmail(email)) return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
+      const removed = await removeStaffAccess(email);
+      return removed ? res.status(204).end() : res.status(404).json({ error: 'NOT_FOUND' });
     } catch (error) {
       return next(error);
     }
