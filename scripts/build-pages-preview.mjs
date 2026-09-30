@@ -15,8 +15,8 @@ const site = {
   crci: '0052305',
   area: 'Belo Horizonte e região',
   address: 'Belo Horizonte, MG',
-  phoneDisplay: '(31) 99999-9999',
-  whatsapp: '5531999999999',
+  phoneDisplay: '(31) 9155-4677',
+  whatsapp: '553191554677',
   email: 'contato@gisleynunesimoveis.com.br',
   instagramDisplay: '@gisleynunesimoveis',
   instagramUrl: 'https://instagram.com/gisleynunesimoveis'
