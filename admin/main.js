@@ -1,6 +1,17 @@
-import './styles.css';
+function ensureAdminStyles() {
+  for (const href of ['/admin/styles.css', '/admin/refinements.css']) {
+    if (document.querySelector(`link[href="${href}"]`)) continue;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.append(link);
+  }
+}
 
-const state = { user: null, properties: [], editing: null, pendingFiles: [], search: '' };
+ensureAdminStyles();
+
+
+const state = { user: null, properties: [], leads: [], editing: null, pendingFiles: [], search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -12,14 +23,26 @@ function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { d
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }
 
 async function request(url, options = {}) {
-  const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
+  const headers = { Accept: 'application/json', ...(options.headers || {}) };
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (response.status === 401) { showLogin(); throw new Error('AUTH_REQUIRED'); }
   if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || 'REQUEST_FAILED'); }
   return response.status === 204 ? null : response.json();
 }
 
-function showLogin() { dashboard.hidden = true; loginScreen.hidden = false; $('#login-button').href = `/api/auth/login?origin=${encodeURIComponent(window.location.origin)}`; }
-function showDashboard() { loginScreen.hidden = true; dashboard.hidden = false; $('#user-name').textContent = state.user?.name?.split(' ')[0] || 'equipe'; }
+function showLogin() { dashboard.hidden = true; loginScreen.hidden = false; $('#login-button').href = '/api/auth/login'; }
+function showDashboard() {
+  loginScreen.hidden = true;
+  dashboard.hidden = false;
+  $('#user-name').textContent = state.user?.name?.split(' ')[0] || 'equipe';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const title = $('#page-title');
+  if (title?.childNodes?.[0]) title.childNodes[0].textContent = `${greeting}, `;
+  const kicker = document.querySelector('.admin-topbar .admin-kicker');
+  if (kicker) kicker.textContent = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date());
+}
 
 function renderProperties() {
   const published = state.properties.filter((item) => item.status === 'published').length;
@@ -130,7 +153,66 @@ async function removeTestimonial(id) {
   } catch { siteNotify('Não foi possível remover o depoimento.', 'error'); }
 }
 
-async function init() { try { const session = await request('/api/admin/session'); if (!session.authenticated) return showLogin(); state.user = session.user; showDashboard(); state.properties = (await request('/api/admin/properties')).properties; renderProperties(); } catch (error) { if (error.message !== 'AUTH_REQUIRED') showLogin(); } }
+function ensureLeadsPanel() {
+  if ($('#leads-panel')) return $('#leads-panel');
+  const metrics = document.querySelector('.metrics-grid');
+  if (!metrics) return null;
+  const panel = document.createElement('section');
+  panel.id = 'leads-panel';
+  panel.className = 'leads-panel';
+  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">novos contatos</p><h3>Interesses recebidos pelo site.</h3></div><span id="lead-total" class="lead-total">0 novos</span></div><div id="lead-list" class="lead-list"></div>';
+  metrics.insertAdjacentElement('afterend', panel);
+  return panel;
+}
+
+function renderLeads() {
+  const panel = ensureLeadsPanel();
+  if (!panel) return;
+  const list = $('#lead-list');
+  const newCount = state.leads.filter((lead) => lead.status === 'new').length;
+  $('#lead-total').textContent = `${newCount} ${newCount === 1 ? 'novo' : 'novos'}`;
+  const accent = document.querySelector('.metric-accent');
+  if (accent) accent.innerHTML = `<span class="metric-label">contatos novos</span><strong>${String(newCount).padStart(2, '0')}</strong><small>recebidos pelo site</small>`;
+
+  const items = state.leads.slice(0, 8);
+  list.innerHTML = items.length ? items.map((lead) => {
+    const propertyLink = String(lead.property_path || '').startsWith('/imoveis/')
+      ? `<a class="lead-property" href="${escapeHTML(lead.property_path)}" target="_blank" rel="noopener">Ver imóvel ↗</a>` : '';
+    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><button type="button" data-lead-status="contacted" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'contacted' ? 'disabled' : ''}>Contatado</button><button type="button" data-lead-status="closed" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'closed' ? 'disabled' : ''}>Concluir</button></div></article>`;
+  }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato pendente.</h4><p>Os formulários enviados pelo site aparecerão aqui.</p></div>';
+
+  list.querySelectorAll('[data-lead-id]').forEach((button) => button.addEventListener('click', async () => {
+    try {
+      await request(`/api/admin/leads/${button.dataset.leadId}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.leadStatus }) });
+      state.leads = state.leads.map((lead) => lead.id === button.dataset.leadId ? { ...lead, status: button.dataset.leadStatus } : lead);
+      renderLeads();
+    } catch { window.alert('Não foi possível atualizar este contato.'); }
+  }));
+}
+
+async function loadLeads() {
+  try {
+    state.leads = (await request('/api/admin/leads')).leads || [];
+    renderLeads();
+  } catch {
+    ensureLeadsPanel();
+    if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar os contatos agora.</p></div>';
+  }
+}
+
+async function init() {
+  try {
+    const session = await request('/api/admin/session');
+    if (!session.authenticated) return showLogin();
+    state.user = session.user;
+    showDashboard();
+    const [properties] = await Promise.all([request('/api/admin/properties'), loadLeads()]);
+    state.properties = properties.properties;
+    renderProperties();
+  } catch (error) {
+    if (error.message !== 'AUTH_REQUIRED') showLogin();
+  }
+}
 
 $('#new-property')?.addEventListener('click', () => openEditor());
 $('#new-property-top')?.addEventListener('click', () => openEditor());
