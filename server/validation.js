@@ -27,16 +27,21 @@ export function normalizePropertyInput(input = {}) {
 
   const purpose = PURPOSES.has(input.purpose) ? input.purpose : 'Comprar';
   const type = PROPERTY_TYPES.has(input.type) ? input.type : 'Apartamento';
+  const location = text(input.location, 180);
+  const city = text(input.city || 'Belo Horizonte', 120);
+  if (!location) throw new Error('LOCATION_REQUIRED');
+  const price = nonNegativeNumber(input.price, 999999999999.99);
+  const priceLabel = text(input.priceLabel, 100) || (price > 0 ? `R$ ${price.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : 'Sob consulta');
 
   return {
     title,
     slug: text(input.slug, 180),
-    location: text(input.location, 180),
-    city: text(input.city || 'Belo Horizonte', 120),
+    location,
+    city,
     purpose,
     type,
-    price: nonNegativeNumber(input.price, 999999999999.99),
-    priceLabel: text(input.priceLabel, 100),
+    price,
+    priceLabel,
     bedrooms: integer(input.bedrooms, 50),
     bathrooms: integer(input.bathrooms, 50),
     areaM2: nonNegativeNumber(input.areaM2, 9999999.99),
