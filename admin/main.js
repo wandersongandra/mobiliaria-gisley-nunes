@@ -268,7 +268,7 @@ function ensureLeadsPanel() {
   const panel = document.createElement('section');
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">novos contatos</p><h3>Interesses recebidos pelo site.</h3></div><span id="lead-total" class="lead-total">0 novos</span></div><div id="lead-list" class="lead-list"></div>';
+  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">novos contatos</p><h3>Interesses recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><div id="lead-list" class="lead-list"></div>';
   metrics.insertAdjacentElement('afterend', panel);
   return panel;
 }
@@ -294,7 +294,18 @@ function renderLeads() {
       await request(`/api/admin/leads/${button.dataset.leadId}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.leadStatus }) });
       state.leads = state.leads.map((lead) => lead.id === button.dataset.leadId ? { ...lead, status: button.dataset.leadStatus } : lead);
       renderLeads();
-    } catch { window.alert('Não foi possível atualizar este contato.'); }
+      const status = $('#lead-status');
+      if (status) {
+        status.textContent = 'Contato atualizado.';
+        status.dataset.tone = 'success';
+      }
+    } catch {
+      const status = $('#lead-status');
+      if (status) {
+        status.textContent = 'Não foi possível atualizar este contato. Tente novamente.';
+        status.dataset.tone = 'error';
+      }
+    }
   }));
 }
 
