@@ -30,7 +30,8 @@ function page({ title, description, pathname, ogImage }) {
     description,
     canonical: `${previewOrigin}${pathname}`,
     ogImage: ogImage || `${previewOrigin}/images/gisley-nunes-imoveis-logo.jpeg`,
-    ogType: 'website'
+    ogType: 'website',
+    robots: 'noindex,nofollow,noarchive'
   };
 }
 
