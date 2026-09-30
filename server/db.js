@@ -1,13 +1,21 @@
 import mysql from 'mysql2/promise';
 import { hasDatabase } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
+import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
 let pool;
 
 export function getPool() {
   if (!hasDatabase()) throw new Error('DATABASE_NOT_CONFIGURED');
   if (!pool) {
-    pool = mysql.createPool({ uri: process.env.DATABASE_URL, connectionLimit: 5, waitForConnections: true, connectTimeout: 10000 });
+    pool = mysql.createPool({
+      uri: process.env.DATABASE_URL,
+      connectionLimit: 5,
+      waitForConnections: true,
+      connectTimeout: 10000,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 0
+    });
   }
   return pool;
 }
@@ -15,6 +23,7 @@ export function getPool() {
 export async function migrate() {
   if (!hasDatabase()) return { configured: false };
   const db = getPool();
+
   await db.query(`CREATE TABLE IF NOT EXISTS morada_admin_users (
     open_id VARCHAR(191) PRIMARY KEY,
     email VARCHAR(255) NOT NULL,
@@ -22,6 +31,7 @@ export async function migrate() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
   await db.query(`CREATE TABLE IF NOT EXISTS morada_properties (
     id CHAR(36) PRIMARY KEY,
     title VARCHAR(160) NOT NULL,
@@ -43,12 +53,20 @@ export async function migrate() {
     status VARCHAR(20) NOT NULL DEFAULT 'draft',
     is_featured TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_morada_properties_status_updated (status, updated_at),
+    INDEX idx_morada_properties_featured (is_featured, updated_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-  try { await db.query('ALTER TABLE morada_properties ADD COLUMN suites INT NOT NULL DEFAULT 0'); } catch {}
-  try { await db.query('ALTER TABLE morada_properties ADD COLUMN parking_spots INT NOT NULL DEFAULT 0'); } catch {}
-  try { await db.query('ALTER TABLE morada_properties ADD COLUMN condo_fee DECIMAL(10,2) NOT NULL DEFAULT 0'); } catch {}
-  try { await db.query('ALTER TABLE morada_properties ADD COLUMN iptu DECIMAL(12,2) NOT NULL DEFAULT 0'); } catch {}
+
+  for (const statement of [
+    'ALTER TABLE morada_properties ADD COLUMN suites INT NOT NULL DEFAULT 0',
+    'ALTER TABLE morada_properties ADD COLUMN parking_spots INT NOT NULL DEFAULT 0',
+    'ALTER TABLE morada_properties ADD COLUMN condo_fee DECIMAL(10,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE morada_properties ADD COLUMN iptu DECIMAL(12,2) NOT NULL DEFAULT 0'
+  ]) {
+    try { await db.query(statement); } catch {}
+  }
+
   await db.query(`CREATE TABLE IF NOT EXISTS morada_property_photos (
     id CHAR(36) PRIMARY KEY,
     property_id CHAR(36) NOT NULL,
@@ -61,6 +79,43 @@ export async function migrate() {
     CONSTRAINT fk_morada_property_photo FOREIGN KEY (property_id) REFERENCES morada_properties(id) ON DELETE CASCADE,
     INDEX idx_morada_property_photos (property_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_site_settings (
+    id TINYINT PRIMARY KEY DEFAULT 1,
+    phone_display VARCHAR(50),
+    whatsapp VARCHAR(30),
+    email VARCHAR(120),
+    address VARCHAR(180),
+    crci VARCHAR(30),
+    area VARCHAR(120),
+    instagram_url VARCHAR(200),
+    instagram_display VARCHAR(60),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_testimonials (
+    id CHAR(36) PRIMARY KEY,
+    author VARCHAR(120) NOT NULL,
+    quote TEXT NOT NULL,
+    location VARCHAR(120),
+    year VARCHAR(10),
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_contact_leads (
+    id CHAR(36) PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    interest VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    property_path VARCHAR(240),
+    status VARCHAR(20) NOT NULL DEFAULT 'new',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_morada_contact_leads_status_created (status, created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
   await db.execute(`UPDATE morada_properties SET
     location = CASE slug
       WHEN 'apartamento-solar' THEN 'Lourdes · Belo Horizonte'
@@ -75,36 +130,23 @@ export async function migrate() {
     description = REPLACE(REPLACE(description, 'Pinheiros', 'Lourdes'), 'Jardins', 'Savassi')
     WHERE slug IN ('apartamento-solar','casa-ipe','cobertura-horizonte','loft-harmonia','casa-cedro','apartamento-mirante')
       AND (city = 'São Paulo' OR location LIKE '%São Paulo%' OR description LIKE '%Pinheiros%' OR description LIKE '%Jardins%')`);
+
   const [[{ count }]] = await db.query('SELECT COUNT(*) AS count FROM morada_properties');
   if (Number(count) === 0) {
     const { randomUUID } = await import('node:crypto');
     for (const item of demoProperties) {
       const id = randomUUID();
-      await db.execute('INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [id, item.title, item.slug, item.location, item.city, item.purpose, item.type, item.price, item.priceLabel, item.bedrooms, item.bathrooms, item.areaM2, item.description, item.status, item.featured]);
-      await db.execute('INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover) VALUES (?,?,?,?,?,?,?)', [randomUUID(), id, `demo/${item.slug}`, item.coverUrl, item.title, 0, 1]);
+      await db.execute(
+        'INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [id, item.title, item.slug, item.location, item.city, item.purpose, item.type, item.price, item.priceLabel, item.bedrooms, item.bathrooms, item.areaM2, item.description, item.status, item.featured]
+      );
+      await db.execute(
+        'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover) VALUES (?,?,?,?,?,?,?)',
+        [randomUUID(), id, `demo/${item.slug}`, item.coverUrl, item.title, 0, 1]
+      );
     }
   }
-  await db.query(`CREATE TABLE IF NOT EXISTS morada_site_settings (
-    id TINYINT PRIMARY KEY DEFAULT 1,
-    phone_display VARCHAR(50),
-    whatsapp VARCHAR(30),
-    email VARCHAR(120),
-    address VARCHAR(180),
-    crci VARCHAR(30),
-    area VARCHAR(120),
-    instagram_url VARCHAR(200),
-    instagram_display VARCHAR(60),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-  await db.query(`CREATE TABLE IF NOT EXISTS morada_testimonials (
-    id CHAR(36) PRIMARY KEY,
-    author VARCHAR(120) NOT NULL,
-    quote TEXT NOT NULL,
-    location VARCHAR(120),
-    year VARCHAR(10),
-    sort_order INT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
   return { configured: true };
 }
 
@@ -112,12 +154,29 @@ function propertyQuery(extra = '') {
   return `SELECT p.*, CASE WHEN p.price < 1500000 THEN 1 WHEN p.price <= 3000000 THEN 2 ELSE 3 END AS price_band, COALESCE(ph.url, '') AS cover_url FROM morada_properties p LEFT JOIN morada_property_photos ph ON ph.property_id = p.id AND ph.is_cover = 1 ${extra}`;
 }
 
+async function hydratePhotos(rows) {
+  if (!rows.length) return rows;
+  const db = getPool();
+  const ids = rows.map((row) => row.id);
+  const placeholders = ids.map(() => '?').join(',');
+  const [photos] = await db.execute(
+    `SELECT id, property_id, storage_path, url, alt_text, sort_order, is_cover, created_at FROM morada_property_photos WHERE property_id IN (${placeholders}) ORDER BY sort_order ASC, created_at ASC`,
+    ids
+  );
+  const grouped = new Map();
+  for (const photo of photos) {
+    if (!grouped.has(photo.property_id)) grouped.set(photo.property_id, []);
+    grouped.get(photo.property_id).push(photo);
+  }
+  for (const row of rows) row.photos = grouped.get(row.id) || [];
+  return rows;
+}
+
 export async function listProperties({ publicOnly = false } = {}) {
   if (!hasDatabase()) return publicOnly ? seedRows().filter((item) => item.status === 'published') : seedRows();
   const db = getPool();
   const [rows] = await db.query(propertyQuery(publicOnly ? "WHERE p.status = 'published' ORDER BY p.is_featured DESC, p.updated_at DESC" : 'ORDER BY p.updated_at DESC'));
-  for (const row of rows) row.photos = await listPhotos(row.id);
-  return rows;
+  return hydratePhotos(rows);
 }
 
 export async function getProperty(id) {
@@ -125,16 +184,16 @@ export async function getProperty(id) {
   const db = getPool();
   const [rows] = await db.execute(propertyQuery('WHERE p.id = ? LIMIT 1'), [id]);
   if (!rows[0]) return null;
-  rows[0].photos = await listPhotos(id);
+  await hydratePhotos(rows);
   return rows[0];
 }
 
 export async function getPropertyBySlug(slug) {
-  if (!hasDatabase()) return seedRows().find((row) => row.slug === slug) || null;
+  if (!hasDatabase()) return seedRows().find((row) => row.slug === slug && row.status === 'published') || null;
   const db = getPool();
-  const [rows] = await db.execute(propertyQuery('WHERE p.slug = ? LIMIT 1'), [slug]);
+  const [rows] = await db.execute(propertyQuery("WHERE p.slug = ? AND p.status = 'published' LIMIT 1"), [String(slug || '').slice(0, 180)]);
   if (!rows[0]) return null;
-  rows[0].photos = await listPhotos(rows[0].id);
+  await hydratePhotos(rows);
   return rows[0];
 }
 
@@ -147,40 +206,62 @@ export async function listPhotos(propertyId) {
 export async function saveProperty(input, id = null) {
   const db = getPool();
   const { randomUUID } = await import('node:crypto');
+  const data = normalizePropertyInput(input);
   const propertyId = id || randomUUID();
-  const title = String(input.title || '').trim();
-  if (!title) throw new Error('TITLE_REQUIRED');
-  const slug = String(input.slug || title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')).slice(0, 170) || propertyId;
-  const values = [propertyId, title, slug, String(input.location || '').trim(), String(input.city || 'Belo Horizonte').trim(), String(input.purpose || 'Comprar'), String(input.type || 'Apartamento'), Number(input.price || 0), String(input.priceLabel || '').trim(), Number(input.bedrooms || 0), Number(input.bathrooms || 0), Number(input.areaM2 || 0), Number(input.suites || 0), Number(input.parkingSpots || 0), Number(input.condoFee || 0), Number(input.iptu || 0), String(input.description || '').trim(), input.status === 'published' ? 'published' : 'draft', input.featured ? 1 : 0];
-  if (id) {
-    await db.execute('UPDATE morada_properties SET title=?,slug=?,location=?,city=?,purpose=?,type=?,price=?,price_label=?,bedrooms=?,bathrooms=?,area_m2=?,suites=?,parking_spots=?,condo_fee=?,iptu=?,description=?,status=?,is_featured=? WHERE id=?', [...values.slice(1), propertyId]);
-  } else {
-    await db.execute('INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,suites,parking_spots,condo_fee,iptu,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', values);
+  const slug = String(data.slug || data.title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')).slice(0, 170) || propertyId;
+  const values = [
+    propertyId, data.title, slug, data.location, data.city, data.purpose, data.type, data.price, data.priceLabel,
+    data.bedrooms, data.bathrooms, data.areaM2, data.suites, data.parkingSpots, data.condoFee, data.iptu,
+    data.description, data.status, data.featured ? 1 : 0
+  ];
+
+  try {
+    if (id) {
+      const [result] = await db.execute(
+        'UPDATE morada_properties SET title=?,slug=?,location=?,city=?,purpose=?,type=?,price=?,price_label=?,bedrooms=?,bathrooms=?,area_m2=?,suites=?,parking_spots=?,condo_fee=?,iptu=?,description=?,status=?,is_featured=? WHERE id=?',
+        [...values.slice(1), propertyId]
+      );
+      if (!result.affectedRows) return null;
+    } else {
+      await db.execute(
+        'INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,suites,parking_spots,condo_fee,iptu,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        values
+      );
+    }
+  } catch (error) {
+    if (error?.code === 'ER_DUP_ENTRY') throw new Error('SLUG_CONFLICT');
+    throw error;
   }
+
   return getProperty(propertyId);
 }
 
 export async function softDeleteProperty(id) {
   const db = getPool();
-  await db.execute("UPDATE morada_properties SET status='archived' WHERE id=?", [id]);
+  const [result] = await db.execute("UPDATE morada_properties SET status='archived' WHERE id=?", [id]);
+  return result.affectedRows > 0;
 }
 
 export async function addPhoto({ id, propertyId, storagePath, url, altText, sortOrder, isCover }) {
   const db = getPool();
   if (isCover) await db.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
-  await db.execute('INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover) VALUES (?,?,?,?,?,?,?)', [id, propertyId, storagePath, url, altText, sortOrder, isCover ? 1 : 0]);
+  await db.execute(
+    'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover) VALUES (?,?,?,?,?,?,?)',
+    [id, propertyId, String(storagePath).slice(0, 500), String(url).slice(0, 600), String(altText || 'Foto do imóvel').trim().slice(0, 255), Number(sortOrder || 0), isCover ? 1 : 0]
+  );
   return listPhotos(propertyId);
 }
 
 export async function removePhoto(photoId) {
   const db = getPool();
   const [[photo]] = await db.execute('SELECT property_id, is_cover FROM morada_property_photos WHERE id=? LIMIT 1', [photoId]);
-  if (!photo) return;
+  if (!photo) return false;
   await db.execute('DELETE FROM morada_property_photos WHERE id=?', [photoId]);
   if (photo.is_cover) {
     const [[nextPhoto]] = await db.execute('SELECT id FROM morada_property_photos WHERE property_id=? ORDER BY sort_order ASC, created_at ASC LIMIT 1', [photo.property_id]);
     if (nextPhoto) await db.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=?', [nextPhoto.id]);
   }
+  return true;
 }
 
 export async function setPhotoCover(photoId) {
@@ -194,15 +275,19 @@ export async function setPhotoCover(photoId) {
 
 export async function reorderPhotos(propertyId, photoIds) {
   const db = getPool();
-  for (let index = 0; index < photoIds.length; index += 1) {
-    await db.execute('UPDATE morada_property_photos SET sort_order=? WHERE id=? AND property_id=?', [index, photoIds[index], propertyId]);
+  const uniqueIds = [...new Set(photoIds.map((id) => String(id || '')).filter(Boolean))].slice(0, 100);
+  for (let index = 0; index < uniqueIds.length; index += 1) {
+    await db.execute('UPDATE morada_property_photos SET sort_order=? WHERE id=? AND property_id=?', [index, uniqueIds[index], propertyId]);
   }
   return listPhotos(propertyId);
 }
 
 export async function upsertAdmin({ openId, email, name }) {
   const db = getPool();
-  await db.execute('INSERT INTO morada_admin_users (open_id,email,name) VALUES (?,?,?) ON DUPLICATE KEY UPDATE email=VALUES(email),name=VALUES(name),last_login_at=CURRENT_TIMESTAMP', [openId, email, name]);
+  await db.execute(
+    'INSERT INTO morada_admin_users (open_id,email,name) VALUES (?,?,?) ON DUPLICATE KEY UPDATE email=VALUES(email),name=VALUES(name),last_login_at=CURRENT_TIMESTAMP',
+    [String(openId).slice(0, 191), String(email).slice(0, 255), String(name).slice(0, 255)]
+  );
 }
 
 export async function findAdmin(openId) {
@@ -219,17 +304,12 @@ export async function getSiteSettings() {
 
 export async function saveSiteSettings(input = {}) {
   const db = getPool();
-  const values = [
-    String(input.phoneDisplay ?? '').trim(),
-    String(input.whatsapp ?? '').trim(),
-    String(input.email ?? '').trim(),
-    String(input.address ?? '').trim(),
-    String(input.crci ?? '').trim(),
-    String(input.area ?? '').trim(),
-    String(input.instagramUrl ?? '').trim(),
-    String(input.instagramDisplay ?? '').trim()
-  ];
-  await db.execute('INSERT INTO morada_site_settings (id, phone_display, whatsapp, email, address, crci, area, instagram_url, instagram_display) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE phone_display=VALUES(phone_display), whatsapp=VALUES(whatsapp), email=VALUES(email), address=VALUES(address), crci=VALUES(crci), area=VALUES(area), instagram_url=VALUES(instagram_url), instagram_display=VALUES(instagram_display)', values);
+  const data = normalizeSiteSettings(input);
+  const values = [data.phoneDisplay, data.whatsapp, data.email, data.address, data.crci, data.area, data.instagramUrl, data.instagramDisplay];
+  await db.execute(
+    'INSERT INTO morada_site_settings (id, phone_display, whatsapp, email, address, crci, area, instagram_url, instagram_display) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE phone_display=VALUES(phone_display), whatsapp=VALUES(whatsapp), email=VALUES(email), address=VALUES(address), crci=VALUES(crci), area=VALUES(area), instagram_url=VALUES(instagram_url), instagram_display=VALUES(instagram_display)',
+    values
+  );
   return getSiteSettings();
 }
 
@@ -239,14 +319,46 @@ export async function listTestimonials() {
   return rows;
 }
 
-export async function addTestimonial({ author, quote, location = '', year = '', sortOrder = 0 }) {
+export async function addTestimonial(input = {}) {
   const db = getPool();
   const { randomUUID } = await import('node:crypto');
-  await db.execute('INSERT INTO morada_testimonials (id, author, quote, location, year, sort_order) VALUES (?,?,?,?,?,?)', [randomUUID(), String(author || '').trim(), String(quote || '').trim(), String(location || '').trim(), String(year || '').trim(), Number(sortOrder || 0)]);
+  const data = normalizeTestimonial(input);
+  await db.execute(
+    'INSERT INTO morada_testimonials (id, author, quote, location, year, sort_order) VALUES (?,?,?,?,?,?)',
+    [randomUUID(), data.author, data.quote, data.location, data.year, data.sortOrder]
+  );
   return listTestimonials();
 }
 
 export async function removeTestimonial(id) {
   const db = getPool();
-  await db.execute('DELETE FROM morada_testimonials WHERE id=?', [id]);
+  const [result] = await db.execute('DELETE FROM morada_testimonials WHERE id=?', [id]);
+  return result.affectedRows > 0;
+}
+
+export async function createContactLead(input = {}) {
+  const db = getPool();
+  const { randomUUID } = await import('node:crypto');
+  const data = normalizeContactLead(input);
+  const id = randomUUID();
+  await db.execute(
+    'INSERT INTO morada_contact_leads (id, name, email, interest, message, property_path, status) VALUES (?,?,?,?,?,?,?)',
+    [id, data.name, data.email, data.interest, data.message, data.propertyPath, 'new']
+  );
+  return { id, ...data, status: 'new' };
+}
+
+export async function listContactLeads({ limit = 100 } = {}) {
+  const db = getPool();
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 250));
+  const [rows] = await db.query(`SELECT id, name, email, interest, message, property_path, status, created_at, updated_at FROM morada_contact_leads ORDER BY created_at DESC LIMIT ${safeLimit}`);
+  return rows;
+}
+
+export async function updateContactLeadStatus(id, status) {
+  const db = getPool();
+  const allowed = new Set(['new', 'contacted', 'closed']);
+  if (!allowed.has(status)) throw new Error('INVALID_LEAD_STATUS');
+  const [result] = await db.execute('UPDATE morada_contact_leads SET status=? WHERE id=?', [status, id]);
+  return result.affectedRows > 0;
 }
