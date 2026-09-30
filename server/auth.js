@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
 import { findAdmin, findStaffAccess, saveStaffAccess, upsertAdmin } from './db.js';
-import { hasDatabase, isAllowedEmail, oauth, sessionSecret } from './config.js';
-import { requestOrigin } from './security.js';
+import { configuredAdminOrigin, hasDatabase, isAllowedEmail, oauth, sessionSecret } from './config.js';
+import { requestHostOrigin } from './security.js';
 
 const sessionCookie = 'webdev_app_session';
 const stateCookie = 'morada_oauth_state';
@@ -101,7 +101,7 @@ export function requireManager() {
 export function login(req, res, next) {
   try {
     assertAuthConfig();
-    const origin = requestOrigin(req);
+    const origin = configuredAdminOrigin() || requestHostOrigin(req);
     if (!origin) return res.status(400).send('Origem inválida.');
 
     const redirectUri = `${origin}/api/auth/callback`;
@@ -173,7 +173,7 @@ export async function callback(req, res) {
 
     res.clearCookie(stateCookie, cookieOptions(req, { path: '/api/auth' }));
     res.cookie(sessionCookie, token, cookieOptions(req, { maxAge: 12 * 60 * 60 * 1000 }));
-    return res.redirect(303, '/admin');
+    return res.redirect(303, configuredAdminOrigin() ? `${configuredAdminOrigin()}/admin` : '/admin');
   } catch (error) {
     console.error('[oauth]', error.message);
     return res.status(400).send('Não foi possível concluir o acesso. Tente novamente.');
