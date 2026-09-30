@@ -22,8 +22,8 @@ export function sessionSecret() {
   return String(env.MORADA_SESSION_SECRET || '');
 }
 
-export function configuredPublicOrigin() {
-  const raw = String(env.PUBLIC_ORIGIN || '').trim();
+function configuredOrigin(value) {
+  const raw = String(value || '').trim();
   if (!raw) return '';
   try {
     const url = new URL(raw);
@@ -39,14 +39,47 @@ export function configuredPublicOrigin() {
   }
 }
 
-export function hasStorage() {
+export function configuredPublicOrigin() {
+  return configuredOrigin(env.PUBLIC_ORIGIN);
+}
+
+export function configuredAdminOrigin() {
+  return configuredOrigin(env.ADMIN_ORIGIN);
+}
+
+export function configuredMediaOrigin() {
+  return configuredOrigin(env.MEDIA_PUBLIC_ORIGIN);
+}
+
+export function hasR2Storage() {
+  return Boolean(
+    env.R2_ACCOUNT_ID
+    && env.R2_BUCKET
+    && env.R2_ACCESS_KEY_ID
+    && env.R2_SECRET_ACCESS_KEY
+  );
+}
+
+export function hasLegacyStorage() {
   return Boolean(env.MANUS_API_URL && env.MANUS_API_KEY);
+}
+
+export function hasStorage() {
+  return hasR2Storage() || hasLegacyStorage();
 }
 
 export const oauth = {
   portalUrl: env.MANUS_OAUTH_PORTAL_URL || '',
   apiUrl: env.MANUS_OAUTH_API_URL || '',
   projectId: env.MANUS_PROJECT_ID || ''
+};
+
+export const r2Storage = {
+  accountId: env.R2_ACCOUNT_ID || '',
+  bucket: env.R2_BUCKET || '',
+  accessKeyId: env.R2_ACCESS_KEY_ID || '',
+  secretAccessKey: env.R2_SECRET_ACCESS_KEY || '',
+  uploadExpiresSeconds: Math.min(Math.max(Number(env.R2_UPLOAD_EXPIRES_SECONDS || 600), 60), 3600)
 };
 
 export const storage = {
