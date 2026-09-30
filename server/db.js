@@ -215,7 +215,7 @@ export async function listProperties({ publicOnly = false } = {}) {
     return publicOnly ? seedRows().filter((item) => item.status === 'published') : seedRows();
   }
   const db = getPool();
-  const [rows] = await db.query(propertyQuery(publicOnly ? "WHERE p.status = 'published' ORDER BY p.is_featured DESC, p.updated_at DESC" : 'ORDER BY p.updated_at DESC'));
+  const [rows] = await db.query(propertyQuery(publicOnly ? "WHERE p.status = 'published' ORDER BY p.is_featured DESC, p.updated_at DESC" : "ORDER BY (p.status = 'archived') ASC, p.updated_at DESC"));
   return hydratePhotos(rows);
 }
 
@@ -248,7 +248,14 @@ export async function saveProperty(input, id = null) {
   const { randomUUID } = await import('node:crypto');
   const data = normalizePropertyInput(input);
   const propertyId = id || randomUUID();
-  const slug = String(data.slug || data.title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')).slice(0, 170) || propertyId;
+  let existingSlug = '';
+  if (id) {
+    const [[existing]] = await db.execute('SELECT slug FROM morada_properties WHERE id=? LIMIT 1', [id]);
+    if (!existing) return null;
+    existingSlug = String(existing.slug || '');
+  }
+  const generatedSlug = data.title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const slug = String(data.slug || existingSlug || generatedSlug).slice(0, 170) || propertyId;
   const values = [
     propertyId, data.title, slug, data.location, data.city, data.purpose, data.type, data.price, data.priceLabel,
     data.bedrooms, data.bathrooms, data.areaM2, data.suites, data.parkingSpots, data.condoFee, data.iptu,
