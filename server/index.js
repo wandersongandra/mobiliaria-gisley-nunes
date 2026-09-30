@@ -10,6 +10,7 @@ import { assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { escapeLd, organizationLd, propertyLd } from './seo.js';
 import { requestOrigin, securityHeaders } from './security.js';
+import { publicProperty } from './presenters.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -103,12 +104,13 @@ app.get('/imoveis/:slug', async (req, res, next) => {
     if (!property) return res.status(404).render('404', {
       page: pageMeta(req, { title: 'Imóvel não encontrado — Gisley Nunes Imóveis', description: 'O imóvel procurado não está disponível. Veja outros imóveis selecionados pela Gisley Nunes.', path: req.path })
     });
-    const description = property.description || `Conheça ${property.title} em ${property.location}.`;
+    const visibleProperty = publicProperty(property);
+    const description = visibleProperty.description || `Conheça ${visibleProperty.title} em ${visibleProperty.location}.`;
     res.render('imovel', {
-      page: pageMeta(req, { title: `${property.title} — Gisley Nunes Imóveis`, description, path: `/imoveis/${property.slug}`, ogImage: property.cover_url }),
-      property,
-      propertyJson: JSON.stringify(property).replace(/</g, '\\u003c'),
-      extraHead: `<script nonce="${res.locals.cspNonce}" type="application/ld+json">${escapeLd(propertyLd(property, originFrom(req)))}</script>`
+      page: pageMeta(req, { title: `${visibleProperty.title} — Gisley Nunes Imóveis`, description, path: `/imoveis/${visibleProperty.slug}`, ogImage: visibleProperty.cover_url }),
+      property: visibleProperty,
+      propertyJson: JSON.stringify(visibleProperty).replace(/</g, '\\u003c'),
+      extraHead: `<script nonce="${res.locals.cspNonce}" type="application/ld+json">${escapeLd(propertyLd(visibleProperty, originFrom(req)))}</script>`
     });
   } catch (error) { next(error); }
 });
