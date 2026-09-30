@@ -9,19 +9,22 @@ import { registerRoutes } from './routes.js';
 import { assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { escapeLd, organizationLd, propertyLd } from './seo.js';
+import { requestOrigin, securityHeaders } from './security.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const app = express();
 
+app.disable('x-powered-by');
+app.set('query parser', 'simple');
 app.set('view engine', 'ejs');
 app.set('views', path.join(root, 'views'));
-app.use(express.json({ limit: '3mb' }));
+app.use(securityHeaders);
+app.use(express.json({ limit: '256kb', type: 'application/json' }));
 app.use(cookieParser());
 
 function originFrom(req) {
-  const proto = req.headers['x-forwarded-proto'] || req.protocol;
-  return `${proto}://${req.get('host')}`;
+  return requestOrigin(req) || `http://localhost:${port}`;
 }
 
 app.use(async (req, res, next) => {
@@ -90,13 +93,15 @@ app.get('/privacidade', (req, res) => res.render('privacidade', {
 app.get('/imoveis/:slug', async (req, res, next) => {
   try {
     const property = await getPropertyBySlug(req.params.slug);
-    if (!property) return res.status(404).send('Imóvel não encontrado.');
+    if (!property) return res.status(404).render('404', {
+      page: pageMeta(req, { title: 'Imóvel não encontrado — Gisley Nunes Imóveis', description: 'O imóvel procurado não está disponível. Veja outros imóveis selecionados pela Gisley Nunes.', path: req.path })
+    });
     const description = property.description || `Conheça ${property.title} em ${property.location}.`;
     res.render('imovel', {
       page: pageMeta(req, { title: `${property.title} — Gisley Nunes Imóveis`, description, path: `/imoveis/${property.slug}`, ogImage: property.cover_url }),
       property,
       propertyJson: JSON.stringify(property).replace(/</g, '\\u003c'),
-      extraHead: `<script type="application/ld+json">${escapeLd(propertyLd(property, originFrom(req)))}</script>`
+      extraHead: `<script nonce="${res.locals.cspNonce}" type="application/ld+json">${escapeLd(propertyLd(property, originFrom(req)))}</script>`
     });
   } catch (error) { next(error); }
 });
@@ -144,19 +149,19 @@ app.get('/llms.txt', async (req, res, next) => {
 app.use((error, req, res, next) => {
   console.error('[api]', error.stack || error.message);
   if (res.headersSent) return next(error);
-  const known = { TITLE_REQUIRED: ['TITLE_REQUIRED', 400], DATABASE_NOT_CONFIGURED: ['DATABASE_NOT_CONFIGURED', 503], STORAGE_NOT_CONFIGURED: ['STORAGE_NOT_CONFIGURED', 503] }[error.message];
+  const known = { TITLE_REQUIRED: ['TITLE_REQUIRED', 400], INVALID_CONTACT: ['INVALID_CONTACT', 400], INVALID_EMAIL: ['INVALID_EMAIL', 400], INVALID_INSTAGRAM_URL: ['INVALID_INSTAGRAM_URL', 400], INVALID_TESTIMONIAL: ['INVALID_TESTIMONIAL', 400], INVALID_LEAD_STATUS: ['INVALID_LEAD_STATUS', 400], SLUG_CONFLICT: ['SLUG_CONFLICT', 409], DATABASE_NOT_CONFIGURED: ['DATABASE_NOT_CONFIGURED', 503], STORAGE_NOT_CONFIGURED: ['STORAGE_NOT_CONFIGURED', 503], OAUTH_NOT_CONFIGURED: ['OAUTH_NOT_CONFIGURED', 503], SESSION_SECRET_NOT_CONFIGURED: ['SESSION_SECRET_NOT_CONFIGURED', 503] }[error.message];
   res.status(known?.[1] || 500).json({ error: known?.[0] || 'INTERNAL_ERROR' });
 });
 
 async function start() {
   const migration = await migrate().catch((error) => { console.warn('[db] migration deferred:', error.message); return { configured: false }; });
   if (isProduction) {
-    const publicHeaders = (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); };
-    app.use(express.static(path.join(root, 'dist'), { etag: true, maxAge: '1y', index: false, setHeaders: publicHeaders }));
-    app.use('/admin', express.static(path.join(root, 'admin'), { etag: true, maxAge: 0, index: 'index.html', setHeaders: publicHeaders }));
+    const publicHeaders = (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); else if (/\.(?:js|css|woff2?|png|jpe?g|webp|avif|svg)$/i.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=604800, immutable'); };
+    app.use(express.static(path.join(root, 'dist'), { etag: true, maxAge: '7d', index: false, setHeaders: publicHeaders }));
+    app.use('/admin', express.static(path.join(root, 'admin'), { etag: true, maxAge: 0, index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate') }));
   } else {
     app.use('/admin', express.static(path.join(root, 'admin'), { etag: true, maxAge: 0, index: 'index.html' }));
-    const vite = await createViteServer({ root, server: { middlewareMode: true, host: '0.0.0.0' }, appType: 'custom' });
+    const vite = await createViteServer({ root, server: { middlewareMode: true, host: '127.0.0.1' }, appType: 'custom' });
     app.use(vite.middlewares);
   }
   app.listen(port, '0.0.0.0', () => console.log(`[morada] listening on 0.0.0.0:${port} · database:${migration.configured ? 'ready' : 'fallback'}`));
