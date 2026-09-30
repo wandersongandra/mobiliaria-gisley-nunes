@@ -22,15 +22,7 @@ const site = {
   instagramUrl: 'https://instagram.com/gisleynunesimoveis'
 };
 
-const testimonials = [
-  {
-    id: 'preview-testimonial-1',
-    author: 'Marina & André',
-    quote: 'O cuidado da Gisley Nunes foi muito além da negociação. Eles entenderam o que a gente procurava antes mesmo de a gente conseguir colocar em palavras.',
-    location: 'Casa em Belvedere',
-    year: '2024'
-  }
-];
+const testimonials = [];
 
 function page({ title, description, pathname, ogImage }) {
   return {
