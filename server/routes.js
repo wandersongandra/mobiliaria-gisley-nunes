@@ -119,6 +119,7 @@ export function registerRoutes(app) {
 
   app.post('/api/contact', requireSameOrigin, contactLimiter, async (req, res, next) => {
     try {
+      if (String(req.body?.website || '').trim()) return res.status(201).json({ ok: true });
       if (!hasDatabase()) return res.status(503).json({ error: 'CONTACT_UNAVAILABLE' });
       const data = normalizeContactLead(req.body || {});
       const lead = await createContactLead(data);
