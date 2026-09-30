@@ -7,8 +7,12 @@ process.env.DATABASE_URL = '';
 
 test('defaultSiteInfo possui os campos editáveis pelo admin', () => {
   for (const key of ['crci', 'area', 'email', 'whatsapp', 'phoneDisplay', 'instagramUrl']) {
-    assert.ok(defaultSiteInfo[key], `campo ausente: ${key}`);
+    assert.ok(Object.hasOwn(defaultSiteInfo, key), `campo ausente: ${key}`);
   }
+  for (const key of ['crci', 'area', 'email', 'whatsapp', 'phoneDisplay']) {
+    assert.ok(defaultSiteInfo[key], `campo obrigatório vazio: ${key}`);
+  }
+  assert.equal(defaultSiteInfo.instagramUrl, '');
 });
 
 test('getSiteInfo retorna o fallback quando não há banco', async () => {
