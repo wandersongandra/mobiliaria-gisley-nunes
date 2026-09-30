@@ -13,8 +13,8 @@
         </div>
       </section>
 
-      <section class="search-card shell" aria-labelledby="search-title">
-        <div class="search-head"><div><p class="eyebrow">encontre seu imóvel</p><h2 id="search-title">Filtre a curadoria</h2></div><span class="listing-count"><strong id="listing-count">00</strong> imóveis</span></div>
+      <section class="search-card shell catalog-search" aria-labelledby="search-title">
+        <div class="catalog-search-head"><div><p class="eyebrow">refine sua busca</p><h2 id="search-title">Encontre o que combina com você.</h2></div><span class="listing-count"><strong id="listing-count">00</strong> imóveis</span></div>
         <form id="search-form" class="search-form">
           <label class="field"><span>Eu quero</span><select id="purpose"><option value="all">Comprar ou alugar</option><option value="Comprar">Comprar</option><option value="Alugar">Alugar</option></select></label>
           <label class="field field-wide"><span>Bairro</span><select id="location"><option value="all">Todos os bairros</option></select></label>
@@ -26,7 +26,8 @@
         <div class="filter-summary" id="filter-summary" aria-live="polite"><span>carregando imóveis…</span></div>
       </section>
 
-      <section class="section shell listings-section" id="imoveis" aria-labelledby="listings-title">
+      <section class="section shell listings-section catalog-results" id="imoveis" aria-labelledby="listings-title">
+        <div class="catalog-results-head"><p class="eyebrow">curadoria disponível</p><span>Seleção atualizada para comprar ou alugar em Belo Horizonte e região.</span></div>
         <div class="listing-grid" id="listing-grid"></div>
         <p class="empty-state" id="empty-state" hidden>Nenhum imóvel encontrado com esses filtros. <button type="button" id="clear-filters">Limpar filtros</button></p>
       </section>
