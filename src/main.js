@@ -242,19 +242,19 @@ function renderPropertyDetail(property) {
   const photos = Array.isArray(property.photos) && property.photos.length
     ? property.photos
     : (property.cover_url ? [{ url: property.cover_url, alt_text: property.title, is_cover: 1 }] : []);
-  const primary = photos.find((photo) => photo.is_cover) || photos[0];
-  const thumbs = photos.map((photo, index) => `<button class="gallery-thumb${photo === primary ? ' is-active' : ''}" type="button" data-image="${escapeHTML(photo.url)}" data-alt="${escapeHTML(photo.alt_text || property.title)}" aria-label="Ver foto ${index + 1}"><img src="${escapeHTML(photo.url)}" alt="" loading="lazy" decoding="async" /><span>${String(index + 1).padStart(2, '0')}</span></button>`).join('');
+  const primaryIndex = Math.max(0, photos.findIndex((photo) => photo.is_cover));
+  const primary = photos[primaryIndex] || photos[0];
+  const thumbs = photos.map((photo, index) => `<button class="gallery-thumb${index === primaryIndex ? ' is-active' : ''}" type="button" data-index="${index}" data-image="${escapeHTML(photo.url)}" data-alt="${escapeHTML(photo.alt_text || property.title)}" aria-label="Ver foto ${index + 1} de ${photos.length}"><img src="${escapeHTML(photo.url)}" alt="" loading="lazy" decoding="async" /><span>${String(index + 1).padStart(2, '0')}</span></button>`).join('');
 
   const featureItems = [
     { label: 'Quartos', value: `${property.bedrooms ?? 0}` },
     { label: 'Suítes', value: `${property.suites ?? 0}`, show: Number(property.suites ?? 0) > 0 },
     { label: 'Banheiros', value: `${property.bathrooms ?? 0}` },
     { label: 'Vagas', value: `${property.parking_spots ?? 0}`, show: Number(property.parking_spots ?? 0) > 0 },
-    { label: 'Área', value: `${property.area_m2 ?? 0} m²` },
+    { label: 'Área privativa', value: `${property.area_m2 ?? 0} m²` },
     { label: 'Condomínio', value: `R$ ${Number(property.condo_fee ?? 0).toLocaleString('pt-BR')}`, show: Number(property.condo_fee ?? 0) > 0 },
-    { label: 'IPTU/ano', value: `R$ ${Number(property.iptu ?? 0).toLocaleString('pt-BR')}`, show: Number(property.iptu ?? 0) > 0 },
-    { label: 'Tipo', value: property.type || '' },
-    { label: 'Finalidade', value: property.purpose || '' }
+    { label: 'IPTU / ano', value: `R$ ${Number(property.iptu ?? 0).toLocaleString('pt-BR')}`, show: Number(property.iptu ?? 0) > 0 },
+    { label: 'Tipo', value: property.type || '' }
   ];
 
   const features = featureItems
@@ -262,7 +262,38 @@ function renderPropertyDetail(property) {
     .map((feature) => `<div class="property-feature"><span>${escapeHTML(feature.label)}</span><strong>${escapeHTML(feature.value)}</strong></div>`)
     .join('');
 
-  return `<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Início</a><span aria-hidden="true">›</span><a href="/imoveis">Imóveis</a><span aria-hidden="true">›</span><span aria-current="page">${escapeHTML(property.title)}</span></nav><section class="property-hero"><div class="property-gallery">${photos.length ? `<div class="gallery-main"><img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" fetchpriority="high" decoding="async" /></div>${photos.length > 1 ? `<div class="gallery-thumbs">${thumbs}</div>` : ''}` : ''}</div><div class="property-summary"><p class="eyebrow">${escapeHTML(property.purpose)} · ${escapeHTML(property.type)}</p><h1>${escapeHTML(property.title)}</h1><p class="property-location">${escapeHTML(property.location)}</p><strong class="property-price">${escapeHTML(property.price_label)}</strong><div class="property-features">${features}</div><a class="button button-primary" href="#contato">Agendar uma conversa <span aria-hidden="true">↗</span></a></div></section><section class="property-description"><p class="eyebrow">sobre este imóvel</p><p class="property-description-copy">${escapeHTML(property.description || '')}</p></section>`;
+  const gallery = photos.length ? `
+    <div class="gallery-main">
+      <img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" fetchpriority="high" decoding="async" />
+      <div class="gallery-main-overlay">
+        <span class="gallery-count" aria-live="polite"><strong data-gallery-current>${String(primaryIndex + 1).padStart(2, '0')}</strong> / ${String(photos.length).padStart(2, '0')}</span>
+        ${photos.length > 1 ? '<div class="gallery-controls"><button type="button" data-gallery-prev aria-label="Foto anterior">←</button><button type="button" data-gallery-next aria-label="Próxima foto">→</button></div>' : ''}
+      </div>
+    </div>
+    ${photos.length > 1 ? `<div class="gallery-thumbs" aria-label="Galeria de fotos">${thumbs}</div>` : ''}
+  ` : '';
+
+  return `<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Início</a><span aria-hidden="true">›</span><a href="/imoveis">Imóveis</a><span aria-hidden="true">›</span><span aria-current="page">${escapeHTML(property.title)}</span></nav>
+    <section class="property-hero">
+      <div class="property-gallery">${gallery}</div>
+      <aside class="property-summary">
+        <div class="property-summary-topline"><span>${escapeHTML(property.purpose)}</span><span>${escapeHTML(property.type)}</span></div>
+        <h1>${escapeHTML(property.title)}</h1>
+        <p class="property-location">${escapeHTML(property.location)}</p>
+        <strong class="property-price">${escapeHTML(property.price_label)}</strong>
+        <div class="property-summary-divider"></div>
+        <p class="property-section-label">Detalhes essenciais</p>
+        <div class="property-features">${features}</div>
+        <div class="property-actions">
+          <a class="button button-primary" href="#contato">Agendar uma conversa <span aria-hidden="true">↗</span></a>
+          <a class="property-back-link" href="/imoveis">← Voltar à curadoria</a>
+        </div>
+      </aside>
+    </section>
+    <section class="property-description">
+      <div><p class="eyebrow">sobre este imóvel</p><span class="property-description-index">01</span></div>
+      <p class="property-description-copy">${escapeHTML(property.description || '')}</p>
+    </section>`;
 }
 
 function initPropertyDetail() {
@@ -278,17 +309,24 @@ function initPropertyDetail() {
   }
 
   root.innerHTML = renderPropertyDetail(property);
-  root.querySelectorAll('.gallery-thumb').forEach((thumb) => {
-    thumb.addEventListener('click', () => {
-      const main = root.querySelector('.gallery-main img');
-      if (main) {
-        main.src = thumb.dataset.image;
-        main.alt = thumb.dataset.alt || property.title;
-      }
-      root.querySelectorAll('.gallery-thumb').forEach((item) => item.classList.remove('is-active'));
-      thumb.classList.add('is-active');
-    });
-  });
+  const thumbs = [...root.querySelectorAll('.gallery-thumb')];
+  const mainImage = root.querySelector('.gallery-main img');
+  const current = root.querySelector('[data-gallery-current]');
+  let activeIndex = Math.max(0, thumbs.findIndex((thumb) => thumb.classList.contains('is-active')));
+
+  const selectPhoto = (index) => {
+    if (!thumbs.length || !mainImage) return;
+    activeIndex = (index + thumbs.length) % thumbs.length;
+    const thumb = thumbs[activeIndex];
+    mainImage.src = thumb.dataset.image;
+    mainImage.alt = thumb.dataset.alt || property.title;
+    thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
+    if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
+  };
+
+  thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => selectPhoto(index)));
+  root.querySelector('[data-gallery-prev]')?.addEventListener('click', () => selectPhoto(activeIndex - 1));
+  root.querySelector('[data-gallery-next]')?.addEventListener('click', () => selectPhoto(activeIndex + 1));
 }
 
 function initTestimonials() {
