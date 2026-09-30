@@ -71,9 +71,39 @@ function fillForm(property = {}) {
   form.elements.featured.checked = Boolean(property.is_featured);
 }
 function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
-function openEditor(property = null) { state.editing = property; state.pendingFiles = []; $('#dialog-title').textContent = property ? 'Editar imóvel' : 'Novo imóvel'; fillForm(property || {}); renderPhotos(property?.photos || []); $('#editor-status').textContent = ''; dialog.showModal(); }
+function openEditor(property = null) {
+  state.editing = property;
+  state.pendingFiles = [];
+  $('#dialog-title').textContent = property ? 'Editar imóvel' : 'Novo imóvel';
+  fillForm(property || {});
+  renderPhotos(property?.photos || []);
+  $('#editor-status').textContent = '';
+  const archiveButton = $('#archive-property');
+  if (archiveButton) archiveButton.hidden = !property || property.status === 'archived';
+  dialog.showModal();
+}
 
 async function saveProperty(event) { if (event.submitter?.value === 'cancel') return; event.preventDefault(); const button = $('#save-property'); button.disabled = true; toast('Salvando alterações…'); const data = Object.fromEntries(new FormData(form)); data.published = form.elements.published.checked; data.featured = form.elements.featured.checked; data.status = data.published ? 'published' : 'draft'; try { const result = await request(state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties', { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(data) }); const property = result.property; await uploadPendingFiles(property.id); state.properties = (await request('/api/admin/properties')).properties; renderProperties(); dialog.close(); } catch (error) { toast(error.message === 'AUTH_REQUIRED' ? 'Sua sessão expirou.' : 'Não foi possível salvar. Tente novamente.', 'error'); } finally { button.disabled = false; } }
+
+
+async function archiveProperty() {
+  if (!state.editing) return;
+  const confirmed = window.confirm(`Arquivar "${state.editing.title}"? Ele deixará de aparecer no site público.`);
+  if (!confirmed) return;
+  const button = $('#archive-property');
+  if (button) button.disabled = true;
+  toast('Arquivando imóvel…');
+  try {
+    await request(`/api/admin/properties/${state.editing.id}`, { method: 'DELETE' });
+    state.properties = (await request('/api/admin/properties')).properties;
+    renderProperties();
+    dialog.close();
+  } catch {
+    toast('Não foi possível arquivar este imóvel.', 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
 
 async function uploadPendingFiles(propertyId) { for (let index = 0; index < state.pendingFiles.length; index += 1) { const file = state.pendingFiles[index]; toast(`Enviando foto ${index + 1} de ${state.pendingFiles.length}…`); const presign = await request('/api/admin/uploads/presign', { method: 'POST', body: JSON.stringify({ propertyId, fileName: file.name, contentType: file.type, size: file.size }) }); const upload = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file }); if (!upload.ok) throw new Error('UPLOAD_FAILED'); await request(`/api/admin/properties/${propertyId}/photos`, { method: 'POST', body: JSON.stringify({ storagePath: presign.storagePath, assetUrl: presign.assetUrl, altText: file.name.replace(/\.[^.]+$/, ''), sortOrder: index, isCover: index === 0 }) }); } }
 async function removePhoto(id) { if (!state.editing) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
@@ -294,6 +324,7 @@ async function init() {
 
 $('#new-property')?.addEventListener('click', () => openEditor());
 $('#new-property-top')?.addEventListener('click', () => openEditor());
+$('#archive-property')?.addEventListener('click', archiveProperty);
 $('#logout-button').addEventListener('click', async () => { await fetch('/api/auth/logout', { method: 'POST' }); showLogin(); });
 form.addEventListener('submit', saveProperty);
 $('#photo-input').addEventListener('change', (event) => { state.pendingFiles = [...state.pendingFiles, ...Array.from(event.target.files)]; $('#photo-grid').innerHTML = state.pendingFiles.map((file, index) => `<div class="photo-tile pending"><img src="${URL.createObjectURL(file)}" alt="${escapeHTML(file.name)}" /><span>${index === 0 ? 'nova capa' : 'nova'}</span></div>`).join(''); });
