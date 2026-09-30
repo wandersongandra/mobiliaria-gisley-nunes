@@ -5,6 +5,7 @@ import ejs from 'ejs';
 import { build } from 'vite';
 import { seedRows } from '../server/seed.js';
 import { escapeLd, organizationLd, propertyLd } from '../server/seo.js';
+import { publicProperty } from '../server/presenters.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'dist-preview');
@@ -105,7 +106,7 @@ const properties = seedRows()
   .filter((item) => item.status === 'published')
   .map((item) => {
     const urls = previewGallery[item.slug] || [item.cover_url];
-    return {
+    return publicProperty({
       ...item,
       photos: urls.map((url, index) => ({
         id: `preview-${item.slug}-${index + 1}`,
@@ -117,7 +118,7 @@ const properties = seedRows()
         is_cover: index === 0 ? 1 : 0,
         created_at: null
       }))
-    };
+    });
   });
 
 await render('home.ejs', 'index.html', {
