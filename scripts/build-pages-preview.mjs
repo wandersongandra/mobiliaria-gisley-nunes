@@ -196,6 +196,10 @@ await writeFile(path.join(outDir, 'api', 'properties', 'index.html'), JSON.strin
 await mkdir(path.join(outDir, 'api', 'site'), { recursive: true });
 await writeFile(path.join(outDir, 'api', 'site', 'index.html'), JSON.stringify({ site }), 'utf8');
 
+await writeFile(path.join(outDir, 'robots.txt'), `User-agent: *
+Disallow: /
+`, 'utf8');
+
 await writeFile(path.join(outDir, '_headers'), `/*
   X-Robots-Tag: noindex, nofollow
   X-Content-Type-Options: nosniff
