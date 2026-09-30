@@ -3,13 +3,13 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
-import { isProduction, port } from './config.js';
+import { configuredAdminOrigin, isProduction, port } from './config.js';
 import { getPropertyBySlug, listProperties, migrate } from './db.js';
 import { registerRoutes } from './routes.js';
 import { assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { escapeLd, organizationLd, propertyLd } from './seo.js';
-import { requestOrigin, securityHeaders } from './security.js';
+import { requestHostOrigin, requestOrigin, securityHeaders } from './security.js';
 import { publicProperty } from './presenters.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +23,13 @@ app.set('views', path.join(root, 'views'));
 app.use(securityHeaders);
 app.use(express.json({ limit: '256kb', type: 'application/json' }));
 app.use(cookieParser());
+
+app.use('/admin', (req, res, next) => {
+  const adminOrigin = configuredAdminOrigin();
+  if (!adminOrigin) return next();
+  if (requestHostOrigin(req) === adminOrigin) return next();
+  return res.redirect(308, `${adminOrigin}${req.originalUrl}`);
+});
 
 function originFrom(req) {
   return requestOrigin(req) || `http://localhost:${port}`;
