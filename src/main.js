@@ -34,9 +34,36 @@ function normalizeProperty(item) {
   };
 }
 
-function listingCard(item) {
+function listingCard(item, index = 0) {
   const href = item.slug ? `/imoveis/${encodeURIComponent(item.slug)}` : '/contato';
-  return `<article class="listing-card"><a href="${href}" class="listing-image"><img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" loading="lazy" decoding="async" /><span class="listing-tag">${escapeHTML(item.tag)}</span><span class="listing-arrow" aria-hidden="true">↗</span></a><div class="listing-info"><div><p class="listing-location">${escapeHTML(item.location)}</p><h3>${escapeHTML(item.title)}</h3></div><strong class="listing-price">${escapeHTML(item.price)}</strong></div><div class="listing-meta">${item.meta.map((meta) => `<span>${escapeHTML(meta)}</span>`).join('')}</div></article>`;
+  return `<article class="listing-card listing-card-enter" data-listing-card style="--card-index:${index}">
+    <a href="${href}" class="listing-image">
+      <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" loading="lazy" decoding="async" />
+      <span class="listing-tag">${escapeHTML(item.tag)}</span>
+      <span class="listing-arrow" aria-hidden="true">↗</span>
+      <span class="listing-image-shade" aria-hidden="true"></span>
+    </a>
+    <div class="listing-info">
+      <div><p class="listing-location">${escapeHTML(item.location)}</p><h3>${escapeHTML(item.title)}</h3></div>
+      <strong class="listing-price">${escapeHTML(item.price)}</strong>
+    </div>
+    <div class="listing-meta">${item.meta.map((meta) => `<span>${escapeHTML(meta)}</span>`).join('')}</div>
+  </article>`;
+}
+
+function listingSkeletons(count = 6) {
+  return Array.from({ length: count }, (_, index) => `<article class="listing-card listing-skeleton" aria-hidden="true" style="--card-index:${index}"><div class="skeleton-image"></div><div class="skeleton-line skeleton-line-short"></div><div class="skeleton-line"></div><div class="skeleton-meta"></div></article>`).join('');
+}
+
+function activateListingCards(grid) {
+  requestAnimationFrame(() => {
+    grid.querySelectorAll('[data-listing-card]').forEach((card) => card.classList.add('is-visible'));
+  });
+  grid.querySelectorAll('.listing-image img').forEach((image) => {
+    const markLoaded = () => image.classList.add('is-loaded');
+    if (image.complete) markLoaded();
+    else image.addEventListener('load', markLoaded, { once: true });
+  });
 }
 
 function markCurrentNavigation() {
@@ -106,10 +133,12 @@ function initListing() {
   }
 
   function renderListings(items = catalog) {
-    grid.innerHTML = items.map(listingCard).join('');
+    grid.innerHTML = items.map((item, index) => listingCard(item, index)).join('');
+    activateListingCards(grid);
     if (count) count.textContent = String(items.length).padStart(2, '0');
     if (empty) empty.hidden = items.length > 0;
     renderFilterSummary(items.length);
+    form?.classList.remove('has-pending-filters');
   }
 
   function clearFilters() {
@@ -130,6 +159,8 @@ function initListing() {
     fillSelect(filters.type, types, 'Todos os tipos');
   }
 
+  Object.values(filters).forEach((filter) => filter?.addEventListener('change', () => form?.classList.add('has-pending-filters')));
+
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
     const filtered = catalog.filter((item) => {
@@ -149,6 +180,7 @@ function initListing() {
   async function loadProperties() {
     try {
       grid.setAttribute('aria-busy', 'true');
+      grid.innerHTML = listingSkeletons(document.body.dataset.page === 'home' ? 6 : 6);
       const response = await fetch('/api/properties', { headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error('LOAD_FAILED');
       const payload = await response.json();
@@ -318,15 +350,65 @@ function initPropertyDetail() {
     if (!thumbs.length || !mainImage) return;
     activeIndex = (index + thumbs.length) % thumbs.length;
     const thumb = thumbs[activeIndex];
-    mainImage.src = thumb.dataset.image;
-    mainImage.alt = thumb.dataset.alt || property.title;
+    mainImage.classList.add('is-switching');
+    const nextSrc = thumb.dataset.image;
+    const nextAlt = thumb.dataset.alt || property.title;
+    const preloader = new Image();
+    preloader.onload = () => {
+      mainImage.src = nextSrc;
+      mainImage.alt = nextAlt;
+      requestAnimationFrame(() => mainImage.classList.remove('is-switching'));
+    };
+    preloader.src = nextSrc;
     thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
+    thumb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
   };
 
   thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => selectPhoto(index)));
   root.querySelector('[data-gallery-prev]')?.addEventListener('click', () => selectPhoto(activeIndex - 1));
   root.querySelector('[data-gallery-next]')?.addEventListener('click', () => selectPhoto(activeIndex + 1));
+
+  const galleryMain = root.querySelector('.gallery-main');
+  let pointerStartX = null;
+  galleryMain?.addEventListener('pointerdown', (event) => { pointerStartX = event.clientX; });
+  galleryMain?.addEventListener('pointerup', (event) => {
+    if (pointerStartX == null || thumbs.length < 2) return;
+    const delta = event.clientX - pointerStartX;
+    pointerStartX = null;
+    if (Math.abs(delta) > 44) selectPhoto(activeIndex + (delta < 0 ? 1 : -1));
+  });
+  galleryMain?.setAttribute('tabindex', '0');
+  galleryMain?.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowLeft') selectPhoto(activeIndex - 1);
+    if (event.key === 'ArrowRight') selectPhoto(activeIndex + 1);
+  });
+}
+
+function initScrollPolish() {
+  const header = document.querySelector('.site-header');
+  const updateHeader = () => header?.classList.toggle('is-scrolled', window.scrollY > 18);
+  updateHeader();
+  window.addEventListener('scroll', updateHeader, { passive: true });
+
+  const targets = document.querySelectorAll('.section-heading, .brand-statement, .experience-intro, .stats, .testimonial-feature, .contact-grid, .about-visual, .about-values-grid, .catalog-results-head, .property-description');
+  if (!('IntersectionObserver' in window)) {
+    targets.forEach((target) => target.classList.add('is-revealed'));
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('is-revealed');
+      observer.unobserve(entry.target);
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -24px' });
+
+  targets.forEach((target) => {
+    target.classList.add('reveal-on-scroll');
+    observer.observe(target);
+  });
 }
 
 function initTestimonials() {
@@ -372,3 +454,4 @@ initPropertyDetail();
 initContactForm();
 initTestimonials();
 initWhatsAppShortcut();
+initScrollPolish();
