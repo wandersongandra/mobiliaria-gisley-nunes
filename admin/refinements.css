@@ -27,3 +27,5 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 @media(max-width:1050px){.team-layout{grid-template-columns:1fr}.team-members-card{order:-1}}
 @media(max-width:760px){.role-chip{display:none}.team-row{grid-template-columns:1fr;gap:10px}.team-actions{justify-content:flex-start}.team-permission{justify-content:flex-start}}
 @media(max-width:460px){.team-actions{flex-wrap:wrap}.team-actions button{flex:1 1 auto}}
+
+.danger-button{margin-right:auto;color:#a76052;border-color:rgba(167,96,82,.3)}.danger-button:hover{background:#a76052!important;border-color:#a76052!important;color:#fff!important}.danger-button:disabled{opacity:.5;cursor:wait}
