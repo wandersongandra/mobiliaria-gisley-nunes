@@ -264,11 +264,10 @@ export async function saveProperty(input, id = null) {
 
   try {
     if (id) {
-      const [result] = await db.execute(
+      await db.execute(
         'UPDATE morada_properties SET title=?,slug=?,location=?,city=?,purpose=?,type=?,price=?,price_label=?,bedrooms=?,bathrooms=?,area_m2=?,suites=?,parking_spots=?,condo_fee=?,iptu=?,description=?,status=?,is_featured=? WHERE id=?',
         [...values.slice(1), propertyId]
       );
-      if (!result.affectedRows) return null;
     } else {
       await db.execute(
         'INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,suites,parking_spots,condo_fee,iptu,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
