@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
-import { findAdmin, upsertAdmin } from './db.js';
+import { findAdmin, findStaffAccess, saveStaffAccess, upsertAdmin } from './db.js';
 import { hasDatabase, isAllowedEmail, oauth, sessionSecret } from './config.js';
 import { requestOrigin } from './security.js';
 
@@ -39,7 +39,7 @@ function assertAuthConfig() {
 
 async function signSession(user) {
   const secret = new TextEncoder().encode(sessionSecret());
-  return new SignJWT({ openId: user.openId, email: user.email, name: user.name, role: 'admin' })
+  return new SignJWT({ openId: user.openId, email: user.email, name: user.name, role: user.role })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuer(sessionIssuer)
     .setAudience(sessionAudience)
@@ -58,7 +58,7 @@ async function verifySessionToken(token) {
       issuer: sessionIssuer,
       audience: sessionAudience
     });
-    if (payload.role === 'admin' && payload.openId) return payload;
+    if (['manager', 'editor'].includes(payload.role) && payload.openId) return payload;
   } catch {}
   return null;
 }
@@ -69,8 +69,13 @@ export async function currentAdmin(req) {
   const payload = await verifySessionToken(token);
   if (!payload?.openId) return null;
   const user = await findAdmin(String(payload.openId));
-  if (!user || !isAllowedEmail(user.email)) return null;
-  return { openId: user.open_id, email: user.email, name: user.name, role: 'admin' };
+  if (!user) return null;
+  const email = String(user.email || '').trim().toLowerCase();
+  const bootstrapManager = isAllowedEmail(email);
+  const access = await findStaffAccess(email);
+  if (!bootstrapManager && (!access || !access.active)) return null;
+  const role = bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor');
+  return { openId: user.open_id, email, name: user.name, role };
 }
 
 export function requireAdmin() {
@@ -83,6 +88,13 @@ export function requireAdmin() {
     } catch (error) {
       return next(error);
     }
+  };
+}
+
+export function requireManager() {
+  return (req, res, next) => {
+    if (req.admin?.role !== 'manager') return res.status(403).json({ error: 'MANAGER_REQUIRED' });
+    return next();
   };
 }
 
@@ -148,12 +160,16 @@ export async function callback(req, res) {
     const openId = String(userInfo.openId || userInfo.open_id || '');
     const name = String(userInfo.name || email || 'Administrador').slice(0, 255);
 
-    if (!openId || !isAllowedEmail(email)) {
+    const bootstrapManager = isAllowedEmail(email);
+    const access = email ? await findStaffAccess(email) : null;
+    if (!openId || (!bootstrapManager && (!access || !access.active))) {
       return res.status(403).send('Este e-mail não está autorizado a administrar a Gisley Nunes Imóveis.');
     }
 
+    const role = bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor');
+    if (bootstrapManager) await saveStaffAccess({ email, name, role: 'manager', active: true, invitedBy: 'environment' });
     await upsertAdmin({ openId, email, name });
-    const token = await signSession({ openId, email, name });
+    const token = await signSession({ openId, email, name, role });
 
     res.clearCookie(stateCookie, cookieOptions(req, { path: '/api/auth' }));
     res.cookie(sessionCookie, token, cookieOptions(req, { maxAge: 12 * 60 * 60 * 1000 }));
