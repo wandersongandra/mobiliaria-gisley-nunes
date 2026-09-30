@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
+import { configuredAdminOrigin } from './config.js';
 import { configuredPublicOrigin, isProduction } from './config.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -106,4 +107,19 @@ export function createRateLimiter({ windowMs, max, namespace = 'default' }) {
 
     return next();
   };
+}
+
+
+export function requireAdminOrigin(req, res, next) {
+  const adminOrigin = configuredAdminOrigin();
+  if (!adminOrigin) return next();
+
+  const currentOrigin = requestOrigin(req);
+  if (currentOrigin === adminOrigin) return next();
+
+  if (req.method === 'GET' && req.path === '/api/auth/login') {
+    return res.redirect(307, `${adminOrigin}${req.originalUrl}`);
+  }
+
+  return res.status(404).json({ error: 'NOT_FOUND' });
 }
