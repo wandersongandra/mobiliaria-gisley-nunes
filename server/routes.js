@@ -296,7 +296,7 @@ export function registerRoutes(app) {
 
   app.patch('/api/admin/team/:email', requireManager(), async (req, res, next) => {
     try {
-      const email = decodeURIComponent(String(req.params.email || '')).trim().toLowerCase();
+      const email = String(req.params.email || '').trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
       if (isAllowedEmail(email) && req.body?.role && req.body.role !== 'manager') {
         return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
@@ -318,7 +318,7 @@ export function registerRoutes(app) {
 
   app.delete('/api/admin/team/:email', requireManager(), async (req, res, next) => {
     try {
-      const email = decodeURIComponent(String(req.params.email || '')).trim().toLowerCase();
+      const email = String(req.params.email || '').trim().toLowerCase();
       if (email === req.admin.email) return res.status(400).json({ error: 'CANNOT_REMOVE_SELF' });
       if (isAllowedEmail(email)) return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
       const removed = await removeStaffAccess(email);
