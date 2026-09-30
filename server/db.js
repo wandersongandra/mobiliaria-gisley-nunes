@@ -20,6 +20,16 @@ export function getPool() {
   return pool;
 }
 
+export async function databaseReady() {
+  if (!hasDatabase()) return { ok: false, reason: 'not_configured' };
+  try {
+    await getPool().query('SELECT 1');
+    return { ok: true, reason: 'ready' };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
 export async function migrate() {
   if (!hasDatabase()) return { configured: false };
   const db = getPool();
