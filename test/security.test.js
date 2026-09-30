@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { configuredPublicOrigin } from '../server/config.js';
-import { requestOrigin } from '../server/security.js';
+import { configuredAdminOrigin, configuredPublicOrigin } from '../server/config.js';
+import { requestHostOrigin, requestOrigin } from '../server/security.js';
 
 function mockRequest({ host = 'localhost:3000', proto = '' } = {}) {
   return {
@@ -30,4 +30,21 @@ test('requestOrigin usa protocolo encaminhado HTTPS', () => {
   process.env.PUBLIC_ORIGIN = '';
   assert.equal(requestOrigin(mockRequest({ host: 'site.com', proto: 'https' })), 'https://site.com');
   process.env.PUBLIC_ORIGIN = previous;
+});
+
+
+test('requestHostOrigin mantém a origem real mesmo com domínio público canônico', () => {
+  const previousPublic = process.env.PUBLIC_ORIGIN;
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  const req = mockRequest({ host: 'painel.gisley.test', proto: 'https' });
+  assert.equal(requestOrigin(req), 'https://www.gisley.test');
+  assert.equal(requestHostOrigin(req), 'https://painel.gisley.test');
+  process.env.PUBLIC_ORIGIN = previousPublic;
+});
+
+test('configuredAdminOrigin normaliza o subdomínio do painel', () => {
+  const previous = process.env.ADMIN_ORIGIN;
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test/admin?x=1';
+  assert.equal(configuredAdminOrigin(), 'https://painel.gisley.test');
+  process.env.ADMIN_ORIGIN = previous;
 });
