@@ -109,10 +109,31 @@ export async function migrate() {
     alt_text VARCHAR(255) NOT NULL,
     sort_order INT NOT NULL DEFAULT 0,
     is_cover TINYINT(1) NOT NULL DEFAULT 0,
+    storage_provider VARCHAR(20) NOT NULL DEFAULT 'legacy',
+    mime_type VARCHAR(80),
+    file_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    width INT UNSIGNED NOT NULL DEFAULT 0,
+    height INT UNSIGNED NOT NULL DEFAULT 0,
+    uploaded_by VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_morada_property_photo FOREIGN KEY (property_id) REFERENCES morada_properties(id) ON DELETE CASCADE,
     INDEX idx_morada_property_photos (property_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  for (const statement of [
+    "ALTER TABLE morada_property_photos ADD COLUMN storage_provider VARCHAR(20) NOT NULL DEFAULT 'legacy'",
+    'ALTER TABLE morada_property_photos ADD COLUMN mime_type VARCHAR(80)',
+    'ALTER TABLE morada_property_photos ADD COLUMN file_size BIGINT UNSIGNED NOT NULL DEFAULT 0',
+    'ALTER TABLE morada_property_photos ADD COLUMN width INT UNSIGNED NOT NULL DEFAULT 0',
+    'ALTER TABLE morada_property_photos ADD COLUMN height INT UNSIGNED NOT NULL DEFAULT 0',
+    'ALTER TABLE morada_property_photos ADD COLUMN uploaded_by VARCHAR(255)'
+  ]) {
+    try {
+      await db.query(statement);
+    } catch (error) {
+      if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
+  }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_site_settings (
     id TINYINT PRIMARY KEY DEFAULT 1,
@@ -197,7 +218,7 @@ async function hydratePhotos(rows) {
   const ids = rows.map((row) => row.id);
   const placeholders = ids.map(() => '?').join(',');
   const [photos] = await db.execute(
-    `SELECT id, property_id, storage_path, url, alt_text, sort_order, is_cover, created_at FROM morada_property_photos WHERE property_id IN (${placeholders}) ORDER BY sort_order ASC, created_at ASC`,
+    `SELECT id, property_id, storage_path, url, alt_text, sort_order, is_cover, storage_provider, mime_type, file_size, width, height, uploaded_by, created_at FROM morada_property_photos WHERE property_id IN (${placeholders}) ORDER BY sort_order ASC, created_at ASC`,
     ids
   );
   const grouped = new Map();
@@ -239,7 +260,7 @@ export async function getPropertyBySlug(slug) {
 
 export async function listPhotos(propertyId) {
   const db = getPool();
-  const [rows] = await db.execute('SELECT id, property_id, storage_path, url, alt_text, sort_order, is_cover, created_at FROM morada_property_photos WHERE property_id = ? ORDER BY sort_order ASC, created_at ASC', [propertyId]);
+  const [rows] = await db.execute('SELECT id, property_id, storage_path, url, alt_text, sort_order, is_cover, storage_provider, mime_type, file_size, width, height, uploaded_by, created_at FROM morada_property_photos WHERE property_id = ? ORDER BY sort_order ASC, created_at ASC', [propertyId]);
   return rows;
 }
 
@@ -288,26 +309,54 @@ export async function softDeleteProperty(id) {
   return result.affectedRows > 0;
 }
 
-export async function addPhoto({ id, propertyId, storagePath, url, altText, sortOrder, isCover }) {
+export async function addPhoto({
+  id,
+  propertyId,
+  storagePath,
+  url,
+  altText,
+  sortOrder,
+  isCover,
+  storageProvider = 'legacy',
+  mimeType = '',
+  fileSize = 0,
+  width = 0,
+  height = 0,
+  uploadedBy = ''
+}) {
   const db = getPool();
   if (isCover) await db.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
   await db.execute(
-    'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover) VALUES (?,?,?,?,?,?,?)',
-    [id, propertyId, String(storagePath).slice(0, 500), String(url).slice(0, 600), String(altText || 'Foto do imóvel').trim().slice(0, 255), Number(sortOrder || 0), isCover ? 1 : 0]
+    'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover,storage_provider,mime_type,file_size,width,height,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    [
+      id,
+      propertyId,
+      String(storagePath).slice(0, 500),
+      String(url).slice(0, 600),
+      String(altText || 'Foto do imóvel').trim().slice(0, 255),
+      Number(sortOrder || 0),
+      isCover ? 1 : 0,
+      String(storageProvider || 'legacy').slice(0, 20),
+      String(mimeType || '').slice(0, 80),
+      Math.max(0, Number(fileSize || 0)),
+      Math.max(0, Number(width || 0)),
+      Math.max(0, Number(height || 0)),
+      String(uploadedBy || '').slice(0, 255)
+    ]
   );
   return listPhotos(propertyId);
 }
 
 export async function removePhoto(photoId) {
   const db = getPool();
-  const [[photo]] = await db.execute('SELECT property_id, is_cover FROM morada_property_photos WHERE id=? LIMIT 1', [photoId]);
+  const [[photo]] = await db.execute('SELECT property_id, is_cover, storage_path, storage_provider FROM morada_property_photos WHERE id=? LIMIT 1', [photoId]);
   if (!photo) return false;
   await db.execute('DELETE FROM morada_property_photos WHERE id=?', [photoId]);
   if (photo.is_cover) {
     const [[nextPhoto]] = await db.execute('SELECT id FROM morada_property_photos WHERE property_id=? ORDER BY sort_order ASC, created_at ASC LIMIT 1', [photo.property_id]);
     if (nextPhoto) await db.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=?', [nextPhoto.id]);
   }
-  return true;
+  return photo;
 }
 
 export async function setPhotoCover(photoId) {
