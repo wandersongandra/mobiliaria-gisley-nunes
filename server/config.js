@@ -8,7 +8,10 @@ export function hasDatabase() {
 }
 
 export function adminEmails() {
-  return String(env.MORADA_ADMIN_EMAILS || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+  return String(env.MORADA_ADMIN_EMAILS || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 export function isAllowedEmail(email) {
@@ -16,7 +19,24 @@ export function isAllowedEmail(email) {
 }
 
 export function sessionSecret() {
-  return env.MORADA_SESSION_SECRET || '';
+  return String(env.MORADA_SESSION_SECRET || '');
+}
+
+export function configuredPublicOrigin() {
+  const raw = String(env.PUBLIC_ORIGIN || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (!['http:', 'https:'].includes(url.protocol)) return '';
+    url.username = '';
+    url.password = '';
+    url.pathname = '';
+    url.search = '';
+    url.hash = '';
+    return url.origin;
+  } catch {
+    return '';
+  }
 }
 
 export function hasStorage() {
@@ -26,8 +46,7 @@ export function hasStorage() {
 export const oauth = {
   portalUrl: env.MANUS_OAUTH_PORTAL_URL || '',
   apiUrl: env.MANUS_OAUTH_API_URL || '',
-  projectId: env.MANUS_PROJECT_ID || '',
-  jwtSecret: env.MANUS_JWT_SECRET || ''
+  projectId: env.MANUS_PROJECT_ID || ''
 };
 
 export const storage = {
