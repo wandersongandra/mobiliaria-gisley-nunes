@@ -35,12 +35,20 @@ export async function migrate() {
     bedrooms INT NOT NULL DEFAULT 0,
     bathrooms INT NOT NULL DEFAULT 0,
     area_m2 DECIMAL(10,2) NOT NULL DEFAULT 0,
+    suites INT NOT NULL DEFAULT 0,
+    parking_spots INT NOT NULL DEFAULT 0,
+    condo_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
+    iptu DECIMAL(12,2) NOT NULL DEFAULT 0,
     description TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'draft',
     is_featured TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  try { await db.query('ALTER TABLE morada_properties ADD COLUMN suites INT NOT NULL DEFAULT 0'); } catch {}
+  try { await db.query('ALTER TABLE morada_properties ADD COLUMN parking_spots INT NOT NULL DEFAULT 0'); } catch {}
+  try { await db.query('ALTER TABLE morada_properties ADD COLUMN condo_fee DECIMAL(10,2) NOT NULL DEFAULT 0'); } catch {}
+  try { await db.query('ALTER TABLE morada_properties ADD COLUMN iptu DECIMAL(12,2) NOT NULL DEFAULT 0'); } catch {}
   await db.query(`CREATE TABLE IF NOT EXISTS morada_property_photos (
     id CHAR(36) PRIMARY KEY,
     property_id CHAR(36) NOT NULL,
@@ -143,11 +151,11 @@ export async function saveProperty(input, id = null) {
   const title = String(input.title || '').trim();
   if (!title) throw new Error('TITLE_REQUIRED');
   const slug = String(input.slug || title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')).slice(0, 170) || propertyId;
-  const values = [propertyId, title, slug, String(input.location || '').trim(), String(input.city || 'Belo Horizonte').trim(), String(input.purpose || 'Comprar'), String(input.type || 'Apartamento'), Number(input.price || 0), String(input.priceLabel || '').trim(), Number(input.bedrooms || 0), Number(input.bathrooms || 0), Number(input.areaM2 || 0), String(input.description || '').trim(), input.status === 'published' ? 'published' : 'draft', input.featured ? 1 : 0];
+  const values = [propertyId, title, slug, String(input.location || '').trim(), String(input.city || 'Belo Horizonte').trim(), String(input.purpose || 'Comprar'), String(input.type || 'Apartamento'), Number(input.price || 0), String(input.priceLabel || '').trim(), Number(input.bedrooms || 0), Number(input.bathrooms || 0), Number(input.areaM2 || 0), Number(input.suites || 0), Number(input.parkingSpots || 0), Number(input.condoFee || 0), Number(input.iptu || 0), String(input.description || '').trim(), input.status === 'published' ? 'published' : 'draft', input.featured ? 1 : 0];
   if (id) {
-    await db.execute('UPDATE morada_properties SET title=?,slug=?,location=?,city=?,purpose=?,type=?,price=?,price_label=?,bedrooms=?,bathrooms=?,area_m2=?,description=?,status=?,is_featured=? WHERE id=?', [...values.slice(1), propertyId]);
+    await db.execute('UPDATE morada_properties SET title=?,slug=?,location=?,city=?,purpose=?,type=?,price=?,price_label=?,bedrooms=?,bathrooms=?,area_m2=?,suites=?,parking_spots=?,condo_fee=?,iptu=?,description=?,status=?,is_featured=? WHERE id=?', [...values.slice(1), propertyId]);
   } else {
-    await db.execute('INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', values);
+    await db.execute('INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,suites,parking_spots,condo_fee,iptu,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', values);
   }
   return getProperty(propertyId);
 }
@@ -173,6 +181,23 @@ export async function removePhoto(photoId) {
     const [[nextPhoto]] = await db.execute('SELECT id FROM morada_property_photos WHERE property_id=? ORDER BY sort_order ASC, created_at ASC LIMIT 1', [photo.property_id]);
     if (nextPhoto) await db.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=?', [nextPhoto.id]);
   }
+}
+
+export async function setPhotoCover(photoId) {
+  const db = getPool();
+  const [[photo]] = await db.execute('SELECT property_id FROM morada_property_photos WHERE id=? LIMIT 1', [photoId]);
+  if (!photo) return null;
+  await db.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [photo.property_id]);
+  await db.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=?', [photoId]);
+  return listPhotos(photo.property_id);
+}
+
+export async function reorderPhotos(propertyId, photoIds) {
+  const db = getPool();
+  for (let index = 0; index < photoIds.length; index += 1) {
+    await db.execute('UPDATE morada_property_photos SET sort_order=? WHERE id=? AND property_id=?', [index, photoIds[index], propertyId]);
+  }
+  return listPhotos(propertyId);
 }
 
 export async function upsertAdmin({ openId, email, name }) {

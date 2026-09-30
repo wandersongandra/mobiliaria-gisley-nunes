@@ -136,13 +136,18 @@ function renderPropertyDetail(property) {
   const photos = Array.isArray(property.photos) && property.photos.length ? property.photos : (property.cover_url ? [{ url: property.cover_url, alt_text: property.title, is_cover: 1 }] : []);
   const primary = photos.find((photo) => photo.is_cover) || photos[0];
   const thumbs = photos.map((photo, index) => `<button class="gallery-thumb${photo === primary ? ' is-active' : ''}" type="button" data-image="${escapeHTML(photo.url)}" aria-label="Ver foto ${index + 1}"><img src="${escapeHTML(photo.url)}" alt="" loading="lazy" /><span>${String(index + 1).padStart(2, '0')}</span></button>`).join('');
-  const features = [
+  const featureItems = [
     { label: 'Quartos', value: `${property.bedrooms ?? 0}` },
+    { label: 'Suítes', value: `${property.suites ?? 0}`, show: Number(property.suites ?? 0) > 0 },
     { label: 'Banheiros', value: `${property.bathrooms ?? 0}` },
+    { label: 'Vagas', value: `${property.parking_spots ?? 0}`, show: Number(property.parking_spots ?? 0) > 0 },
     { label: 'Área', value: `${property.area_m2 ?? 0} m²` },
+    { label: 'Condomínio', value: `R$ ${Number(property.condo_fee ?? 0).toLocaleString('pt-BR')}`, show: Number(property.condo_fee ?? 0) > 0 },
+    { label: 'IPTU/ano', value: `R$ ${Number(property.iptu ?? 0).toLocaleString('pt-BR')}`, show: Number(property.iptu ?? 0) > 0 },
     { label: 'Tipo', value: property.type || '' },
     { label: 'Finalidade', value: property.purpose || '' }
-  ].map((feature) => `<div class="property-feature"><span>${escapeHTML(feature.label)}</span><strong>${escapeHTML(feature.value)}</strong></div>`).join('');
+  ];
+  const features = featureItems.filter((feature) => feature.show !== false).map((feature) => `<div class="property-feature"><span>${escapeHTML(feature.label)}</span><strong>${escapeHTML(feature.value)}</strong></div>`).join('');
 
   return `<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Início</a><span aria-hidden="true">›</span><a href="/#imoveis">Imóveis</a><span aria-hidden="true">›</span><span aria-current="page">${escapeHTML(property.title)}</span></nav><section class="property-hero"><div class="property-gallery">${photos.length ? `<div class="gallery-main"><img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" /></div>${photos.length > 1 ? `<div class="gallery-thumbs">${thumbs}</div>` : ''}` : ''}</div><div class="property-summary"><p class="eyebrow">${escapeHTML(property.purpose)} · ${escapeHTML(property.type)}</p><h1>${escapeHTML(property.title)}</h1><p class="property-location">${escapeHTML(property.location)}</p><strong class="property-price">${escapeHTML(property.price_label)}</strong><div class="property-features">${features}</div><a class="button button-primary" href="#contato">Falar sobre este imóvel <span aria-hidden="true">↗</span></a></div></section><section class="property-description"><p class="eyebrow">sobre este imóvel</p><p class="property-description-copy">${escapeHTML(property.description || '')}</p></section>`;
 }

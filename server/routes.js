@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { addPhoto, addTestimonial, getProperty, getPropertyBySlug, listProperties, removePhoto, removeTestimonial, saveProperty, saveSiteSettings, softDeleteProperty } from './db.js';
+import { addPhoto, addTestimonial, getProperty, getPropertyBySlug, listProperties, removePhoto, removeTestimonial, reorderPhotos, saveProperty, saveSiteSettings, setPhotoCover, softDeleteProperty } from './db.js';
 import { hasDatabase } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin } from './auth.js';
 import { getSiteInfo, getTestimonials } from './site.js';
@@ -62,6 +62,8 @@ export function registerRoutes(app) {
     } catch (error) { next(error); }
   });
   app.delete('/api/admin/photos/:id', async (req, res, next) => { try { await removePhoto(req.params.id); res.status(204).end(); } catch (error) { next(error); } });
+  app.put('/api/admin/properties/:id/photos/order', async (req, res, next) => { try { const { photoIds } = req.body || {}; if (!Array.isArray(photoIds)) return res.status(400).json({ error: 'INVALID_ORDER' }); const property = await getProperty(req.params.id); if (!property) return res.status(404).json({ error: 'NOT_FOUND' }); res.json({ photos: await reorderPhotos(req.params.id, photoIds) }); } catch (error) { next(error); } });
+  app.put('/api/admin/photos/:id/cover', async (req, res, next) => { try { const photos = await setPhotoCover(req.params.id); if (!photos) return res.status(404).json({ error: 'NOT_FOUND' }); res.json({ photos }); } catch (error) { next(error); } });
 
   app.get('/api/admin/site', async (req, res, next) => { try { res.json({ site: await getSiteInfo(), testimonials: await getTestimonials() }); } catch (error) { next(error); } });
   app.put('/api/admin/site', async (req, res, next) => { try { await saveSiteSettings(req.body || {}); res.json({ site: await getSiteInfo() }); } catch (error) { next(error); } });

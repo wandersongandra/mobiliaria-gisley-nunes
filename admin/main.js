@@ -1,6 +1,6 @@
 import './styles.css';
 
-const state = { user: null, properties: [], editing: null, pendingFiles: [] };
+const state = { user: null, properties: [], editing: null, pendingFiles: [], search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -27,24 +27,51 @@ function renderProperties() {
   $('#metric-total').textContent = String(state.properties.length).padStart(2, '0');
   $('#metric-published').textContent = String(published).padStart(2, '0');
   $('#metric-draft').textContent = String(drafts).padStart(2, '0');
+  const query = String(state.search || '').trim().toLowerCase();
+  const items = query ? state.properties.filter((item) => `${item.title} ${item.location} ${item.type}`.toLowerCase().includes(query)) : state.properties;
   $('#side-count').textContent = state.properties.length;
-  $('#property-list').innerHTML = state.properties.length ? state.properties.map((item) => `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span><button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button></article>`).join('') : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>';
+  $('#property-list').innerHTML = items.length ? items.map((item) => `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span><button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button></article>`).join('') : (query ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo de busca.</p></div>' : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>');
   document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => openEditor(state.properties.find((item) => item.id === button.dataset.edit))));
   $('[data-empty-new]')?.addEventListener('click', () => openEditor());
 }
 
 function fillForm(property = {}) {
-  for (const [key, value] of Object.entries({ title: property.title || '', location: property.location || '', city: property.city || 'Belo Horizonte', purpose: property.purpose || 'Comprar', type: property.type || 'Apartamento', price: property.price || '', priceLabel: property.price_label || '', bedrooms: property.bedrooms ?? 2, bathrooms: property.bathrooms ?? 2, areaM2: property.area_m2 ?? 80, description: property.description || '' })) { if (form.elements[key]) form.elements[key].value = value; }
+  for (const [key, value] of Object.entries({ title: property.title || '', location: property.location || '', city: property.city || 'Belo Horizonte', purpose: property.purpose || 'Comprar', type: property.type || 'Apartamento', price: property.price || '', priceLabel: property.price_label || '', bedrooms: property.bedrooms ?? 2, bathrooms: property.bathrooms ?? 2, areaM2: property.area_m2 ?? 80, suites: property.suites ?? 0, parkingSpots: property.parking_spots ?? 0, condoFee: property.condo_fee ?? 0, iptu: property.iptu ?? 0, description: property.description || '' })) { if (form.elements[key]) form.elements[key].value = value; }
   form.elements.published.checked = property.status !== 'draft' && property.status !== 'archived';
   form.elements.featured.checked = Boolean(property.is_featured);
 }
-function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${index === 0 ? 'capa' : String(index + 1).padStart(2, '0')}</span><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); }
+function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
 function openEditor(property = null) { state.editing = property; state.pendingFiles = []; $('#dialog-title').textContent = property ? 'Editar imóvel' : 'Novo imóvel'; fillForm(property || {}); renderPhotos(property?.photos || []); $('#editor-status').textContent = ''; dialog.showModal(); }
 
 async function saveProperty(event) { if (event.submitter?.value === 'cancel') return; event.preventDefault(); const button = $('#save-property'); button.disabled = true; toast('Salvando alterações…'); const data = Object.fromEntries(new FormData(form)); data.published = form.elements.published.checked; data.featured = form.elements.featured.checked; data.status = data.published ? 'published' : 'draft'; try { const result = await request(state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties', { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(data) }); const property = result.property; await uploadPendingFiles(property.id); state.properties = (await request('/api/admin/properties')).properties; renderProperties(); dialog.close(); } catch (error) { toast(error.message === 'AUTH_REQUIRED' ? 'Sua sessão expirou.' : 'Não foi possível salvar. Tente novamente.', 'error'); } finally { button.disabled = false; } }
 
 async function uploadPendingFiles(propertyId) { for (let index = 0; index < state.pendingFiles.length; index += 1) { const file = state.pendingFiles[index]; toast(`Enviando foto ${index + 1} de ${state.pendingFiles.length}…`); const presign = await request('/api/admin/uploads/presign', { method: 'POST', body: JSON.stringify({ propertyId, fileName: file.name, contentType: file.type, size: file.size }) }); const upload = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file }); if (!upload.ok) throw new Error('UPLOAD_FAILED'); await request(`/api/admin/properties/${propertyId}/photos`, { method: 'POST', body: JSON.stringify({ storagePath: presign.storagePath, assetUrl: presign.assetUrl, altText: file.name.replace(/\.[^.]+$/, ''), sortOrder: index, isCover: index === 0 }) }); } }
 async function removePhoto(id) { if (!state.editing) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
+
+async function movePhoto(id, direction) {
+  if (!state.editing) return;
+  const photos = [...state.editing.photos];
+  const index = photos.findIndex((photo) => photo.id === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= photos.length) return;
+  [photos[index], photos[target]] = [photos[target], photos[index]];
+  state.editing.photos = photos;
+  renderPhotos(photos);
+  try {
+    const result = await request(`/api/admin/properties/${state.editing.id}/photos/order`, { method: 'PUT', body: JSON.stringify({ photoIds: photos.map((photo) => photo.id) }) });
+    state.editing.photos = result.photos;
+    renderPhotos(result.photos);
+  } catch { toast('Não foi possível reordenar.', 'error'); }
+}
+
+async function makeCover(id) {
+  if (!state.editing) return;
+  try {
+    const result = await request(`/api/admin/photos/${id}/cover`, { method: 'PUT' });
+    state.editing.photos = result.photos;
+    renderPhotos(result.photos);
+  } catch { toast('Não foi possível definir a capa.', 'error'); }
+}
 
 const siteForm = $('#site-settings-form');
 const testimonialForm = $('#testimonial-form');
@@ -114,4 +141,5 @@ dialog.addEventListener('close', () => { state.pendingFiles = []; });
 document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); switchView(link.dataset.view); }));
 siteForm.addEventListener('submit', saveSite);
 testimonialForm.addEventListener('submit', addTestimonial);
+$('#property-search')?.addEventListener('input', (event) => { state.search = event.target.value; renderProperties(); });
 init();
