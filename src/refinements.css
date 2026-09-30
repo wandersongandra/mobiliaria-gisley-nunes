@@ -96,10 +96,15 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
 .home-listings .listing-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:58px 28px}
 .home-listings .listing-card:nth-child(1){grid-column:span 7}
 .home-listings .listing-card:nth-child(2){grid-column:span 5}
-.home-listings .listing-card:nth-child(n+3){grid-column:span 4}
+.home-listings .listing-card:nth-child(n+3):nth-child(-n+5){grid-column:span 4}
+.home-listings .listing-card:nth-child(6){grid-column:1 / -1;display:grid;grid-template-columns:1.35fr .65fr;column-gap:34px;align-items:end}
 .home-listings .listing-card:nth-child(1) .listing-image,
 .home-listings .listing-card:nth-child(2) .listing-image{height:430px}
-.home-listings .listing-card:nth-child(n+3) .listing-image{height:285px}
+.home-listings .listing-card:nth-child(n+3):nth-child(-n+5) .listing-image{height:285px}
+.home-listings .listing-card:nth-child(6) .listing-image{height:410px;grid-row:1 / span 3}
+.home-listings .listing-card:nth-child(6) .listing-info{align-self:end}
+.home-listings .listing-card:nth-child(6) .listing-info h3{font-size:36px}
+.home-listings .listing-card:nth-child(6) .listing-meta{align-self:start}
 .home-listings .listing-card:nth-child(1) .listing-info h3,
 .home-listings .listing-card:nth-child(2) .listing-info h3{font-size:32px}
 
@@ -238,8 +243,9 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
   .field-wide{grid-column:span 2}
   .search-button{grid-column:span 2;min-height:56px;justify-content:center}
   .home-listings .listing-card:nth-child(1),
-  .home-listings .listing-card:nth-child(2){grid-column:span 6}
+  .home-listings .listing-card:nth-child(2),
   .home-listings .listing-card:nth-child(n+3){grid-column:span 6}
+  .home-listings .listing-card:nth-child(6){display:block}
   .home-listings .listing-card:nth-child(n) .listing-image{height:330px}
   .brand-statement{grid-template-columns:.18fr 1fr;gap:30px}
   .brand-statement>div{grid-column:2;align-items:flex-start;margin-top:-14px}
