@@ -61,7 +61,13 @@ function renderProperties() {
   const query = String(state.search || '').trim().toLowerCase();
   const items = query ? state.properties.filter((item) => `${item.title} ${item.location} ${item.type}`.toLowerCase().includes(query)) : state.properties;
   $('#side-count').textContent = state.properties.length;
-  $('#property-list').innerHTML = items.length ? items.map((item) => `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span><button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button></article>`).join('') : (query ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo de busca.</p></div>' : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>');
+  $('#property-list').innerHTML = items.length ? items.map((item) => {
+    const canEdit = state.user?.role === 'manager' || item.status === 'draft';
+    const action = canEdit
+      ? `<button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button>`
+      : '<span class="row-locked" title="Somente Gestor pode alterar imóvel publicado ou arquivado">Somente Gestor</span>';
+    return `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span>${action}</article>`;
+  }).join('') : (query ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo de busca.</p></div>' : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>');
   document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => openEditor(state.properties.find((item) => item.id === button.dataset.edit))));
   $('[data-empty-new]')?.addEventListener('click', () => openEditor());
 }
@@ -110,6 +116,12 @@ function renderEditorPhotos() {
   });
 }
 function openEditor(property = null) {
+  const isManager = state.user?.role === 'manager';
+  if (property && !isManager && property.status !== 'draft') {
+    toast('Somente Gestor pode alterar imóvel publicado ou arquivado.', 'error');
+    return;
+  }
+
   state.editing = property;
   clearPendingFiles();
   $('#dialog-title').textContent = property ? 'Editar imóvel' : 'Novo imóvel';
@@ -117,7 +129,19 @@ function openEditor(property = null) {
   renderEditorPhotos();
   $('#editor-status').textContent = '';
   const archiveButton = $('#archive-property');
-  if (archiveButton) archiveButton.hidden = !property || property.status === 'archived';
+  if (archiveButton) archiveButton.hidden = !isManager || !property || property.status === 'archived';
+
+  const publishedInput = form.elements.published;
+  const featuredInput = form.elements.featured;
+  if (publishedInput) {
+    publishedInput.disabled = !isManager;
+    if (!isManager) publishedInput.checked = false;
+  }
+  if (featuredInput) {
+    featuredInput.disabled = !isManager;
+    if (!isManager) featuredInput.checked = false;
+  }
+
   dialog.showModal();
 }
 
@@ -130,8 +154,9 @@ async function saveProperty(event) {
   toast('Salvando alterações…');
 
   const data = Object.fromEntries(new FormData(form));
-  data.published = form.elements.published.checked;
-  data.featured = form.elements.featured.checked;
+  const isManager = state.user?.role === 'manager';
+  data.published = isManager && form.elements.published.checked;
+  data.featured = isManager && form.elements.featured.checked;
   data.status = data.published ? 'published' : 'draft';
 
   let propertySaved = false;
