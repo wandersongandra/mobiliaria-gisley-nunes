@@ -33,7 +33,9 @@ function scan(text, scope) {
     re.lastIndex = 0;
     for (const match of text.matchAll(re)) {
       const value = match[0];
+      const captured = String(match[1] || match[2] || '').replace(/^['"]|['"]$/g, '');
       if (allowed(value)) continue;
+      if (name === 'sensitive-env' && captured.length < 20) continue;
       findings.push({
         scope,
         type: name,
