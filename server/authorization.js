@@ -73,7 +73,6 @@ export function auditView(entry = {}) {
     action: entry.action,
     entity_type: entry.entity_type,
     entity_id: entry.entity_id,
-    details: entry.details,
     created_at: entry.created_at
   };
 }
