@@ -5,22 +5,22 @@ import { readFileSync } from 'node:fs';
 const routesSource = readFileSync(new URL('../server/routes.js', import.meta.url), 'utf8');
 
 const managerOnlyDeclarations = [
-  "app.put('/api/admin/site', requireManager()",
-  "app.post('/api/admin/testimonials', requireManager()",
-  "app.delete('/api/admin/testimonials/:id', requireManager()",
-  "app.delete('/api/admin/leads/:id', requireManager()",
-  "app.get('/api/admin/audit', requireManager()",
-  "app.get('/api/admin/team', requireManager()",
-  "app.post('/api/admin/team', requireManager()",
-  "app.patch('/api/admin/team/:email', requireManager()",
-  "app.delete('/api/admin/team/:email', requireManager()"
+  "app.put('/api/admin/site', requireCapability('site.manage')",
+  "app.post('/api/admin/testimonials', requireCapability('testimonial.manage')",
+  "app.delete('/api/admin/testimonials/:id', requireCapability('testimonial.manage')",
+  "app.delete('/api/admin/leads/:id', requireCapability('lead.erase')",
+  "app.get('/api/admin/audit', requireCapability('audit.read')",
+  "app.get('/api/admin/team', requireCapability('team.manage')",
+  "app.post('/api/admin/team', requireCapability('team.manage')",
+  "app.patch('/api/admin/team/:email', requireCapability('team.manage')",
+  "app.delete('/api/admin/team/:email', requireCapability('team.manage')"
 ];
 
-test('operações sensíveis permanecem explicitamente restritas a gestor', () => {
+test('operações sensíveis permanecem explicitamente restritas por capacidade', () => {
   for (const declaration of managerOnlyDeclarations) {
     assert.ok(
       routesSource.includes(declaration),
-      `proteção de gestor ausente ou alterada: ${declaration}`
+      `capacidade sensível ausente ou alterada: ${declaration}`
     );
   }
 });
