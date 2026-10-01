@@ -476,7 +476,8 @@ export async function saveProperty(input, id = null, { requireDraft = false } = 
   return getProperty(propertyId);
 }
 
-export async function softDeleteProperty(id) {
+export async function softDeleteProperty(id, { allowArchive = false } = {}) {
+  if (!allowArchive) throw new Error('CAPABILITY_REQUIRED');
   const db = getPool();
   const [result] = await db.execute("UPDATE morada_properties SET status='archived' WHERE id=?", [id]);
   return result.affectedRows > 0;
