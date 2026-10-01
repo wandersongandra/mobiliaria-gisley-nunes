@@ -13,7 +13,7 @@ const previewOrigin = process.env.PREVIEW_ORIGIN || 'https://mobiliaria-gisley-n
 
 const site = {
   name: 'Gisley Nunes Imóveis',
-  crci: '0052305',
+  crci: '',
   area: 'Belo Horizonte e região',
   address: 'Belo Horizonte, MG',
   phoneDisplay: '(31) 9155-4677',
