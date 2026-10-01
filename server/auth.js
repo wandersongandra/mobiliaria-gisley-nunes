@@ -82,7 +82,11 @@ function assertAuthConfig() {
   if (production) {
     const adminOrigin = configuredAdminOrigin();
     if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
-    if (adminEmails().length === 0) throw new Error('BOOTSTRAP_MANAGER_NOT_CONFIGURED');
+    const bootstrapManagers = adminEmails();
+    if (bootstrapManagers.length === 0) throw new Error('BOOTSTRAP_MANAGER_NOT_CONFIGURED');
+    if (bootstrapManagers.some((email) => email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      throw new Error('BOOTSTRAP_MANAGER_INVALID');
+    }
   }
 }
 
