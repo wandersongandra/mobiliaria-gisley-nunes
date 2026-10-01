@@ -9,7 +9,7 @@ import { registerRoutes } from './routes.js';
 import { assertAuthConfiguration } from './auth.js';
 import { assertAssetsReady, assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { escapeLd, organizationLd, propertyLd, sitemapDate } from './seo.js';
+import { escapeJsonForHtml, escapeLd, organizationLd, propertyLd, sitemapDate } from './seo.js';
 import {
   assertSecurityConfiguration,
   requestHostOrigin,
@@ -143,8 +143,8 @@ app.get('/imoveis/:slug', async (req, res, next) => {
     res.render('imovel', {
       page: pageMeta(req, { title: `${visibleProperty.title} — Gisley Nunes Imóveis`, description, path: `/imoveis/${visibleProperty.slug}`, ogImage: visibleProperty.cover_url }),
       property: visibleProperty,
-      propertyJson: JSON.stringify(visibleProperty).replace(/</g, '\\u003c'),
-      extraHead: `<script nonce="${res.locals.cspNonce}" type="application/ld+json">${escapeLd(propertyLd(visibleProperty, originFrom(req)))}</script>`
+      propertyJson: escapeJsonForHtml(visibleProperty),
+      pageLd: escapeLd(propertyLd(visibleProperty, originFrom(req)))
     });
   } catch (error) { next(error); }
 });
