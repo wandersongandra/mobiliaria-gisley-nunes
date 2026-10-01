@@ -95,3 +95,25 @@ test('capability precede rate limit on manager-only destructive routes', () => {
     );
   }
 });
+
+
+test('mídia pública exige vínculo published antes de emitir URL assinada', () => {
+  const start = routesSource.indexOf("app.get(/^\\/media\\/(.+)$/");
+  assert.ok(start >= 0, 'rota pública /media ausente');
+  const end = routesSource.indexOf("if (legacyStorageRouteEnabled())", start);
+  const block = routesSource.slice(start, end);
+  const lookup = block.indexOf('findPublishedPhotoByStoragePath(key)');
+  const sign = block.indexOf('storageGetSignedUrl(key)');
+  assert.ok(lookup >= 0, 'lookup de publicação ausente');
+  assert.ok(sign >= 0, 'assinatura GET ausente');
+  assert.ok(lookup < sign, 'URL assinada não pode ser emitida antes de validar publicação');
+  assert.ok(block.includes("if (!publishedPhoto) return res.status(404)"));
+});
+
+test('mídia de rascunho do CRM exige autenticação e property.read', () => {
+  const prefix = "app.get('/api/admin/photos/:id/media'";
+  const start = routesSource.indexOf(prefix);
+  assert.ok(start >= 0, 'rota autenticada de mídia ausente');
+  const line = routesSource.slice(start, routesSource.indexOf('\n', start));
+  assert.ok(line.includes("requireCapability('property.read')"));
+});
