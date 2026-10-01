@@ -472,6 +472,15 @@ export async function addPhoto({
   return listPhotos(propertyId);
 }
 
+export async function getPhoto(photoId) {
+  const db = getPool();
+  const [rows] = await db.execute(
+    'SELECT id,property_id,storage_path,url,alt_text,sort_order,is_cover,storage_provider,mime_type,file_size,width,height,uploaded_by,created_at FROM morada_property_photos WHERE id=? LIMIT 1',
+    [String(photoId || '').slice(0, 36)]
+  );
+  return rows[0] || null;
+}
+
 export async function removePhoto(photoId) {
   const db = getPool();
   const connection = await db.getConnection();
