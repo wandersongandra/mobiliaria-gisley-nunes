@@ -209,11 +209,16 @@ test('editor não consegue escalar publicação por payload', () => {
   assert.equal(canCreateProperty(editor, { status: 'published', featured: false }), false);
   assert.equal(canCreateProperty(editor, { status: 'archived', featured: false }), false);
   assert.equal(canCreateProperty(editor, { status: 'draft', featured: true }), false);
-  assert.equal(canCreateProperty(editor, { status: 'draft', featured: 'false' }), false);
+  assert.equal(canCreateProperty(editor, { status: 'draft', featured: 1 }), false);
+  assert.equal(canCreateProperty(editor, { status: 'draft', featured: '1' }), false);
+  assert.equal(canCreateProperty(editor, { status: 'draft', featured: 'true' }), false);
+  assert.equal(canCreateProperty(editor, { status: 'draft', featured: 'false' }), true);
 
   assert.equal(canRequestPublication(editor, { status: 'published' }), false);
   assert.equal(canRequestPublication(editor, { status: 'archived' }), false);
   assert.equal(canRequestPublication(editor, { featured: true }), false);
+  assert.equal(canRequestPublication(editor, { featured: 1 }), false);
+  assert.equal(canRequestPublication(editor, { featured: '1' }), false);
   assert.equal(canRequestPublication(editor, { status: 'draft', featured: false }), true);
 
   assert.equal(canCreateProperty(manager, { status: 'published', featured: true }), true);
