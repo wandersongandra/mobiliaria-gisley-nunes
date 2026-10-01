@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, properties: [], leads: [], team: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
+const state = { user: null, csrfToken: '', properties: [], leads: [], team: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -24,7 +24,11 @@ function toast(message, tone = 'success') { const status = $('#editor-status'); 
 
 async function request(url, options = {}) {
   const headers = { Accept: 'application/json', ...(options.headers || {}) };
+  const method = String(options.method || 'GET').toUpperCase();
   if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrfToken) {
+    headers['X-CSRF-Token'] = state.csrfToken;
+  }
   const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (response.status === 401) { showLogin(); throw new Error('AUTH_REQUIRED'); }
   if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || 'REQUEST_FAILED'); }
@@ -33,6 +37,7 @@ async function request(url, options = {}) {
 
 function clearSensitiveState() {
   state.user = null;
+  state.csrfToken = '';
   state.properties = [];
   state.leads = [];
   state.team = [];
@@ -75,7 +80,7 @@ async function performLogout({ all = false } = {}) {
   try {
     const response = await fetch(all ? '/api/auth/logout-all' : '/api/auth/logout', {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(state.csrfToken ? { 'X-CSRF-Token': state.csrfToken } : {}) },
       credentials: 'same-origin'
     });
     const body = await response.json().catch(() => ({}));
@@ -678,6 +683,7 @@ async function loadLeads() {
 async function init() {
   try {
     const session = await request('/api/admin/session');
+    state.csrfToken = String(session.csrfToken || '');
     if (!session.authenticated) return showLogin();
     state.user = session.user;
     showDashboard();
