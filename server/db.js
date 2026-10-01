@@ -375,19 +375,50 @@ export async function listPhotos(propertyId) {
   return rows;
 }
 
-export async function saveProperty(input, id = null) {
+export async function saveProperty(input, id = null, { requireDraft = false } = {}) {
   const db = getPool();
   const { randomUUID } = await import('node:crypto');
   const data = normalizePropertyInput(input);
   const propertyId = id || randomUUID();
-  let existingSlug = '';
-  if (id) {
-    const [[existing]] = await db.execute('SELECT slug FROM morada_properties WHERE id=? LIMIT 1', [id]);
-    if (!existing) return null;
-    existingSlug = String(existing.slug || '');
-  }
   const generatedSlug = data.title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const slug = String(data.slug || existingSlug || generatedSlug).slice(0, 170) || propertyId;
+
+  if (id) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [[existing]] = await connection.execute(
+        'SELECT slug,status FROM morada_properties WHERE id=? LIMIT 1 FOR UPDATE',
+        [propertyId]
+      );
+      if (!existing) {
+        await connection.rollback();
+        return null;
+      }
+      if (requireDraft && String(existing.status) !== 'draft') {
+        throw new Error('CAPABILITY_REQUIRED');
+      }
+
+      const slug = String(data.slug || existing.slug || generatedSlug).slice(0, 170) || propertyId;
+      await connection.execute(
+        'UPDATE morada_properties SET title=?,slug=?,location=?,city=?,purpose=?,type=?,price=?,price_label=?,bedrooms=?,bathrooms=?,area_m2=?,suites=?,parking_spots=?,condo_fee=?,iptu=?,description=?,status=?,is_featured=? WHERE id=?',
+        [
+          data.title, slug, data.location, data.city, data.purpose, data.type, data.price, data.priceLabel,
+          data.bedrooms, data.bathrooms, data.areaM2, data.suites, data.parkingSpots, data.condoFee, data.iptu,
+          data.description, data.status, data.featured ? 1 : 0, propertyId
+        ]
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      if (error?.code === 'ER_DUP_ENTRY') throw new Error('SLUG_CONFLICT');
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return getProperty(propertyId);
+  }
+
+  const slug = String(data.slug || generatedSlug).slice(0, 170) || propertyId;
   const values = [
     propertyId, data.title, slug, data.location, data.city, data.purpose, data.type, data.price, data.priceLabel,
     data.bedrooms, data.bathrooms, data.areaM2, data.suites, data.parkingSpots, data.condoFee, data.iptu,
@@ -395,17 +426,10 @@ export async function saveProperty(input, id = null) {
   ];
 
   try {
-    if (id) {
-      await db.execute(
-        'UPDATE morada_properties SET title=?,slug=?,location=?,city=?,purpose=?,type=?,price=?,price_label=?,bedrooms=?,bathrooms=?,area_m2=?,suites=?,parking_spots=?,condo_fee=?,iptu=?,description=?,status=?,is_featured=? WHERE id=?',
-        [...values.slice(1), propertyId]
-      );
-    } else {
-      await db.execute(
-        'INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,suites,parking_spots,condo_fee,iptu,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        values
-      );
-    }
+    await db.execute(
+      'INSERT INTO morada_properties (id,title,slug,location,city,purpose,type,price,price_label,bedrooms,bathrooms,area_m2,suites,parking_spots,condo_fee,iptu,description,status,is_featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      values
+    );
   } catch (error) {
     if (error?.code === 'ER_DUP_ENTRY') throw new Error('SLUG_CONFLICT');
     throw error;
@@ -433,13 +457,19 @@ export async function addPhoto({
   fileSize = 0,
   width = 0,
   height = 0,
-  uploadedBy = ''
+  uploadedBy = '',
+  requireDraft = false
 }) {
   const db = getPool();
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    await connection.execute('SELECT id FROM morada_properties WHERE id=? FOR UPDATE', [propertyId]);
+    const [[property]] = await connection.execute(
+      'SELECT id,status FROM morada_properties WHERE id=? LIMIT 1 FOR UPDATE',
+      [propertyId]
+    );
+    if (!property) throw new Error('NOT_FOUND');
+    if (requireDraft && String(property.status) !== 'draft') throw new Error('CAPABILITY_REQUIRED');
     const [[{ photo_count: photoCount }]] = await connection.execute(
       'SELECT COUNT(*) AS photo_count FROM morada_property_photos WHERE property_id=?',
       [propertyId]
@@ -488,7 +518,7 @@ export async function getPhoto(photoId) {
   return rows[0] || null;
 }
 
-export async function removePhoto(photoId) {
+export async function removePhoto(photoId, { requireDraft = false } = {}) {
   const db = getPool();
   const connection = await db.getConnection();
   let photo;
@@ -503,6 +533,12 @@ export async function removePhoto(photoId) {
       return false;
     }
     photo = lockedPhoto;
+    const [[property]] = await connection.execute(
+      'SELECT status FROM morada_properties WHERE id=? LIMIT 1 FOR UPDATE',
+      [photo.property_id]
+    );
+    if (!property) throw new Error('NOT_FOUND');
+    if (requireDraft && String(property.status) !== 'draft') throw new Error('CAPABILITY_REQUIRED');
     await connection.execute('DELETE FROM morada_property_photos WHERE id=?', [photoId]);
     if (photo.is_cover) {
       const [[nextPhoto]] = await connection.execute(
@@ -521,7 +557,7 @@ export async function removePhoto(photoId) {
   return photo;
 }
 
-export async function setPhotoCover(photoId) {
+export async function setPhotoCover(photoId, { requireDraft = false } = {}) {
   const db = getPool();
   const connection = await db.getConnection();
   let propertyId;
@@ -536,6 +572,12 @@ export async function setPhotoCover(photoId) {
       return null;
     }
     propertyId = photo.property_id;
+    const [[property]] = await connection.execute(
+      'SELECT status FROM morada_properties WHERE id=? LIMIT 1 FOR UPDATE',
+      [propertyId]
+    );
+    if (!property) throw new Error('NOT_FOUND');
+    if (requireDraft && String(property.status) !== 'draft') throw new Error('CAPABILITY_REQUIRED');
     await connection.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
     await connection.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=? AND property_id=?', [photoId, propertyId]);
     await connection.commit();
@@ -548,13 +590,19 @@ export async function setPhotoCover(photoId) {
   return listPhotos(propertyId);
 }
 
-export async function reorderPhotos(propertyId, photoIds) {
+export async function reorderPhotos(propertyId, photoIds, { requireDraft = false } = {}) {
   const db = getPool();
   const uniqueIds = [...new Set(photoIds.map((id) => String(id || '')).filter(Boolean))].slice(0, 100);
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
+    const [[property]] = await connection.execute(
+      'SELECT status FROM morada_properties WHERE id=? LIMIT 1 FOR UPDATE',
+      [propertyId]
+    );
+    if (!property) throw new Error('NOT_FOUND');
+    if (requireDraft && String(property.status) !== 'draft') throw new Error('CAPABILITY_REQUIRED');
     const [existing] = await connection.execute(
       'SELECT id FROM morada_property_photos WHERE property_id=? ORDER BY id FOR UPDATE',
       [propertyId]
