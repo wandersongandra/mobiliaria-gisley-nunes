@@ -71,7 +71,9 @@ import {
 } from './validation.js';
 import { adminProperties, adminProperty, publicProperties, publicProperty } from './presenters.js';
 
-const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth' });
+const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-login' });
+const callbackLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-callback' });
+const sessionProbeLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 120, namespace: 'auth-session' });
 const contactLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 8, namespace: 'contact' });
 const adminLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 300, namespace: 'admin' });
 const uploadLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 120, namespace: 'upload' });
@@ -145,10 +147,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   });
 
   app.get('/api/auth/login', loginLimiter, login);
-  app.get('/api/auth/callback', loginLimiter, callback);
+  app.get('/api/auth/callback', callbackLimiter, callback);
   app.post('/api/auth/logout', requireSameOrigin, logout);
   app.post('/api/auth/logout-all', requireSameOrigin, requireAdmin(), logoutAll);
-  app.get('/api/admin/session', async (req, res, next) => {
+  app.get('/api/admin/session', sessionProbeLimiter, async (req, res, next) => {
     try {
       res.setHeader('Cache-Control', 'no-store');
       const user = await currentAdmin(req);
