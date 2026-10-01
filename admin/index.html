@@ -25,11 +25,11 @@
     <form id="team-form" class="site-card team-form">
       <span class="metric-label">novo acesso</span>
       <strong class="site-card-title">Adicionar pessoa à equipe</strong>
-      <p class="team-help">A permissão é vinculada ao Código de identidade OAuth, não ao e-mail. Peça à pessoa para tentar entrar uma vez; se ainda não tiver acesso, ela verá o código que deve enviar ao gestor.</p>
+      <p class="team-help">A permissão é vinculada por um código temporário de uso único. Peça à pessoa para tentar entrar uma vez; se ainda não tiver acesso, ela verá um código com validade de 15 minutos.</p>
       <div class="site-fields">
         <label>Nome<input name="name" required maxlength="255" placeholder="Nome da pessoa" /></label>
         <label>E-mail <small>apenas contato</small><input name="email" required type="email" maxlength="255" placeholder="corretor@email.com" /></label>
-        <label>Código de identidade OAuth<input name="openId" required maxlength="191" autocomplete="off" spellcheck="false" placeholder="Cole o código enviado pela pessoa" /></label>
+        <label>Código de vinculação<input name="pairingCode" required minlength="12" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Cole o código temporário" /></label>
         <label>Permissão<select name="role"><option value="editor">Corretor / Editor</option><option value="manager">Gestor</option></select></label>
       </div>
       <button class="admin-button admin-button-primary" type="submit">Adicionar acesso <span>＋</span></button>
