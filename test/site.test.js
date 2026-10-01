@@ -9,16 +9,17 @@ test('defaultSiteInfo possui os campos editáveis pelo admin', () => {
   for (const key of ['crci', 'area', 'email', 'whatsapp', 'phoneDisplay', 'instagramUrl']) {
     assert.ok(Object.hasOwn(defaultSiteInfo, key), `campo ausente: ${key}`);
   }
-  for (const key of ['crci', 'area', 'email', 'whatsapp', 'phoneDisplay']) {
+  for (const key of ['area', 'email', 'whatsapp', 'phoneDisplay']) {
     assert.ok(defaultSiteInfo[key], `campo obrigatório vazio: ${key}`);
   }
+  assert.equal(defaultSiteInfo.crci, '');
   assert.equal(defaultSiteInfo.instagramUrl, '');
 });
 
 test('getSiteInfo retorna o fallback quando não há banco', async () => {
   const site = await getSiteInfo();
   assert.equal(site.name, defaultSiteInfo.name);
-  assert.ok(site.crci);
+  assert.equal(site.crci, '');
   assert.ok(site.email);
 });
 
