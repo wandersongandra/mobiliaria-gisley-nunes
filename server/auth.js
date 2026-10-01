@@ -108,7 +108,7 @@ export function safeStateEqual(left, right) {
 
 export async function createSessionToken({ openId, nowMs = Date.now() }) {
   const secretValue = sessionSecret();
-  if (Buffer.byteLength(secretValue, 'utf8') < 32) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
+  if (weakSessionSecret(secretValue)) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
 
   const jti = randomUUID();
   const expiresAtMs = nowMs + SESSION_TTL_MS;
@@ -128,7 +128,7 @@ export async function createSessionToken({ openId, nowMs = Date.now() }) {
 
 export async function verifySessionToken(token) {
   const secretValue = sessionSecret();
-  if (Buffer.byteLength(secretValue, 'utf8') < 32) return null;
+  if (weakSessionSecret(secretValue)) return null;
 
   try {
     const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(secretValue), {
@@ -373,4 +373,19 @@ export async function logout(req, res) {
 
   res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
   return res.json({ ok: true });
+}
+
+
+export async function logoutAll(req, res, next) {
+  try {
+    const user = req.admin || await currentAdmin(req);
+    if (!user?.openId) return res.status(401).json({ error: 'AUTH_REQUIRED', login: true });
+
+    await revokeAdminSessionsByOpenId(user.openId);
+    res.setHeader('Cache-Control', 'no-store');
+    res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
+    return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
 }
