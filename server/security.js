@@ -48,11 +48,11 @@ function hostMatchesOrigin(host, origin) {
     if (candidateHost !== expectedHost) return false;
 
     const candidatePort = candidate.port ? Number(candidate.port) : 0;
-    const expectedPort = parsedOrigin.port
-      ? Number(parsedOrigin.port)
-      : (parsedOrigin.protocol === 'https:' ? 443 : 80);
-
-    return candidatePort === 0 || candidatePort === expectedPort;
+    const defaultPort = parsedOrigin.protocol === 'https:' ? 443 : 80;
+    if (parsedOrigin.port) {
+      return candidatePort === Number(parsedOrigin.port);
+    }
+    return candidatePort === 0 || candidatePort === defaultPort;
   } catch {
     return false;
   }
