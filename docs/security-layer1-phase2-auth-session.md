@@ -84,7 +84,21 @@ Default reduzido de 5 para 3 sessões concorrentes por identidade, mantendo faix
 **Severidade:** Operacional  
 **Status:** Corrigido
 
-O scanner agora reporta arquivo/linha no HEAD e commit/arquivo no histórico, sem revelar o valor.
+O scanner agora reporta arquivo/linha no HEAD e commit/arquivo no histórico, sem revelar o valor. A detecção de variáveis sensíveis foi refinada para valores literais, evitando falsos positivos em expressões de teste. Fixtures históricas comprovadamente sintéticas são reconhecidas apenas por fingerprint SHA-256.
+
+### F2-08 — Sessões revogadas sem retenção definida
+**Severidade:** Baixa  
+**Status:** Corrigido
+
+Sessões expiradas já eram removidas; sessões revogadas antigas podiam permanecer indefinidamente.
+
+**Correção:** ao criar uma nova sessão, registros revogados há mais de 7 dias são purgados. A trilha de auditoria permanece separada.
+
+### F2-09 — Pairing e sessão sem testes de vínculo adversarial suficientes
+**Severidade:** Preventiva  
+**Status:** Corrigido
+
+Foram adicionados testes explícitos para JTI divergente, OpenID divergente, troca de e-mail, acesso desativado, expiração absoluta, idle timeout e identidade OAuth não verificada.
 
 ## Testes adversariais adicionados
 
