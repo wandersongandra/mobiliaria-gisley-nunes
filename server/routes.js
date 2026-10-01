@@ -87,6 +87,20 @@ function extensionOf(fileName) {
   return match?.[1] || '';
 }
 
+function requireJsonApiBody(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+
+  const length = Number(req.get('content-length') || 0);
+  const transferEncoding = String(req.get('transfer-encoding') || '').trim();
+  const hasBody = (Number.isFinite(length) && length > 0) || Boolean(transferEncoding);
+
+  if (hasBody && !req.is('application/json')) {
+    return res.status(415).json({ error: 'UNSUPPORTED_MEDIA_TYPE' });
+  }
+
+  return next();
+}
+
 function adminApiGuard(req, res, next) {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return adminLimiter(req, res, next);
   return next();
@@ -108,6 +122,7 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
 }
 
 export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
+  app.use('/api', requireJsonApiBody);
   app.use(['/api/auth', '/api/admin'], requireAdminOrigin);
   app.use('/api/admin', requireAdminRequestContext);
   app.use('/api/auth', (req, res, next) => {
