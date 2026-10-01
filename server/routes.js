@@ -59,6 +59,7 @@ import {
 import {
   normalizeAuditQuery,
   normalizeContactLead,
+  normalizeEmailAddress,
   normalizeLeadStatusRequest,
   normalizePhotoInput,
   normalizePhotoOrder,
@@ -562,8 +563,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.patch('/api/admin/team/:email', requireCapability('team.manage'), async (req, res, next) => {
     try {
-      const email = String(req.params.email || '').trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
+      const email = normalizeEmailAddress(req.params.email, { error: 'INVALID_EMAIL' });
 
       const current = await findStaffAccess(email);
       if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -600,7 +600,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.delete('/api/admin/team/:email', requireCapability('team.manage'), async (req, res, next) => {
     try {
-      const email = String(req.params.email || '').trim().toLowerCase();
+      const email = normalizeEmailAddress(req.params.email, { error: 'INVALID_EMAIL' });
       const current = await findStaffAccess(email);
       if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
 
