@@ -5,6 +5,10 @@ import cookieParser from 'cookie-parser';
 import { registerRoutes } from '../server/routes.js';
 import {
   auditView,
+  canCreateProperty,
+  canManagePropertyMedia,
+  canMutateProperty,
+  canRequestPublication,
   capabilitiesForRole,
   hasCapability,
   requireCapability,
@@ -72,6 +76,7 @@ test('gestor possui capacidades administrativas e operacionais', () => {
   for (const capability of [
     'property.read',
     'property.write',
+    'property.publish',
     'property.archive',
     'media.manage',
     'site.read',
@@ -189,4 +194,122 @@ test('auditView mantém openId bruto somente no banco e entrega hint ao CRM', ()
   assert.equal(Object.hasOwn(view, 'actor_open_id'), false);
   assert.equal(view.actor_identity_hint, 'oauth-id…mnop');
   assert.equal(view.actor_email, 'owner@gisley.test');
+});
+
+
+test('editor não consegue escalar publicação por payload', () => {
+  const editor = { role: 'editor' };
+  const manager = { role: 'manager' };
+
+  assert.equal(canCreateProperty(editor, { status: 'draft', featured: false }), true);
+  assert.equal(canCreateProperty(editor, { status: 'published', featured: false }), false);
+  assert.equal(canCreateProperty(editor, { status: 'draft', featured: true }), false);
+  assert.equal(canCreateProperty(editor, { status: 'draft', featured: 'false' }), false);
+
+  assert.equal(canRequestPublication(editor, { status: 'published' }), false);
+  assert.equal(canRequestPublication(editor, { featured: true }), false);
+  assert.equal(canRequestPublication(editor, { status: 'draft', featured: false }), true);
+
+  assert.equal(canCreateProperty(manager, { status: 'published', featured: true }), true);
+  assert.equal(canRequestPublication(manager, { status: 'published', featured: true }), true);
+});
+
+test('editor só altera imóvel e mídia enquanto o recurso continua em rascunho', () => {
+  const editor = { role: 'editor' };
+  const manager = { role: 'manager' };
+
+  for (const status of ['published', 'archived']) {
+    assert.equal(canMutateProperty(editor, { status }), false);
+    assert.equal(canManagePropertyMedia(editor, { status }), false);
+    assert.equal(canMutateProperty(manager, { status }), true);
+    assert.equal(canManagePropertyMedia(manager, { status }), true);
+  }
+
+  assert.equal(canMutateProperty(editor, { status: 'draft' }), true);
+  assert.equal(canManagePropertyMedia(editor, { status: 'draft' }), true);
+});
+
+test('editor autenticado não consegue mutar imóvel publicado por chamada direta à API', async () => {
+  await withEditorServer(async (origin) => {
+    const requests = [
+      {
+        method: 'PUT',
+        path: '/api/admin/properties/demo-1',
+        body: {
+          title: 'Tentativa indevida',
+          location: 'Lourdes · Belo Horizonte',
+          city: 'Belo Horizonte',
+          purpose: 'Comprar',
+          type: 'Apartamento',
+          status: 'draft'
+        }
+      },
+      {
+        method: 'DELETE',
+        path: '/api/admin/properties/demo-1',
+        body: {}
+      },
+      {
+        method: 'POST',
+        path: '/api/admin/uploads/presign',
+        body: {
+          propertyId: 'demo-1',
+          fileName: 'fachada.jpg',
+          contentType: 'image/jpeg',
+          size: 1024
+        }
+      }
+    ];
+
+    for (const item of requests) {
+      const response = await fetch(`${origin}${item.path}`, {
+        method: item.method,
+        headers: {
+          Origin: origin,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(item.body)
+      });
+      assert.equal(response.status, 403, `${item.method} ${item.path} deveria falhar fechado para Editor`);
+      assert.deepEqual(await response.json(), { error: 'CAPABILITY_REQUIRED' });
+    }
+  });
+});
+
+test('editor não cria imóvel publicado ou destacado por payload adulterado', async () => {
+  await withEditorServer(async (origin) => {
+    for (const body of [
+      {
+        title: 'Publicação indevida',
+        location: 'Savassi · Belo Horizonte',
+        city: 'Belo Horizonte',
+        purpose: 'Comprar',
+        type: 'Apartamento',
+        status: 'published',
+        featured: false
+      },
+      {
+        title: 'Destaque indevido',
+        location: 'Savassi · Belo Horizonte',
+        city: 'Belo Horizonte',
+        purpose: 'Comprar',
+        type: 'Apartamento',
+        status: 'draft',
+        featured: true
+      }
+    ]) {
+      const response = await fetch(`${origin}/api/admin/properties`, {
+        method: 'POST',
+        headers: {
+          Origin: origin,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), { error: 'CAPABILITY_REQUIRED' });
+    }
+  });
 });
