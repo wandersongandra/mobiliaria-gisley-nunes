@@ -207,10 +207,12 @@ test('editor não consegue escalar publicação por payload', () => {
 
   assert.equal(canCreateProperty(editor, { status: 'draft', featured: false }), true);
   assert.equal(canCreateProperty(editor, { status: 'published', featured: false }), false);
+  assert.equal(canCreateProperty(editor, { status: 'archived', featured: false }), false);
   assert.equal(canCreateProperty(editor, { status: 'draft', featured: true }), false);
   assert.equal(canCreateProperty(editor, { status: 'draft', featured: 'false' }), false);
 
   assert.equal(canRequestPublication(editor, { status: 'published' }), false);
+  assert.equal(canRequestPublication(editor, { status: 'archived' }), false);
   assert.equal(canRequestPublication(editor, { featured: true }), false);
   assert.equal(canRequestPublication(editor, { status: 'draft', featured: false }), true);
 
@@ -388,4 +390,13 @@ test('ator sem papel manager falha fechado nas mutações de equipe', () => {
   const target = { open_id: 'other-open-id', role: 'editor', active: 1, is_bootstrap: false };
   assert.equal(staffMutationError(editor, target, { role: 'manager' }), 'CAPABILITY_REQUIRED');
   assert.equal(staffRemovalError(editor, target), 'CAPABILITY_REQUIRED');
+});
+
+
+test('persistência exige permissão explícita para arquivar', async () => {
+  const { softDeleteProperty } = await import('../server/db.js');
+  await assert.rejects(
+    () => softDeleteProperty('property-id'),
+    /CAPABILITY_REQUIRED/
+  );
 });
