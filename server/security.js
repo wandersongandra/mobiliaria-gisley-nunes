@@ -51,6 +51,7 @@ export function securityHeaders(req, res, next) {
     connectSources.push('https:');
     mediaSources.push('https:');
   } else {
+    imageSources.push('https://images.unsplash.com');
     if (mediaOrigin) {
       imageSources.push(mediaOrigin);
       mediaSources.push(mediaOrigin);
