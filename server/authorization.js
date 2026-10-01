@@ -89,3 +89,34 @@ export function canRequestPublication(admin, input = {}) {
   if (hasCapability(admin, 'property.publish')) return true;
   return input.status !== 'published' && !Boolean(input.featured);
 }
+
+
+export function staffMutationError(actor, target, patch = {}) {
+  if (!actor || actor.role !== 'manager' || !target) return 'CAPABILITY_REQUIRED';
+
+  const actorOpenId = String(actor.openId || '');
+  const targetOpenId = String(target.open_id || '');
+  const isSelf = Boolean(actorOpenId && targetOpenId && actorOpenId === targetOpenId);
+  const isBootstrap = Boolean(target.is_bootstrap);
+
+  if (isSelf && ((patch.role && patch.role !== actor.role) || patch.active === false)) {
+    return 'CANNOT_CHANGE_SELF_ACCESS';
+  }
+
+  if (isBootstrap && ((patch.role && patch.role !== 'manager') || patch.active === false)) {
+    return 'BOOTSTRAP_MANAGER_PROTECTED';
+  }
+
+  return null;
+}
+
+export function staffRemovalError(actor, target) {
+  if (!actor || actor.role !== 'manager' || !target) return 'CAPABILITY_REQUIRED';
+
+  const actorOpenId = String(actor.openId || '');
+  const targetOpenId = String(target.open_id || '');
+
+  if (actorOpenId && targetOpenId && actorOpenId === targetOpenId) return 'CANNOT_REMOVE_SELF';
+  if (target.is_bootstrap) return 'BOOTSTRAP_MANAGER_PROTECTED';
+  return null;
+}
