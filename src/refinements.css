@@ -720,4 +720,3 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
 .stats-three .stat:last-child{grid-column:1/-1;min-height:128px}
 .form-privacy{margin:-4px 0 0;color:#718182;font-size:9px;line-height:1.55;text-transform:none;letter-spacing:0}
 .form-privacy a{color:var(--ink);font-weight:700;text-decoration:underline;text-underline-offset:3px}
-@media(max-width:600px){.stats-three .stat:last-child{grid-column:auto;min-height:105px}}
