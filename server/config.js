@@ -28,6 +28,14 @@ export function maxAdminSessions() {
   return Math.min(Math.max(Math.trunc(value), 1), 10);
 }
 
+export function sessionIdleTimeoutMs() {
+  const minutes = Number(env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES || 60);
+  const safeMinutes = Number.isFinite(minutes)
+    ? Math.min(Math.max(Math.trunc(minutes), 15), 240)
+    : 60;
+  return safeMinutes * 60 * 1000;
+}
+
 function configuredOrigin(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
