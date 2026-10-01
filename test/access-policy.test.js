@@ -40,21 +40,21 @@ test('API administrativa mantém autenticação global antes das rotas de negóc
     'middleware administrativo padrão deixou de ser requireAdmin()'
   );
   assert.ok(
-    routesSource.includes('requireSameOrigin, adminApiGuard, adminMiddleware'),
-    'ordem global same-origin → rate-limit → autenticação foi alterada'
+    routesSource.includes('requireSameOrigin, adminApiGuard, adminMiddleware, requireCsrfToken'),
+    'ordem global same-origin → rate-limit → autenticação → CSRF foi alterada'
   );
 });
 
 test('logout individual e global mantêm origem e rate limit antes da lógica de sessão', () => {
   assert.ok(routesSource.includes("const logoutLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 60, namespace: 'auth-logout' });"));
-  assert.ok(routesSource.includes("app.post('/api/auth/logout', requireSameOrigin, logoutLimiter, logout);"));
-  assert.ok(routesSource.includes("app.post('/api/auth/logout-all', requireSameOrigin, logoutLimiter, requireAdmin(), logoutAll);"));
+  assert.ok(routesSource.includes("app.post('/api/auth/logout', requireSameOrigin, requireCsrfToken, logoutLimiter, logout);"));
+  assert.ok(routesSource.includes("app.post('/api/auth/logout-all', requireSameOrigin, logoutLimiter, requireAdmin(), requireCsrfToken, logoutAll);"));
 });
 
 test('sonda de sessão continua anônima, mas protegida por contexto de origem e minimizada', () => {
   const contextGuardIndex = routesSource.indexOf("app.use('/api/admin', requireAdminRequestContext)");
   const sessionIndex = routesSource.indexOf("app.get('/api/admin/session'");
-  const authGuardIndex = routesSource.indexOf('requireSameOrigin, adminApiGuard, adminMiddleware', sessionIndex);
+  const authGuardIndex = routesSource.indexOf('requireSameOrigin, adminApiGuard, adminMiddleware, requireCsrfToken', sessionIndex);
 
   assert.ok(contextGuardIndex >= 0, 'guard de contexto administrativo ausente');
   assert.ok(sessionIndex >= 0, 'session probe ausente');
