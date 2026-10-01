@@ -33,6 +33,7 @@ const protectedAdminRoutes = [
   ['DELETE', '/api/admin/properties/property-id'],
   ['POST', '/api/admin/uploads/presign'],
   ['POST', '/api/admin/properties/property-id/photos'],
+  ['GET', '/api/admin/photos/photo-id/media'],
   ['DELETE', '/api/admin/photos/photo-id'],
   ['PUT', '/api/admin/properties/property-id/photos/order'],
   ['PUT', '/api/admin/photos/photo-id/cover'],
