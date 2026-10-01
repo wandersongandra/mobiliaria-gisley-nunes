@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, properties: [], leads: [], team: [], editing: null, pendingFiles: [], search: '' };
+const state = { user: null, properties: [], leads: [], team: [], editing: null, pendingFiles: [], pendingPreviewUrls: [], search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -72,19 +72,97 @@ function fillForm(property = {}) {
   form.elements.featured.checked = Boolean(property.is_featured);
 }
 function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
+
+function clearPendingPreviewUrls() {
+  state.pendingPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  state.pendingPreviewUrls = [];
+}
+
+function clearPendingFiles() {
+  clearPendingPreviewUrls();
+  state.pendingFiles = [];
+  const input = $('#photo-input');
+  if (input) input.value = '';
+}
+
+function renderEditorPhotos() {
+  renderPhotos(state.editing?.photos || []);
+  if (!state.pendingFiles.length) return;
+
+  clearPendingPreviewUrls();
+  const grid = $('#photo-grid');
+  const existingPhotoCount = state.editing?.photos?.length || 0;
+  const pendingMarkup = state.pendingFiles.map((file, index) => {
+    const url = URL.createObjectURL(file);
+    state.pendingPreviewUrls.push(url);
+    const becomesCover = existingPhotoCount === 0 && index === 0;
+    return `<div class="photo-tile pending"><img src="${url}" alt="${escapeHTML(file.name)}" /><span>${becomesCover ? 'nova capa' : 'nova'}</span><div class="photo-tile-actions"><button data-pending-remove="${index}" type="button" aria-label="Remover foto pendente">×</button></div></div>`;
+  }).join('');
+
+  if (existingPhotoCount === 0) grid.innerHTML = pendingMarkup;
+  else grid.insertAdjacentHTML('beforeend', pendingMarkup);
+
+  grid.querySelectorAll('[data-pending-remove]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.pendingFiles.splice(Number(button.dataset.pendingRemove), 1);
+      renderEditorPhotos();
+    });
+  });
+}
 function openEditor(property = null) {
   state.editing = property;
-  state.pendingFiles = [];
+  clearPendingFiles();
   $('#dialog-title').textContent = property ? 'Editar imóvel' : 'Novo imóvel';
   fillForm(property || {});
-  renderPhotos(property?.photos || []);
+  renderEditorPhotos();
   $('#editor-status').textContent = '';
   const archiveButton = $('#archive-property');
   if (archiveButton) archiveButton.hidden = !property || property.status === 'archived';
   dialog.showModal();
 }
 
-async function saveProperty(event) { if (event.submitter?.value === 'cancel') return; event.preventDefault(); const button = $('#save-property'); button.disabled = true; toast('Salvando alterações…'); const data = Object.fromEntries(new FormData(form)); data.published = form.elements.published.checked; data.featured = form.elements.featured.checked; data.status = data.published ? 'published' : 'draft'; try { const result = await request(state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties', { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(data) }); const property = result.property; await uploadPendingFiles(property.id); state.properties = (await request('/api/admin/properties')).properties; renderProperties(); dialog.close(); } catch (error) { toast(error.message === 'AUTH_REQUIRED' ? 'Sua sessão expirou.' : 'Não foi possível salvar. Tente novamente.', 'error'); } finally { button.disabled = false; } }
+async function saveProperty(event) {
+  if (event.submitter?.value === 'cancel') return;
+  event.preventDefault();
+
+  const button = $('#save-property');
+  button.disabled = true;
+  toast('Salvando alterações…');
+
+  const data = Object.fromEntries(new FormData(form));
+  data.published = form.elements.published.checked;
+  data.featured = form.elements.featured.checked;
+  data.status = data.published ? 'published' : 'draft';
+
+  let propertySaved = false;
+  try {
+    const result = await request(
+      state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties',
+      { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(data) }
+    );
+
+    state.editing = result.property;
+    propertySaved = true;
+    await uploadPendingFiles(result.property.id);
+
+    state.properties = (await request('/api/admin/properties')).properties;
+    renderProperties();
+    dialog.close();
+  } catch (error) {
+    if (error.message === 'AUTH_REQUIRED') {
+      toast('Sua sessão expirou.', 'error');
+    } else if (propertySaved) {
+      state.properties = (await request('/api/admin/properties').catch(() => ({ properties: state.properties }))).properties;
+      renderProperties();
+      renderEditorPhotos();
+      toast('Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.', 'error');
+    } else {
+      toast(error.message === 'SLUG_CONFLICT' ? 'Já existe um imóvel com esse endereço de URL.' : 'Não foi possível salvar. Tente novamente.', 'error');
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
 
 
 async function archiveProperty() {
@@ -131,10 +209,13 @@ async function imageDimensions(file) {
 }
 
 async function uploadPendingFiles(propertyId) {
-  const existingPhotoCount = state.editing?.photos?.length || 0;
-  for (let index = 0; index < state.pendingFiles.length; index += 1) {
-    const file = state.pendingFiles[index];
-    toast(`Enviando foto ${index + 1} de ${state.pendingFiles.length}…`);
+  let uploadedCount = 0;
+
+  while (state.pendingFiles.length) {
+    const file = state.pendingFiles[0];
+    const existingPhotoCount = state.editing?.photos?.length || 0;
+    toast(`Enviando foto ${uploadedCount + 1}…`);
+
     const dimensions = await imageDimensions(file);
     const presign = await request('/api/admin/uploads/presign', {
       method: 'POST',
@@ -145,23 +226,37 @@ async function uploadPendingFiles(propertyId) {
         size: file.size
       })
     });
-    const upload = await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+
+    const upload = await fetch(presign.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file
+    });
     if (!upload.ok) throw new Error('UPLOAD_FAILED');
-    await request(`/api/admin/properties/${propertyId}/photos`, {
+
+    const result = await request(`/api/admin/properties/${propertyId}/photos`, {
       method: 'POST',
       body: JSON.stringify({
         storagePath: presign.storagePath,
         altText: file.name.replace(/\.[^.]+$/, ''),
-        sortOrder: existingPhotoCount + index,
-        isCover: existingPhotoCount === 0 && index === 0,
+        sortOrder: existingPhotoCount,
+        isCover: existingPhotoCount === 0,
         contentType: file.type,
         size: file.size,
         width: dimensions.width,
         height: dimensions.height
       })
     });
+
+    state.editing = { ...state.editing, photos: result.photos };
+    state.pendingFiles.shift();
+    uploadedCount += 1;
+    renderEditorPhotos();
   }
+
+  clearPendingFiles();
 }
+
 async function removePhoto(id) { if (!state.editing) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
 
 async function movePhoto(id, direction) {
@@ -394,8 +489,20 @@ $('#new-property-top')?.addEventListener('click', () => openEditor());
 $('#archive-property')?.addEventListener('click', archiveProperty);
 $('#logout-button').addEventListener('click', async () => { await fetch('/api/auth/logout', { method: 'POST' }); showLogin(); });
 form.addEventListener('submit', saveProperty);
-$('#photo-input').addEventListener('change', (event) => { state.pendingFiles = [...state.pendingFiles, ...Array.from(event.target.files)]; $('#photo-grid').innerHTML = state.pendingFiles.map((file, index) => `<div class="photo-tile pending"><img src="${URL.createObjectURL(file)}" alt="${escapeHTML(file.name)}" /><span>${index === 0 ? 'nova capa' : 'nova'}</span></div>`).join(''); });
-dialog.addEventListener('close', () => { state.pendingFiles = []; });
+$('#photo-input').addEventListener('change', (event) => {
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+  const incoming = Array.from(event.target.files || []);
+  const valid = incoming.filter((file) => allowed.has(file.type) && file.size > 0 && file.size <= 12 * 1024 * 1024);
+  const available = Math.max(0, 40 - ((state.editing?.photos?.length || 0) + state.pendingFiles.length));
+  state.pendingFiles.push(...valid.slice(0, available));
+
+  if (valid.length !== incoming.length) toast('Algumas fotos foram ignoradas por formato ou tamanho inválido.', 'error');
+  else if (valid.length > available) toast('O imóvel pode ter no máximo 40 fotos.', 'error');
+
+  event.target.value = '';
+  renderEditorPhotos();
+});
+dialog.addEventListener('close', clearPendingFiles);
 document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); switchView(link.dataset.view); }));
 siteForm?.addEventListener('submit', saveSite);
 testimonialForm?.addEventListener('submit', addTestimonial);
