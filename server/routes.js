@@ -317,8 +317,8 @@ export function registerRoutes(app) {
           uploadedBy: req.admin.email
         });
       } catch (error) {
-        if (error?.message === 'PHOTO_LIMIT_REACHED') {
-          try { await storageDelete(storagePath); } catch {}
+        try { await storageDelete(storagePath); } catch (cleanupError) {
+          console.warn('[storage] failed to clean unpersisted upload:', cleanupError.message);
         }
         throw error;
       }
