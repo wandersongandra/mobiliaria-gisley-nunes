@@ -172,3 +172,15 @@ test('API aceita mutação sem body quando a rota não precisa de payload', asyn
     assert.deepEqual(await response.json(), { ok: true });
   });
 });
+
+
+test('mídia R2 não é exposta sem vínculo publicado no banco', async () => {
+  await withServer(async (origin) => {
+    const response = await fetch(
+      `${origin}/media/gisley/properties/property-id/foto.webp`,
+      { redirect: 'manual', headers: { Accept: 'image/webp' } }
+    );
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get('location'), null);
+  });
+});
