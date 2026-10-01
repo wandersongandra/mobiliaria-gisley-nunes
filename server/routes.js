@@ -206,8 +206,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         if (!key.startsWith('morada/properties/') || key.includes('..') || key.includes('\\0')) {
           return res.status(400).json({ error: 'INVALID_ASSET' });
         }
+        const publishedPhoto = await findPublishedPhotoByStoragePath(key);
+        if (!publishedPhoto) return res.status(404).json({ error: 'NOT_FOUND' });
         const signedUrl = await storageGetSignedUrl(key);
-        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.setHeader('Cache-Control', 'no-store');
         return res.redirect(307, signedUrl);
       } catch (error) {
         return next(error);
