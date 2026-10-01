@@ -179,12 +179,19 @@ app.get('/llms.txt', async (req, res, next) => {
 app.use((error, req, res, next) => {
   console.error('[api]', error.stack || error.message);
   if (res.headersSent) return next(error);
-  const known = { TITLE_REQUIRED: ['TITLE_REQUIRED', 400], LOCATION_REQUIRED: ['LOCATION_REQUIRED', 400], INVALID_ASSET: ['INVALID_ASSET', 400], INVALID_CONTACT: ['INVALID_CONTACT', 400], INVALID_EMAIL: ['INVALID_EMAIL', 400], INVALID_INSTAGRAM_URL: ['INVALID_INSTAGRAM_URL', 400], INVALID_TESTIMONIAL: ['INVALID_TESTIMONIAL', 400], INVALID_LEAD_STATUS: ['INVALID_LEAD_STATUS', 400], SLUG_CONFLICT: ['SLUG_CONFLICT', 409], DATABASE_NOT_CONFIGURED: ['DATABASE_NOT_CONFIGURED', 503], STORAGE_NOT_CONFIGURED: ['STORAGE_NOT_CONFIGURED', 503], OAUTH_NOT_CONFIGURED: ['OAUTH_NOT_CONFIGURED', 503], SESSION_SECRET_NOT_CONFIGURED: ['SESSION_SECRET_NOT_CONFIGURED', 503] }[error.message];
+  const known = { TITLE_REQUIRED: ['TITLE_REQUIRED', 400], LOCATION_REQUIRED: ['LOCATION_REQUIRED', 400], INVALID_ASSET: ['INVALID_ASSET', 400], INVALID_CONTACT: ['INVALID_CONTACT', 400], INVALID_EMAIL: ['INVALID_EMAIL', 400], INVALID_INSTAGRAM_URL: ['INVALID_INSTAGRAM_URL', 400], INVALID_TESTIMONIAL: ['INVALID_TESTIMONIAL', 400], INVALID_LEAD_STATUS: ['INVALID_LEAD_STATUS', 400], INVALID_ORDER: ['INVALID_ORDER', 400], SLUG_CONFLICT: ['SLUG_CONFLICT', 409], DATABASE_NOT_CONFIGURED: ['DATABASE_NOT_CONFIGURED', 503], STORAGE_NOT_CONFIGURED: ['STORAGE_NOT_CONFIGURED', 503], OAUTH_NOT_CONFIGURED: ['OAUTH_NOT_CONFIGURED', 503], SESSION_SECRET_NOT_CONFIGURED: ['SESSION_SECRET_NOT_CONFIGURED', 503] }[error.message];
   res.status(known?.[1] || 500).json({ error: known?.[0] || 'INTERNAL_ERROR' });
 });
 
 async function start() {
-  const migration = await migrate().catch((error) => { console.warn('[db] migration deferred:', error.message); return { configured: false }; });
+  let migration;
+  try {
+    migration = await migrate();
+  } catch (error) {
+    if (isProduction) throw error;
+    console.warn('[db] migration deferred:', error.message);
+    migration = { configured: false };
+  }
   if (isProduction) {
     const publicHeaders = (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); else if (/\.(?:js|css|woff2?|png|jpe?g|webp|avif|svg)$/i.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=604800, immutable'); };
     app.use(express.static(path.join(root, 'dist'), { etag: true, maxAge: '7d', index: false, setHeaders: publicHeaders }));
