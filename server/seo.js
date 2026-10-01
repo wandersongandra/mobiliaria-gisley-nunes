@@ -16,14 +16,24 @@ export function organizationLd(site, origin) {
 }
 
 export function propertyLd(property, origin) {
+  const price = Number(property.price || 0);
   const ld = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
     name: property.title,
     url: `${origin}/imoveis/${property.slug}`,
-    offers: { '@type': 'Offer', price: Number(property.price || 0), priceCurrency: 'BRL' },
     address: { '@type': 'PostalAddress', addressLocality: property.city || 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' }
   };
+  if (price > 0) {
+    ld.offers = {
+      '@type': 'Offer',
+      price,
+      priceCurrency: 'BRL',
+      ...(property.purpose === 'Alugar'
+        ? { priceSpecification: { '@type': 'UnitPriceSpecification', price, priceCurrency: 'BRL', unitText: 'MONTH' } }
+        : {})
+    };
+  }
   if (property.description) ld.description = property.description;
   if (property.cover_url) ld.image = property.cover_url;
   if (Number(property.bedrooms || 0)) ld.numberOfBedrooms = Number(property.bedrooms);
