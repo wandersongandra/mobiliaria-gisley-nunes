@@ -577,11 +577,12 @@ export async function addTestimonial(input = {}) {
   const db = getPool();
   const { randomUUID } = await import('node:crypto');
   const data = normalizeTestimonial(input);
+  const id = randomUUID();
   await db.execute(
     'INSERT INTO morada_testimonials (id, author, quote, location, year, sort_order) VALUES (?,?,?,?,?,?)',
-    [randomUUID(), data.author, data.quote, data.location, data.year, data.sortOrder]
+    [id, data.author, data.quote, data.location, data.year, data.sortOrder]
   );
-  return listTestimonials();
+  return { id, testimonials: await listTestimonials() };
 }
 
 export async function removeTestimonial(id) {
