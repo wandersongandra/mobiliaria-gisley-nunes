@@ -256,6 +256,11 @@ export function normalizeAuditLimit(value) {
   return numberField(value, 250, { integer: true, error: 'INVALID_LIMIT' }) || 100;
 }
 
+export function normalizeAuditQuery(input = {}) {
+  input = contract(input, ['limit'], 'INVALID_LIMIT');
+  return { limit: normalizeAuditLimit(input.limit) };
+}
+
 export function normalizeTeamCreate(input = {}) {
   input = contract(input, ['email', 'pairingCode', 'name', 'role'], 'INVALID_TEAM_MEMBER');
   const email = text(input.email, 255, { required: true, error: 'INVALID_TEAM_MEMBER' }).toLowerCase();
