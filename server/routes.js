@@ -53,7 +53,7 @@ import {
   storageProviderName
 } from './storage.js';
 import { normalizeContactLead, normalizeTestimonial } from './validation.js';
-import { publicProperties, publicProperty } from './presenters.js';
+import { adminProperties, adminProperty, publicProperties, publicProperty } from './presenters.js';
 
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth' });
 const contactLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 8, namespace: 'contact' });
@@ -197,7 +197,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   }, requireSameOrigin, adminApiGuard, adminMiddleware);
 
   app.get('/api/admin/properties', requireCapability('property.read'), async (req, res, next) => {
-    try { res.json({ properties: await listProperties() }); } catch (error) { next(error); }
+    try { res.json({ properties: adminProperties(await listProperties()) }); } catch (error) { next(error); }
   });
 
   app.post('/api/admin/properties', requireCapability('property.write'), async (req, res, next) => {
@@ -207,7 +207,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       }
       const property = await saveProperty(req.body);
       await writeAudit(req, 'property.create', 'property', property.id, { title: property.title, status: property.status });
-      return res.status(201).json({ property });
+      return res.status(201).json({ property: adminProperty(property) });
     } catch (error) {
       return next(error);
     }
@@ -217,7 +217,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     try {
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
-      return res.json({ property });
+      return res.json({ property: adminProperty(property) });
     } catch (error) {
       return next(error);
     }
@@ -234,7 +234,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         requireDraft: !hasCapability(req.admin, 'property.publish')
       });
       await writeAudit(req, 'property.update', 'property', property.id, { title: property.title, status: property.status });
-      return res.json({ property });
+      return res.json({ property: adminProperty(property) });
     } catch (error) {
       return next(error);
     }
