@@ -66,7 +66,7 @@ test('EJS escapa dados institucionais hostis em atributos e texto', async () => 
 
   assert.equal(html.includes('<img src=x onerror=alert(1)>'), false);
   assert.equal(html.includes('"><img src=x'), false);
-  assert.match(html, /&quot;&gt;&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(html, /(?:&quot;|&#34;)&gt;&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
 test('templates não possuem slot genérico de HTML bruto no head', async () => {
