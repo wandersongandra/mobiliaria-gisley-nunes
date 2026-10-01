@@ -621,10 +621,28 @@ export async function revokeAdminSessionsByEmail(email) {
 
 export async function upsertAdmin({ openId, email, name }) {
   const db = getPool();
-  await db.execute(
-    'INSERT INTO morada_admin_users (open_id,email,name) VALUES (?,?,?) ON DUPLICATE KEY UPDATE email=VALUES(email),name=VALUES(name),last_login_at=CURRENT_TIMESTAMP',
-    [String(openId).slice(0, 191), String(email).slice(0, 255), String(name).slice(0, 255)]
-  );
+  const normalizedOpenId = String(openId).slice(0, 191);
+  const normalizedEmail = String(email).trim().toLowerCase().slice(0, 255);
+  const normalizedName = String(name).slice(0, 255);
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      'DELETE FROM morada_admin_users WHERE email=? AND open_id<>?',
+      [normalizedEmail, normalizedOpenId]
+    );
+    await connection.execute(
+      'INSERT INTO morada_admin_users (open_id,email,name) VALUES (?,?,?) ON DUPLICATE KEY UPDATE email=VALUES(email),name=VALUES(name),last_login_at=CURRENT_TIMESTAMP',
+      [normalizedOpenId, normalizedEmail, normalizedName]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function findAdmin(openId) {
