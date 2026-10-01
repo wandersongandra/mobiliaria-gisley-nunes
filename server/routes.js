@@ -23,7 +23,7 @@ import {
   softDeleteProperty,
   updateContactLeadStatus
 } from './db.js';
-import { hasDatabase, isAllowedEmail } from './config.js';
+import { hasDatabase, isAllowedEmail, legacyStorageRouteEnabled } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin, requireManager } from './auth.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireAdminOrigin, requireSameOrigin } from './security.js';
@@ -136,19 +136,21 @@ export function registerRoutes(app) {
     }
   });
 
-  app.get(/^\/manus-storage\/(.+)$/, async (req, res, next) => {
-    try {
-      const key = String(req.params[0] || '').replace(/^\/+/, '');
-      if (!key.startsWith('morada/properties/') || key.includes('..') || key.includes('\\0')) {
-        return res.status(400).json({ error: 'INVALID_ASSET' });
+  if (legacyStorageRouteEnabled()) {
+    app.get(/^\/manus-storage\/(.+)$/, async (req, res, next) => {
+      try {
+        const key = String(req.params[0] || '').replace(/^\/+/, '');
+        if (!key.startsWith('morada/properties/') || key.includes('..') || key.includes('\\0')) {
+          return res.status(400).json({ error: 'INVALID_ASSET' });
+        }
+        const signedUrl = await storageGetSignedUrl(key);
+        res.setHeader('Cache-Control', 'private, max-age=300');
+        return res.redirect(307, signedUrl);
+      } catch (error) {
+        return next(error);
       }
-      const signedUrl = await storageGetSignedUrl(key);
-      res.setHeader('Cache-Control', 'private, max-age=300');
-      return res.redirect(307, signedUrl);
-    } catch (error) {
-      return next(error);
-    }
-  });
+    });
+  }
 
   app.get('/api/site', async (req, res, next) => {
     try {
