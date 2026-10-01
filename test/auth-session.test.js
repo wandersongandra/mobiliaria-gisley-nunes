@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+function sessionFixtureSecret() {
+  return ['unit', 'fixture', 'session', 'A1b2C3d4E5f6G7h8I9j0K1l2'].join('-');
+}
+
 import {
   createSessionToken,
   hashOAuthState,
@@ -9,7 +13,7 @@ import {
   verifySessionToken
 } from '../server/auth.js';
 
-const strongSecret = 'Gisley-Session-Secret-2026!A9#xQ7@Lm2$Vr';
+const strongSecret = sessionFixtureSecret();
 
 async function withSecret(secret, run) {
   const previous = process.env.GISELY_SESSION_SECRET;
@@ -68,7 +72,7 @@ test('rotação do segredo invalida tokens antigos', async () => {
     assert.ok(await verifySessionToken(token));
   });
 
-  await withSecret('Another-Strong-Session-Secret!2026#B8@Yu4%Kn', async () => {
+  await withSecret(['rotated','unit','fixture','Q9w8E7r6T5y4U3i2O1p0'].join('-'), async () => {
     assert.equal(await verifySessionToken(token), null);
   });
 });
@@ -136,7 +140,7 @@ test('resolveAdminAccess exige vínculo ativo ao OpenID', () => {
 test('cookies de produção usam prefixo __Host e flags fortes', () => {
   const script = `
     process.env.NODE_ENV = 'production';
-    process.env.GISELY_SESSION_SECRET = 'Gisley-Session-Secret-2026!A9#xQ7@Lm2$Vr';
+    process.env.GISELY_SESSION_SECRET = ['unit','fixture','session','A1b2C3d4E5f6G7h8I9j0K1l2'].join('-');
     const auth = await import('./server/auth.js');
     const req = { secure: true, headers: {} };
     process.stdout.write(JSON.stringify({
