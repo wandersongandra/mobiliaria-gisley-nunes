@@ -754,6 +754,89 @@ export async function consumeIdentityPairing(codeHash, expectedEmail) {
   }
 }
 
+export async function bindStaffAccessFromPairing({
+  codeHash,
+  email,
+  name,
+  role = 'editor',
+  invitedBy = null
+}) {
+  const db = getPool();
+  const connection = await db.getConnection();
+  const normalizedHash = String(codeHash || '').trim().slice(0, 64);
+  const normalizedEmail = String(email || '').trim().toLowerCase().slice(0, 255);
+  const normalizedName = String(name || normalizedEmail).trim().slice(0, 255);
+  const normalizedRole = role === 'manager' ? 'manager' : 'editor';
+
+  if (normalizedHash.length !== 64 || !normalizedEmail || !normalizedName) {
+    throw new Error('INVALID_PAIRING');
+  }
+
+  try {
+    await connection.beginTransaction();
+
+    const [[pairing]] = await connection.execute(
+      'SELECT code_hash,open_id,email,expires_at_ms FROM morada_identity_pairings WHERE code_hash=? LIMIT 1 FOR UPDATE',
+      [normalizedHash]
+    );
+
+    if (!pairing) {
+      await connection.rollback();
+      return null;
+    }
+
+    if (Number(pairing.expires_at_ms) <= Date.now()) {
+      await connection.execute('DELETE FROM morada_identity_pairings WHERE code_hash=?', [normalizedHash]);
+      await connection.commit();
+      return null;
+    }
+
+    const pairingEmail = String(pairing.email || '').trim().toLowerCase();
+    const pairingOpenId = String(pairing.open_id || '').trim().slice(0, 191);
+
+    if (pairingEmail !== normalizedEmail || !pairingOpenId) {
+      await connection.rollback();
+      return null;
+    }
+
+    const [[emailConflict]] = await connection.execute(
+      'SELECT email FROM morada_staff_access WHERE email=? LIMIT 1 FOR UPDATE',
+      [normalizedEmail]
+    );
+    if (emailConflict) throw new Error('TEAM_MEMBER_EXISTS');
+
+    const [[openIdConflict]] = await connection.execute(
+      'SELECT email FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',
+      [pairingOpenId]
+    );
+    if (openIdConflict) throw new Error('TEAM_MEMBER_EXISTS');
+
+    await connection.execute(
+      'INSERT INTO morada_staff_access (email,open_id,name,role,active,invited_by) VALUES (?,?,?,?,1,?)',
+      [
+        normalizedEmail,
+        pairingOpenId,
+        normalizedName,
+        normalizedRole,
+        invitedBy ? String(invitedBy).slice(0, 255) : null
+      ]
+    );
+
+    await connection.execute(
+      'DELETE FROM morada_identity_pairings WHERE code_hash=?',
+      [normalizedHash]
+    );
+
+    await connection.commit();
+    return findStaffAccessByOpenId(pairingOpenId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function createAuthChallenge({ stateHash, redirectUri, expiresAtMs }) {
   const db = getPool();
   const now = Date.now();
