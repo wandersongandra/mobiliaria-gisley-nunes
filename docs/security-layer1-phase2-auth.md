@@ -174,7 +174,7 @@ Requisitos:
 - cookies de produção: fortes;
 - configuração fraca: fail-closed;
 - CI: PASS;
-- CodeQL: aguardando confirmação final desta revisão no momento da escrita.
+- CodeQL: PASS.
 
 ## Próxima fase
 
