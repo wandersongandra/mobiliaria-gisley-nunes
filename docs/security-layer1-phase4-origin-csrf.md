@@ -1,102 +1,127 @@
-# Camada 1 — Fase 4: Origem, CSRF e isolamento do domínio administrativo
+# Camada 1 — Fase 4: Origem, CSRF e domínio administrativo
 
-Data: 2026-10-01
-Branch: `audit/security-design-2026-09-30`
+Data da revisão: 2026-10-01  
+Branch auditada: `audit/security-design-2026-09-30`
 
-## Escopo
+## Objetivo
 
-Revisar Host, Origin, Fetch Metadata, X-Forwarded-*, separação entre domínio público e painel, callback OAuth no host correto, CSRF em mutações e comportamento de requisições administrativas seguras (GET).
+Garantir separação estrita entre site público, painel administrativo e origens externas, evitando:
+- CSRF;
+- Host header abuse;
+- callback OAuth no host errado;
+- spoofing de proxy;
+- CORS permissivo;
+- uso indevido de `X-Forwarded-*`.
 
-## Arquitetura validada
+## Controles verificados
 
-- `PUBLIC_ORIGIN` e `ADMIN_ORIGIN` são obrigatoriamente separados em produção.
-- Ambos precisam ser HTTPS em produção.
-- Host desconhecido retorna `421 MISDIRECTED_REQUEST`.
-- `/api/auth/*` e `/api/admin/*` ficam vinculados ao host administrativo.
-- Login iniciado no domínio público é redirecionado para o painel.
-- Callback OAuth no domínio público não é processado.
-- Mutações exigem Origin exatamente igual à origem canônica esperada.
-- `Origin: null` é rejeitada.
-- `Sec-Fetch-Site: same-site` e `cross-site` são rejeitados em mutações.
-- `X-Forwarded-Proto` só é considerado quando `TRUST_PROXY_MODE=cloudflare`.
-- `CF-Connecting-IP` é ignorado por padrão; só é aceito com confiança explícita separada.
+### Host
+Em produção, apenas os hosts canônicos definidos por:
+- `PUBLIC_ORIGIN`;
+- `ADMIN_ORIGIN`;
+
+são aceitos.
+
+Hosts desconhecidos recebem:
+`421 MISDIRECTED_REQUEST`.
+
+A única exceção é liveness/readiness em loopback local.
+
+### Separação público × painel
+- domínio público serve site;
+- domínio do painel serve admin/auth;
+- callback OAuth no domínio público é bloqueado;
+- login iniciado no domínio público redireciona apenas para o painel configurado;
+- painel não serve acidentalmente a home pública.
+
+### CSRF / mesma origem
+Mutações exigem `Origin` exatamente igual à origem esperada.
+
+Quando origins canônicas estão configuradas:
+- ausência de `Origin` em mutação falha fechada;
+- `same-site` não é tratado como `same-origin`;
+- `Origin: null` é rejeitado;
+- `Sec-Fetch-Site: cross-site` contraditório é rejeitado.
+
+### Admin GET
+Mesmo requests GET administrativos passam por `requireAdminRequestContext`.
+
+`Sec-Fetch-Site` igual a `same-site` ou `cross-site` é rejeitado.
+
+### Proxy
+`X-Forwarded-Proto` só é considerado quando:
+`TRUST_PROXY_MODE=cloudflare`.
+
+`CF-Connecting-IP` exige adicionalmente:
+`TRUST_CLIENT_IP_HEADER=true`.
+
+Sem isso, o endereço usado é o socket real.
+
+### CORS
+Não existe middleware CORS global, nem:
+- `Access-Control-Allow-Origin: *`;
+- `Access-Control-Allow-Credentials`.
+
+Preflight cross-origin administrativo não recebe headers de liberação.
 
 ## Achados
 
-### F4-01 — GET administrativo podia ser disparado por subdomínio same-site
-Severidade: Média-baixa
-Status: Corrigido
+### F4-01 — Host allowlist
+**Resultado:** PASS
 
-`requireSameOrigin` corretamente ignora métodos seguros, mas isso permitia que um subdomínio irmão comprometido disparasse GETs contra o painel. A política de mesma origem do navegador impediria a leitura da resposta, porém a requisição ainda poderia tocar sessão e gerar carga.
+Hosts maliciosos, sufixos falsos, listas e portas divergentes são rejeitados.
 
-Correção:
-- novo `requireAdminRequestContext`;
-- aplicado a todo `/api/admin/*`, inclusive `/api/admin/session`;
-- rejeita `Sec-Fetch-Site: same-site` e `cross-site`;
-- aceita `same-origin`, `none` e header ausente para compatibilidade;
-- exige host administrativo quando `ADMIN_ORIGIN` está configurado.
+### F4-02 — CSRF same-site
+**Resultado:** PASS
 
-### F4-02 — Host com lista separada por vírgula era normalizado para o primeiro valor
-Severidade: Média
-Status: Corrigido
+Subdomínio público não consegue usar a sessão do painel para mutação administrativa.
 
-O parser de Host reutilizava um helper apropriado para headers encaminhados e aceitava:
+### F4-03 — Callback OAuth no host errado
+**Resultado:** PASS
 
-`Host: painel.gisley.test,evil.example`
+Callback no domínio público recebe 404 e não é processado.
 
-como se fosse apenas `painel.gisley.test`.
+### F4-04 — X-Forwarded-Proto spoofing
+**Resultado:** PASS
 
-Correção:
-- `safeHost()` agora rejeita qualquer Host contendo vírgula;
-- listas, espaços, sufixos maliciosos, trailing dot e malformed host são testados.
+Hosts canônicos usam a origem configurada e não confiam em protocolo encaminhado contraditório.
 
-### F4-03 — Porta padrão explícita era tratada como host diferente
-Severidade: Baixa
-Status: Corrigido
+### F4-05 — CF-Connecting-IP
+**Resultado:** PASS com condição operacional
 
-`painel.gisley.test:443` poderia falhar apesar de ser equivalente à origem HTTPS configurada.
+Header só é confiado com opt-in duplo. Antes de habilitar em produção, o origin precisa estar bloqueado contra acesso direto.
 
-Correção:
-- porta 443 explícita é aceita para origem HTTPS sem porta explícita;
-- porta 80 equivalente para HTTP;
-- portas divergentes continuam rejeitadas;
-- origem configurada com porta não padrão exige exatamente essa porta.
+### F4-06 — CORS permissivo
+**Resultado:** Não encontrado
 
-## Proteções confirmadas
+Foi adicionado gate automático para impedir regressão.
 
-- domínio público não consegue mutar API administrativa;
-- painel não consegue usar sua origem para mutar endpoint público;
-- callback OAuth só funciona no painel;
-- Host público não vira admin por `X-Forwarded-Proto`;
-- Host com sufixo malicioso é rejeitado;
-- Origin null é rejeitada;
-- same-site não é tratado como same-origin;
-- GET administrativo também possui Fetch Metadata guard;
-- saúde local continua possível por loopback sem abrir Host genérico.
+## Gate da Fase 4
 
-## Gate
-
-PASS quando:
-- CI verde;
-- CodeQL verde;
-- Host poisoning tests PASS;
-- canonical origin separation PASS;
-- CSRF mutation tests PASS;
-- admin GET context PASS;
-- OAuth callback wrong-host FAIL;
-- forwarded-header spoof tests PASS;
-- default/non-default port tests PASS.
+PASS somente se:
+- Host desconhecido em produção resultar em 421;
+- público e painel permanecerem separados;
+- callback OAuth no host errado não for processado;
+- mutações cross-origin falharem;
+- Origin ausente/null falhar com origins canônicas;
+- same-site não equivaler a same-origin;
+- proxy headers só forem confiados por configuração explícita;
+- CORS administrativo não for aberto;
+- CI e CodeQL permanecerem verdes.
 
 ## Próxima fase
 
-Fase 5 — Validação de entrada:
-- body/query/params;
+**Fase 5 — Validação de entrada**
+
+Foco:
 - contratos fechados;
-- payload oversized;
 - chaves extras;
-- NaN/Infinity/negativos;
-- Unicode/control characters;
-- arrays/objects em campos escalares;
+- payloads gigantes;
+- tipos estruturais;
+- números estranhos;
+- Unicode de controle;
 - IDs/slugs;
-- strings gigantes;
-- content-type inesperado.
+- query strings;
+- limites de texto;
+- JSON inválido;
+- content-type incorreto.
