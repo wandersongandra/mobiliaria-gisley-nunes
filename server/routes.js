@@ -6,6 +6,7 @@ import {
   databaseReady,
   deleteContactLead,
   findStaffAccess,
+  findStaffAccessByOpenId,
   getProperty,
   getPropertyBySlug,
   listAuditLog,
@@ -17,7 +18,7 @@ import {
   removeTestimonial,
   recordAudit,
   reorderPhotos,
-  revokeAdminSessionsByEmail,
+  revokeAdminSessionsByOpenId,
   saveProperty,
   saveSiteSettings,
   saveStaffAccess,
@@ -25,7 +26,7 @@ import {
   softDeleteProperty,
   updateContactLeadStatus
 } from './db.js';
-import { hasDatabase, isAllowedEmail, legacyStorageRouteEnabled } from './config.js';
+import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin, requireManager } from './auth.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireAdminOrigin, requireSameOrigin } from './security.js';
@@ -462,15 +463,29 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.post('/api/admin/team', requireManager(), async (req, res, next) => {
     try {
       const email = String(req.body?.email || '').trim().toLowerCase();
+      const openId = String(req.body?.openId || '').trim();
       const name = String(req.body?.name || '').trim();
       const role = req.body?.role === 'manager' ? 'manager' : 'editor';
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !name || name.length > 255) {
+
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        || !/^\S{1,191}$/.test(openId)
+        || !name
+        || name.length > 255
+      ) {
         return res.status(400).json({ error: 'INVALID_TEAM_MEMBER' });
       }
-      if (await findStaffAccess(email)) return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
 
-      const member = await saveStaffAccess({ email, name, role, active: true, invitedBy: req.admin.email });
-      await writeAudit(req, 'team.create', 'staff', email, { role: member.role, active: Boolean(member.active) });
+      if (await findStaffAccess(email) || await findStaffAccessByOpenId(openId)) {
+        return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
+      }
+
+      const member = await saveStaffAccess({ email, openId, name, role, active: true, invitedBy: req.admin.email });
+      await writeAudit(req, 'team.create', 'staff', email, {
+        role: member.role,
+        active: Boolean(member.active),
+        openIdBound: true
+      });
       return res.status(201).json({ member });
     } catch (error) {
       return next(error);
@@ -481,25 +496,33 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     try {
       const email = String(req.params.email || '').trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
-      if (email === req.admin.email && ((req.body?.role && req.body.role !== req.admin.role) || req.body?.active === false)) {
+
+      const current = await findStaffAccess(email);
+      if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
+
+      const isSelf = current.open_id && String(current.open_id) === String(req.admin.openId);
+      if (isSelf && ((req.body?.role && req.body.role !== req.admin.role) || req.body?.active === false)) {
         return res.status(400).json({ error: 'CANNOT_CHANGE_SELF_ACCESS' });
       }
+
       if (
-        isAllowedEmail(email)
+        current.open_id
+        && isAllowedOpenId(current.open_id)
         && ((req.body?.role && req.body.role !== 'manager') || req.body?.active === false)
       ) {
         return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
       }
-      const current = (await listStaffAccess()).find((item) => item.email === email);
-      if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
       const member = await saveStaffAccess({
         email,
         name: String(req.body?.name ?? current.name).trim(),
-        role: isAllowedEmail(email) ? 'manager' : (req.body?.role === 'manager' ? 'manager' : (req.body?.role === 'editor' ? 'editor' : current.role)),
+        openId: current.open_id,
+        role: current.open_id && isAllowedOpenId(current.open_id)
+          ? 'manager'
+          : (req.body?.role === 'manager' ? 'manager' : (req.body?.role === 'editor' ? 'editor' : current.role)),
         active: typeof req.body?.active === 'boolean' ? req.body.active : Boolean(current.active),
         invitedBy: current.invited_by || req.admin.email
       });
-      await revokeAdminSessionsByEmail(email);
+      if (current.open_id) await revokeAdminSessionsByOpenId(current.open_id);
       await writeAudit(req, 'team.update', 'staff', email, { role: member.role, active: Boolean(member.active), sessionsRevoked: true });
       return res.json({ member });
     } catch (error) {
@@ -510,11 +533,19 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.delete('/api/admin/team/:email', requireManager(), async (req, res, next) => {
     try {
       const email = String(req.params.email || '').trim().toLowerCase();
-      if (email === req.admin.email) return res.status(400).json({ error: 'CANNOT_REMOVE_SELF' });
-      if (isAllowedEmail(email)) return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
+      const current = await findStaffAccess(email);
+      if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
+
+      if (current.open_id && String(current.open_id) === String(req.admin.openId)) {
+        return res.status(400).json({ error: 'CANNOT_REMOVE_SELF' });
+      }
+      if (current.open_id && isAllowedOpenId(current.open_id)) {
+        return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
+      }
+
       const removed = await removeStaffAccess(email);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
-      await revokeAdminSessionsByEmail(email);
+      if (current.open_id) await revokeAdminSessionsByOpenId(current.open_id);
       await writeAudit(req, 'team.remove', 'staff', email, { sessionsRevoked: true });
       return res.status(204).end();
     } catch (error) {
