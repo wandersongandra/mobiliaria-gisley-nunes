@@ -31,3 +31,15 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 .danger-button{margin-right:auto;color:#a76052;border-color:rgba(167,96,82,.3)}.danger-button:hover{background:#a76052!important;border-color:#a76052!important;color:#fff!important}.danger-button:disabled{opacity:.5;cursor:wait}
 
 .lead-status{min-height:14px;margin-top:5px;color:#6f8384;font-size:9px}.lead-status[data-tone="error"]{color:#a76052}.lead-status[data-tone="success"]{color:#4f8b70}
+
+.lead-actions button.danger{color:#a76052;border-color:rgba(167,96,82,.28)}
+.lead-actions button.danger:hover:not(:disabled){background:#a76052;border-color:#a76052;color:#fff}
+.audit-card{padding-top:24px}
+.audit-head{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;padding-bottom:18px}
+.audit-head p{max-width:520px;margin:0;color:#718182;font-size:10px;line-height:1.55;text-align:right}
+.audit-list{border-top:1px solid rgba(18,60,70,.08)}
+.audit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center;padding:15px 0;border-bottom:1px solid rgba(18,60,70,.08)}
+.audit-row>div:last-child{text-align:right}
+.audit-row strong{display:block;color:#123c46;font-family:Fraunces,Georgia,serif;font-size:16px;font-weight:600}
+.audit-row span,.audit-row time{display:block;margin-top:3px;color:#7a898a;font-size:9px}
+@media(max-width:680px){.audit-head{display:block}.audit-head p{margin-top:8px;text-align:left}.audit-row{grid-template-columns:1fr}.audit-row>div:last-child{text-align:left}}
