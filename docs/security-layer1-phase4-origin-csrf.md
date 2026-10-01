@@ -1,92 +1,102 @@
-# Camada 1 — Fase 4: Origem, CSRF e domínio administrativo
+# Camada 1 — Fase 4: Origem, CSRF e isolamento do domínio administrativo
 
-Data da revisão: 2026-10-01  
-Branch auditada: `audit/security-design-2026-09-30`
+Data: 2026-10-01
+Branch: `audit/security-design-2026-09-30`
 
-## Objetivo
+## Escopo
 
-Garantir separação efetiva entre site público e painel, impedir mutações cross-site e rejeitar Host/origens ambiguamente configurados.
+Revisar Host, Origin, Fetch Metadata, X-Forwarded-*, separação entre domínio público e painel, callback OAuth no host correto, CSRF em mutações e comportamento de requisições administrativas seguras (GET).
 
-## Controles validados
+## Arquitetura validada
 
-- `PUBLIC_ORIGIN` e `ADMIN_ORIGIN` distintos em produção;
-- ambos obrigatoriamente HTTPS;
-- Host allowlist em produção;
-- `/api/admin/*` e `/api/auth/*` restritos ao host administrativo;
-- mutações públicas exigem Origin pública;
-- mutações administrativas exigem Origin do painel;
-- `Origin: null` rejeitada;
-- `Sec-Fetch-Site: same-site` não é tratado como same-origin;
-- conflito Origin × Fetch Metadata é rejeitado;
-- callback OAuth no domínio público retorna 404;
-- login iniciado no domínio público redireciona para o painel;
-- `X-Forwarded-Proto` só é considerado em modo Cloudflare;
-- `CF-Connecting-IP` não é confiado por padrão;
-- health/readiness só ignoram Host em conexão loopback real.
+- `PUBLIC_ORIGIN` e `ADMIN_ORIGIN` são obrigatoriamente separados em produção.
+- Ambos precisam ser HTTPS em produção.
+- Host desconhecido retorna `421 MISDIRECTED_REQUEST`.
+- `/api/auth/*` e `/api/admin/*` ficam vinculados ao host administrativo.
+- Login iniciado no domínio público é redirecionado para o painel.
+- Callback OAuth no domínio público não é processado.
+- Mutações exigem Origin exatamente igual à origem canônica esperada.
+- `Origin: null` é rejeitada.
+- `Sec-Fetch-Site: same-site` e `cross-site` são rejeitados em mutações.
+- `X-Forwarded-Proto` só é considerado quando `TRUST_PROXY_MODE=cloudflare`.
+- `CF-Connecting-IP` é ignorado por padrão; só é aceito com confiança explícita separada.
 
-## Achado
+## Achados
 
-### F4-01 — Origem canônica aceitava configuração ambígua
-**Severidade:** Média-baixa  
-**Status:** Corrigido
+### F4-01 — GET administrativo podia ser disparado por subdomínio same-site
+Severidade: Média-baixa
+Status: Corrigido
 
-Configurações como:
+`requireSameOrigin` corretamente ignora métodos seguros, mas isso permitia que um subdomínio irmão comprometido disparasse GETs contra o painel. A política de mesma origem do navegador impediria a leitura da resposta, porém a requisição ainda poderia tocar sessão e gerar carga.
 
-- `https://dominio/admin`
-- `https://dominio/?x=1`
-- `https://user:pass@dominio/`
+Correção:
+- novo `requireAdminRequestContext`;
+- aplicado a todo `/api/admin/*`, inclusive `/api/admin/session`;
+- rejeita `Sec-Fetch-Site: same-site` e `cross-site`;
+- aceita `same-origin`, `none` e header ausente para compatibilidade;
+- exige host administrativo quando `ADMIN_ORIGIN` está configurado.
 
-eram normalizadas silenciosamente para a origem.
+### F4-02 — Host com lista separada por vírgula era normalizado para o primeiro valor
+Severidade: Média
+Status: Corrigido
 
-**Correção:** configuração agora falha fechada. Só é aceito:
+O parser de Host reutilizava um helper apropriado para headers encaminhados e aceitava:
 
-`scheme://host[:port]`
+`Host: painel.gisley.test,evil.example`
 
-com barra final opcional.
+como se fosse apenas `painel.gisley.test`.
 
-## Testes adversariais
+Correção:
+- `safeHost()` agora rejeita qualquer Host contendo vírgula;
+- listas, espaços, sufixos maliciosos, trailing dot e malformed host são testados.
 
-Cobertos:
+### F4-03 — Porta padrão explícita era tratada como host diferente
+Severidade: Baixa
+Status: Corrigido
 
-- domínio parecido (`site.com.evil.example`);
-- porta não autorizada;
-- Host desconhecido;
-- callback OAuth no host errado;
-- mutação sem Origin;
-- Origin pública tentando API admin;
-- Origin admin tentando mutação pública;
-- `Origin: null`;
-- Fetch Metadata contraditório;
-- spoof de protocolo encaminhado;
-- headers de IP Cloudflare sem trust explícito;
-- exceção de health apenas em loopback.
+`painel.gisley.test:443` poderia falhar apesar de ser equivalente à origem HTTPS configurada.
 
-## Gate da Fase 4
+Correção:
+- porta 443 explícita é aceita para origem HTTPS sem porta explícita;
+- porta 80 equivalente para HTTP;
+- portas divergentes continuam rejeitadas;
+- origem configurada com porta não padrão exige exatamente essa porta.
 
-**PASS**
+## Proteções confirmadas
 
-- Host allowlist: PASS
-- ADMIN_ORIGIN isolation: PASS
-- public/admin origin separation: PASS
-- CSRF same-origin: PASS
-- null Origin rejection: PASS
-- Fetch Metadata consistency: PASS
-- callback host restriction: PASS
-- proxy trust defaults: PASS
-- CI: PASS
-- CodeQL: PASS
+- domínio público não consegue mutar API administrativa;
+- painel não consegue usar sua origem para mutar endpoint público;
+- callback OAuth só funciona no painel;
+- Host público não vira admin por `X-Forwarded-Proto`;
+- Host com sufixo malicioso é rejeitado;
+- Origin null é rejeitada;
+- same-site não é tratado como same-origin;
+- GET administrativo também possui Fetch Metadata guard;
+- saúde local continua possível por loopback sem abrir Host genérico.
+
+## Gate
+
+PASS quando:
+- CI verde;
+- CodeQL verde;
+- Host poisoning tests PASS;
+- canonical origin separation PASS;
+- CSRF mutation tests PASS;
+- admin GET context PASS;
+- OAuth callback wrong-host FAIL;
+- forwarded-header spoof tests PASS;
+- default/non-default port tests PASS.
 
 ## Próxima fase
 
-**Fase 5 — Validação de entrada**
-
-Foco:
-- body, params e query;
-- tipos inesperados;
-- campos extras;
-- IDs;
-- números;
-- Unicode/control chars;
-- URLs;
-- payload máximo;
-- fail-closed validation.
+Fase 5 — Validação de entrada:
+- body/query/params;
+- contratos fechados;
+- payload oversized;
+- chaves extras;
+- NaN/Infinity/negativos;
+- Unicode/control characters;
+- arrays/objects em campos escalares;
+- IDs/slugs;
+- strings gigantes;
+- content-type inesperado.
