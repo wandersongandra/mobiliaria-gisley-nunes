@@ -31,6 +31,21 @@ app.use('/admin', (req, res, next) => {
   return res.redirect(308, `${adminOrigin}${req.originalUrl}`);
 });
 
+app.use((req, res, next) => {
+  const adminOrigin = configuredAdminOrigin();
+  if (!adminOrigin || requestHostOrigin(req) !== adminOrigin) return next();
+
+  const allowed = req.path.startsWith('/admin')
+    || req.path.startsWith('/api/admin')
+    || req.path.startsWith('/api/auth')
+    || req.path.startsWith('/_app/')
+    || req.path.startsWith('/media/');
+
+  if (allowed) return next();
+  if (req.method === 'GET' && req.accepts('html')) return res.redirect(302, `${adminOrigin}/admin`);
+  return res.status(404).json({ error: 'NOT_FOUND' });
+});
+
 function originFrom(req) {
   return requestOrigin(req) || `http://localhost:${port}`;
 }
