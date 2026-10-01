@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://images.unsplash.com" />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <script nonce="<%= cspNonce %>" type="application/ld+json"><%- siteLd %></script>
-    <%- locals.extraHead || '' %>
+    <% if (locals.pageLd) { %><script nonce="<%= cspNonce %>" type="application/ld+json"><%- pageLd %></script><% } %>
     <% if (assets.css) { %><link rel="stylesheet" href="<%= assets.css %>" /><% } %>
     <title><%= page.title %></title>
   </head>
