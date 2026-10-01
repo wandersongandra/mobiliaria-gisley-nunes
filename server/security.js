@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
   configuredAdminOrigin,
@@ -13,6 +13,69 @@ import {
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const MAX_RATE_BUCKETS = 10000;
 const rateBuckets = new Map();
+
+
+const CSRF_TTL_MS = 8 * 60 * 60 * 1000;
+const csrfCookieName = isProduction ? '__Host-gisley_csrf' : 'gisley_csrf';
+
+function csrfCookieOptions(req) {
+  return {
+    httpOnly: true,
+    secure: isProduction || Boolean(req.secure),
+    sameSite: 'strict',
+    path: '/',
+    priority: 'high',
+    maxAge: CSRF_TTL_MS
+  };
+}
+
+function validCsrfToken(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+function requestCsrfCookie(req) {
+  return isProduction
+    ? req.cookies?.['__Host-gisley_csrf']
+    : req.cookies?.gisley_csrf;
+}
+
+export function verifyCsrfToken(cookieToken, headerToken) {
+  if (!validCsrfToken(cookieToken) || !validCsrfToken(headerToken)) return false;
+  const left = Buffer.from(cookieToken, 'utf8');
+  const right = Buffer.from(headerToken, 'utf8');
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+export function ensureCsrfToken(req, res, { rotate = false } = {}) {
+  const existing = requestCsrfCookie(req);
+  if (!rotate && validCsrfToken(existing)) return existing;
+
+  const token = randomBytes(32).toString('base64url');
+  res.cookie(csrfCookieName, token, csrfCookieOptions(req));
+  return token;
+}
+
+export function clearCsrfToken(req, res) {
+  res.clearCookie(csrfCookieName, {
+    httpOnly: true,
+    secure: isProduction || Boolean(req.secure),
+    sameSite: 'strict',
+    path: '/'
+  });
+}
+
+export function requireCsrfToken(req, res, next) {
+  if (SAFE_METHODS.has(req.method)) return next();
+
+  const csrfCookie = requestCsrfCookie(req);
+  const csrfHeader = String(req.get('x-csrf-token') || '').trim();
+
+  if (!verifyCsrfToken(csrfCookie, csrfHeader)) {
+    return res.status(403).json({ error: 'CSRF_TOKEN_INVALID' });
+  }
+
+  return next();
+}
 
 function firstHeader(value) {
   return String(value || '').split(',')[0].trim();
