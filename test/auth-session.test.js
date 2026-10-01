@@ -133,6 +133,7 @@ function authConfigResult(envOverrides) {
       DATABASE_URL: 'mysql://user:pass@db:3306/gisley',
       ADMIN_ORIGIN: 'https://painel.gisley.test',
       GISELY_SESSION_SECRET: strongSecret,
+      GISELY_ADMIN_EMAILS: 'owner@gisley.test',
       MANUS_OAUTH_PORTAL_URL: 'https://oauth.example.test',
       MANUS_OAUTH_API_URL: 'https://oauth-api.example.test',
       MANUS_PROJECT_ID: 'project-test',
@@ -146,6 +147,7 @@ test('produção exige configuração de autenticação fechada e HTTPS', () => 
   assert.equal(authConfigResult({}), 'OK');
   assert.equal(authConfigResult({ DATABASE_URL: '' }), 'AUTH_DATABASE_NOT_CONFIGURED');
   assert.equal(authConfigResult({ ADMIN_ORIGIN: 'http://painel.gisley.test' }), 'ADMIN_ORIGIN_NOT_CONFIGURED');
+  assert.equal(authConfigResult({ GISELY_ADMIN_EMAILS: '' }), 'BOOTSTRAP_MANAGER_NOT_CONFIGURED');
   assert.equal(authConfigResult({ MANUS_OAUTH_API_URL: 'http://oauth-api.example.test' }), 'OAUTH_URL_INVALID');
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'troque-por-um-segredo' }), 'SESSION_SECRET_NOT_CONFIGURED');
   assert.equal(authConfigResult({ MANUS_OAUTH_PORTAL_URL: 'https://user:pass@oauth.example.test' }), 'OAUTH_URL_INVALID');
