@@ -46,9 +46,16 @@ export async function migrate() {
     open_id VARCHAR(191) PRIMARY KEY,
     email VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
+    UNIQUE KEY uq_morada_admin_email (email),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  try {
+    await db.query('ALTER TABLE morada_admin_users ADD UNIQUE KEY uq_morada_admin_email (email)');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_KEYNAME') throw error;
+  }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_staff_access (
     email VARCHAR(255) PRIMARY KEY,
@@ -633,8 +640,8 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
     );
 
     await connection.execute(
-      'SELECT email FROM morada_staff_access WHERE email=? LIMIT 1 FOR UPDATE',
-      [normalizedEmail]
+      'SELECT open_id FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',
+      [String(openId).slice(0, 191)]
     );
 
     await connection.execute(
@@ -651,9 +658,9 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
     const [previousActive] = await connection.execute(
       `SELECT jti
        FROM morada_admin_sessions
-       WHERE email=? AND jti<>? AND revoked_at IS NULL AND expires_at_ms>?
+       WHERE open_id=? AND jti<>? AND revoked_at IS NULL AND expires_at_ms>?
        ORDER BY expires_at_ms DESC, created_at DESC, jti DESC`,
-      [normalizedEmail, String(jti).slice(0, 36), now]
+      [String(openId).slice(0, 191), String(jti).slice(0, 36), now]
     );
 
     const keepPrevious = Math.max(0, maxAdminSessions() - 1);
