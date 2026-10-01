@@ -170,6 +170,12 @@ export async function currentAdmin(req) {
 
   const bootstrapManager = isAllowedEmail(email);
   const access = await findStaffAccess(email);
+
+  if (access?.invited_by === 'environment' && !bootstrapManager) {
+    await revokeAdminSession(payload.jti);
+    return null;
+  }
+
   if (!bootstrapManager && (!access || !access.active)) {
     await revokeAdminSession(payload.jti);
     return null;
