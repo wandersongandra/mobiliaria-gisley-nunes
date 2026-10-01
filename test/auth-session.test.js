@@ -42,8 +42,10 @@ test('JWT adulterado ou expirado é rejeitado', async () => {
 
   try {
     const issued = await createSessionToken({ openId: 'oauth-user-123' });
-    const last = issued.token.at(-1);
-    const tampered = issued.token.slice(0, -1) + (last === 'a' ? 'b' : 'a');
+    const [header, payload, signature] = issued.token.split('.');
+    const first = signature[0];
+    const tamperedSignature = (first === 'a' ? 'b' : 'a') + signature.slice(1);
+    const tampered = `${header}.${payload}.${tamperedSignature}`;
     assert.equal(await verifySessionToken(tampered), null);
 
     const expired = await createSessionToken({
