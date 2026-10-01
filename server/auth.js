@@ -1,13 +1,31 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
-import { findAdmin, findStaffAccess, saveStaffAccess, upsertAdmin } from './db.js';
-import { configuredAdminOrigin, hasDatabase, isAllowedEmail, oauth, sessionSecret } from './config.js';
+import {
+  consumeAuthChallenge,
+  createAdminSession,
+  createAuthChallenge,
+  findActiveAdminSession,
+  findAdmin,
+  findStaffAccess,
+  revokeAdminSession,
+  saveStaffAccess,
+  upsertAdmin
+} from './db.js';
+import {
+  configuredAdminOrigin,
+  hasDatabase,
+  isAllowedEmail,
+  oauth,
+  sessionSecret
+} from './config.js';
 import { requestHostOrigin } from './security.js';
 
 const sessionCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_admin_session' : 'gisley_admin_session';
-const stateCookie = process.env.NODE_ENV === 'production' ? '__Secure-gisley_oauth_state' : 'gisley_oauth_state';
+const stateCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_oauth_state' : 'gisley_oauth_state';
 const sessionIssuer = 'gisley-nunes-imoveis';
-const sessionAudience = 'morada-admin';
+const sessionAudience = 'gisley-admin';
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 function secureCookie(req) {
   const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
@@ -21,60 +39,120 @@ function cookieOptions(req, extra = {}) {
     secure: secureCookie(req),
     sameSite: 'lax',
     path: '/',
+    priority: 'high',
     ...extra
   };
 }
 
-function encodeState(value) {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
-
-function decodeState(value) {
-  return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+function validUrl(value, { httpsOnly = false } = {}) {
+  try {
+    const parsed = new URL(String(value || ''));
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (httpsOnly && parsed.protocol !== 'https:') return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function assertAuthConfig() {
+  if (!hasDatabase()) throw new Error('AUTH_DATABASE_NOT_CONFIGURED');
   if (!oauth.portalUrl || !oauth.apiUrl || !oauth.projectId) throw new Error('OAUTH_NOT_CONFIGURED');
-  if (sessionSecret().length < 32) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
+
+  const secret = sessionSecret();
+  if (Buffer.byteLength(secret, 'utf8') < 32 || /troque-por|change-me|example/i.test(secret)) {
+    throw new Error('SESSION_SECRET_NOT_CONFIGURED');
+  }
+
+  const production = process.env.NODE_ENV === 'production';
+  if (!validUrl(oauth.portalUrl, { httpsOnly: production }) || !validUrl(oauth.apiUrl, { httpsOnly: production })) {
+    throw new Error('OAUTH_URL_INVALID');
+  }
+
+  if (production) {
+    const adminOrigin = configuredAdminOrigin();
+    if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
+  }
 }
 
-async function signSession(user) {
-  const secret = new TextEncoder().encode(sessionSecret());
-  return new SignJWT({ openId: user.openId, email: user.email, name: user.name, role: user.role })
+export function hashOAuthState(value) {
+  return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+export function safeStateEqual(left, right) {
+  const a = Buffer.from(String(left || ''), 'utf8');
+  const b = Buffer.from(String(right || ''), 'utf8');
+  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);
+}
+
+export async function createSessionToken({ openId, nowMs = Date.now() }) {
+  const secretValue = sessionSecret();
+  if (Buffer.byteLength(secretValue, 'utf8') < 32) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
+
+  const jti = randomUUID();
+  const expiresAtMs = nowMs + SESSION_TTL_MS;
+  const secret = new TextEncoder().encode(secretValue);
+  const token = await new SignJWT({})
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuer(sessionIssuer)
     .setAudience(sessionAudience)
-    .setJti(randomUUID())
-    .setIssuedAt()
-    .setExpirationTime('12h')
+    .setSubject(String(openId))
+    .setJti(jti)
+    .setIssuedAt(Math.floor(nowMs / 1000))
+    .setExpirationTime(Math.floor(expiresAtMs / 1000))
     .sign(secret);
+
+  return { token, jti, expiresAtMs };
 }
 
-async function verifySessionToken(token) {
+export async function verifySessionToken(token) {
   const secretValue = sessionSecret();
-  if (secretValue.length < 32) return null;
+  if (Buffer.byteLength(secretValue, 'utf8') < 32) return null;
+
   try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secretValue), {
+    const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(secretValue), {
       algorithms: ['HS256'],
       issuer: sessionIssuer,
       audience: sessionAudience
     });
-    if (['manager', 'editor'].includes(payload.role) && payload.openId) return payload;
-  } catch {}
-  return null;
+
+    if (protectedHeader.typ !== 'JWT') return null;
+    if (!payload.sub || !payload.jti) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export async function currentAdmin(req) {
   const token = req.cookies?.[sessionCookie];
   if (!token || !hasDatabase()) return null;
+
   const payload = await verifySessionToken(token);
-  if (!payload?.openId) return null;
-  const user = await findAdmin(String(payload.openId));
-  if (!user) return null;
+  if (!payload?.sub || !payload?.jti) return null;
+
+  const session = await findActiveAdminSession(String(payload.jti));
+  if (!session || String(session.open_id) !== String(payload.sub)) return null;
+
+  const user = await findAdmin(String(payload.sub));
+  if (!user) {
+    await revokeAdminSession(payload.jti);
+    return null;
+  }
+
   const email = String(user.email || '').trim().toLowerCase();
+  if (!email || String(session.email || '').trim().toLowerCase() !== email) {
+    await revokeAdminSession(payload.jti);
+    return null;
+  }
+
   const bootstrapManager = isAllowedEmail(email);
   const access = await findStaffAccess(email);
-  if (!bootstrapManager && (!access || !access.active)) return null;
+  if (!bootstrapManager && (!access || !access.active)) {
+    await revokeAdminSession(payload.jti);
+    return null;
+  }
+
   const role = bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor');
   return { openId: user.open_id, email, name: user.name, role };
 }
@@ -99,17 +177,25 @@ export function requireManager() {
   };
 }
 
-export function login(req, res, next) {
+export async function login(req, res, next) {
   try {
     assertAuthConfig();
+
     const origin = configuredAdminOrigin() || requestHostOrigin(req);
     if (!origin) return res.status(400).send('Origem inválida.');
 
     const redirectUri = `${origin}/api/auth/callback`;
-    const nonce = randomUUID();
-    const state = encodeState({ redirectUri, nonce });
+    const state = randomBytes(32).toString('base64url');
+    const expiresAtMs = Date.now() + OAUTH_STATE_TTL_MS;
 
-    res.cookie(stateCookie, state, cookieOptions(req, { maxAge: 10 * 60 * 1000, path: '/api/auth' }));
+    await createAuthChallenge({
+      stateHash: hashOAuthState(state),
+      redirectUri,
+      expiresAtMs
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.cookie(stateCookie, state, cookieOptions(req, { maxAge: OAUTH_STATE_TTL_MS, path: '/' }));
 
     const url = new URL(`${oauth.portalUrl.replace(/\/$/, '')}/app-auth`);
     url.searchParams.set('appId', oauth.projectId);
@@ -147,33 +233,59 @@ async function exchangeCode({ code, redirectUri }) {
 export async function callback(req, res) {
   try {
     assertAuthConfig();
-    const code = String(req.query.code || '').trim();
-    if (!code) return res.status(400).send('Código de autenticação ausente.');
 
-    const state = decodeState(String(req.query.state || ''));
-    const saved = decodeState(String(req.cookies?.[stateCookie] || ''));
-    if (!state.nonce || !saved.nonce || state.nonce !== saved.nonce || state.redirectUri !== saved.redirectUri) {
+    const code = String(req.query.code || '').trim();
+    const state = String(req.query.state || '').trim();
+    const savedState = String(req.cookies?.[stateCookie] || '');
+
+    res.clearCookie(stateCookie, cookieOptions(req, { path: '/' }));
+
+    if (!code) return res.status(400).send('Código de autenticação ausente.');
+    if (!safeStateEqual(state, savedState)) {
       return res.status(400).send('Sessão de autenticação inválida. Tente novamente.');
     }
 
-    const userInfo = await exchangeCode({ code, redirectUri: saved.redirectUri });
+    const challenge = await consumeAuthChallenge(hashOAuthState(state));
+    if (!challenge) return res.status(400).send('Sessão de autenticação expirada ou já utilizada.');
+
+    const expectedOrigin = configuredAdminOrigin() || requestHostOrigin(req);
+    const expectedRedirectUri = expectedOrigin ? `${expectedOrigin}/api/auth/callback` : '';
+    if (!expectedRedirectUri || challenge.redirectUri !== expectedRedirectUri) {
+      return res.status(400).send('Origem de autenticação inválida.');
+    }
+
+    const userInfo = await exchangeCode({ code, redirectUri: challenge.redirectUri });
     const email = String(userInfo.email || '').trim().toLowerCase();
-    const openId = String(userInfo.openId || userInfo.open_id || '');
-    const name = String(userInfo.name || email || 'Administrador').slice(0, 255);
+    const openId = String(userInfo.openId || userInfo.open_id || '').trim();
+    const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !openId) {
+      return res.status(403).send('Identidade inválida para acesso administrativo.');
+    }
 
     const bootstrapManager = isAllowedEmail(email);
-    const access = email ? await findStaffAccess(email) : null;
-    if (!openId || (!bootstrapManager && (!access || !access.active))) {
+    const access = await findStaffAccess(email);
+    if (!bootstrapManager && (!access || !access.active)) {
       return res.status(403).send('Este e-mail não está autorizado a administrar a Gisley Nunes Imóveis.');
     }
 
     const role = bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor');
-    if (bootstrapManager) await saveStaffAccess({ email, name, role: 'manager', active: true, invitedBy: 'environment' });
-    await upsertAdmin({ openId, email, name });
-    const token = await signSession({ openId, email, name, role });
+    if (bootstrapManager) {
+      await saveStaffAccess({ email, name, role: 'manager', active: true, invitedBy: 'environment' });
+    }
 
-    res.clearCookie(stateCookie, cookieOptions(req, { path: '/api/auth' }));
-    res.cookie(sessionCookie, token, cookieOptions(req, { maxAge: 12 * 60 * 60 * 1000 }));
+    await upsertAdmin({ openId, email, name });
+
+    const issued = await createSessionToken({ openId });
+    await createAdminSession({
+      jti: issued.jti,
+      openId,
+      email,
+      expiresAtMs: issued.expiresAtMs
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.cookie(sessionCookie, issued.token, cookieOptions(req, { maxAge: SESSION_TTL_MS, path: '/' }));
     return res.redirect(303, configuredAdminOrigin() ? `${configuredAdminOrigin()}/admin` : '/admin');
   } catch (error) {
     console.error('[oauth]', error.message);
@@ -181,8 +293,22 @@ export async function callback(req, res) {
   }
 }
 
-export function logout(req, res) {
-  res.clearCookie(sessionCookie, cookieOptions(req));
+export async function logout(req, res) {
+  const token = req.cookies?.[sessionCookie];
+  let revoked = true;
+
+  if (token && hasDatabase()) {
+    try {
+      const payload = await verifySessionToken(token);
+      if (payload?.jti) await revokeAdminSession(payload.jti);
+    } catch {
+      revoked = false;
+    }
+  }
+
+  res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ ok: true });
+
+  if (!revoked) return res.status(503).json({ ok: false, error: 'SESSION_REVOCATION_FAILED' });
+  return res.json({ ok: true });
 }
