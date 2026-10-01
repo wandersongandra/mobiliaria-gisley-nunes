@@ -79,7 +79,14 @@ function enumField(value, allowed, { defaultValue, error = 'INVALID_ENUM' } = {}
 export function normalizeEmailAddress(value, { error = 'INVALID_EMAIL' } = {}) {
   const email = text(value, 254, { required: true, error }).toLowerCase();
   const pattern = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
-  if (!pattern.test(email)) throw new Error(error);
+  const [local] = email.split('@');
+  if (
+    !pattern.test(email)
+    || !local
+    || local.startsWith('.')
+    || local.endsWith('.')
+    || local.includes('..')
+  ) throw new Error(error);
   return email;
 }
 
@@ -258,7 +265,9 @@ export function normalizeLeadStatusRequest(input = {}) {
 
 export function normalizeAuditLimit(value) {
   if (value === undefined || value === null || value === '') return 100;
-  return numberField(value, 250, { integer: true, error: 'INVALID_LIMIT' }) || 100;
+  const limit = numberField(value, 250, { integer: true, error: 'INVALID_LIMIT' });
+  if (limit < 1) throw new Error('INVALID_LIMIT');
+  return limit;
 }
 
 export function normalizeAuditQuery(input = {}) {
