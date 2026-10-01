@@ -88,3 +88,32 @@ test('rota pública de storage legado fica desativada por padrão', async () => 
     assert.equal(response.headers.get('location'), null);
   });
 });
+
+
+test('rotas de autenticação usam no-store e logout global exige sessão válida', async () => {
+  await withServer(async (origin) => {
+    const logoutAll = await fetch(`${origin}/api/auth/logout-all`, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        Accept: 'application/json'
+      }
+    });
+    assert.equal(logoutAll.status, 401);
+    assert.deepEqual(await logoutAll.json(), { error: 'AUTH_REQUIRED', login: true });
+    assert.match(logoutAll.headers.get('cache-control') || '', /no-store/i);
+    assert.equal(logoutAll.headers.get('referrer-policy'), 'no-referrer');
+
+    const logout = await fetch(`${origin}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        Accept: 'application/json'
+      }
+    });
+    assert.equal(logout.status, 200);
+    assert.deepEqual(await logout.json(), { ok: true });
+    assert.match(logout.headers.get('cache-control') || '', /no-store/i);
+    assert.equal(logout.headers.get('referrer-policy'), 'no-referrer');
+  });
+});
