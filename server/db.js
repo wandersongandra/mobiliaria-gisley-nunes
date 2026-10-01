@@ -80,6 +80,17 @@ export async function migrate() {
     if (!['ER_DUP_KEYNAME', 'ER_MULTIPLE_PRI_KEY'].includes(error?.code)) throw error;
   }
 
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_identity_pairings (
+    code_hash CHAR(64) PRIMARY KEY,
+    open_id VARCHAR(191) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    expires_at_ms BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_morada_identity_pairing_openid (open_id),
+    INDEX idx_morada_identity_pairing_email (email),
+    INDEX idx_morada_identity_pairing_expiry (expires_at_ms)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
   await db.query(`CREATE TABLE IF NOT EXISTS morada_auth_challenges (
     state_hash CHAR(64) PRIMARY KEY,
     redirect_uri VARCHAR(500) NOT NULL,
@@ -631,6 +642,85 @@ export async function reorderPhotos(propertyId, photoIds, { requireDraft = false
   }
 
   return listPhotos(propertyId);
+}
+
+export async function createIdentityPairing({ codeHash, openId, email, expiresAtMs }) {
+  const db = getPool();
+  const now = Date.now();
+  const normalizedOpenId = String(openId || '').trim().slice(0, 191);
+  const normalizedEmail = String(email || '').trim().toLowerCase().slice(0, 255);
+  const normalizedHash = String(codeHash || '').trim().slice(0, 64);
+
+  if (!normalizedOpenId || !normalizedEmail || normalizedHash.length !== 64) {
+    throw new Error('INVALID_PAIRING');
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute('DELETE FROM morada_identity_pairings WHERE expires_at_ms<=?', [now]);
+    await connection.execute(
+      'DELETE FROM morada_identity_pairings WHERE open_id=? OR email=?',
+      [normalizedOpenId, normalizedEmail]
+    );
+    await connection.execute(
+      'INSERT INTO morada_identity_pairings (code_hash,open_id,email,expires_at_ms) VALUES (?,?,?,?)',
+      [normalizedHash, normalizedOpenId, normalizedEmail, Number(expiresAtMs)]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function consumeIdentityPairing(codeHash, expectedEmail) {
+  const db = getPool();
+  const connection = await db.getConnection();
+  const normalizedHash = String(codeHash || '').trim().slice(0, 64);
+  const normalizedEmail = String(expectedEmail || '').trim().toLowerCase().slice(0, 255);
+
+  if (normalizedHash.length !== 64 || !normalizedEmail) return null;
+
+  try {
+    await connection.beginTransaction();
+    const [[pairing]] = await connection.execute(
+      'SELECT code_hash,open_id,email,expires_at_ms FROM morada_identity_pairings WHERE code_hash=? LIMIT 1 FOR UPDATE',
+      [normalizedHash]
+    );
+
+    if (!pairing) {
+      await connection.rollback();
+      return null;
+    }
+
+    if (Number(pairing.expires_at_ms) <= Date.now()) {
+      await connection.execute('DELETE FROM morada_identity_pairings WHERE code_hash=?', [normalizedHash]);
+      await connection.commit();
+      return null;
+    }
+
+    if (String(pairing.email).trim().toLowerCase() !== normalizedEmail) {
+      await connection.rollback();
+      return null;
+    }
+
+    await connection.execute('DELETE FROM morada_identity_pairings WHERE code_hash=?', [normalizedHash]);
+    await connection.commit();
+
+    return {
+      openId: String(pairing.open_id),
+      email: String(pairing.email).trim().toLowerCase(),
+      expiresAtMs: Number(pairing.expires_at_ms)
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function createAuthChallenge({ stateHash, redirectUri, expiresAtMs }) {
