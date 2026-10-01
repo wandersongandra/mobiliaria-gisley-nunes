@@ -146,6 +146,23 @@ export async function verifySessionToken(token) {
   }
 }
 
+export function resolveAdminAccess({ email, access }) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const bootstrapManager = isAllowedEmail(normalizedEmail);
+
+  if (access?.invited_by === 'environment' && !bootstrapManager) return null;
+  if (!bootstrapManager && (!access || !access.active)) return null;
+
+  return {
+    role: bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor'),
+    bootstrapManager
+  };
+}
+
+export function authCookieNames() {
+  return { sessionCookie, stateCookie };
+}
+
 export async function currentAdmin(req) {
   const token = req.cookies?.[sessionCookie];
   if (!token || !hasDatabase()) return null;
@@ -168,21 +185,14 @@ export async function currentAdmin(req) {
     return null;
   }
 
-  const bootstrapManager = isAllowedEmail(email);
   const access = await findStaffAccess(email);
-
-  if (access?.invited_by === 'environment' && !bootstrapManager) {
+  const resolved = resolveAdminAccess({ email, access });
+  if (!resolved) {
     await revokeAdminSession(payload.jti);
     return null;
   }
 
-  if (!bootstrapManager && (!access || !access.active)) {
-    await revokeAdminSession(payload.jti);
-    return null;
-  }
-
-  const role = bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor');
-  return { openId: user.open_id, email, name: user.name, role };
+  return { openId: user.open_id, email, name: user.name, role: resolved.role };
 }
 
 export function requireAdmin() {
