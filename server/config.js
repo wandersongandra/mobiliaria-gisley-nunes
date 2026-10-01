@@ -23,8 +23,8 @@ export function sessionSecret() {
 }
 
 export function maxAdminSessions() {
-  const value = Number(env.GISELY_MAX_ADMIN_SESSIONS || 5);
-  if (!Number.isFinite(value)) return 5;
+  const value = Number(env.GISELY_MAX_ADMIN_SESSIONS || 3);
+  if (!Number.isFinite(value)) return 3;
   return Math.min(Math.max(Math.trunc(value), 1), 10);
 }
 
