@@ -45,10 +45,16 @@ test('API administrativa mantém autenticação global antes das rotas de negóc
   );
 });
 
+test('logout individual e global mantêm origem e rate limit antes da lógica de sessão', () => {
+  assert.ok(routesSource.includes("const logoutLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 60, namespace: 'auth-logout' });"));
+  assert.ok(routesSource.includes("app.post('/api/auth/logout', requireSameOrigin, logoutLimiter, logout);"));
+  assert.ok(routesSource.includes("app.post('/api/auth/logout-all', requireSameOrigin, logoutLimiter, requireAdmin(), logoutAll);"));
+});
+
 test('sonda de sessão continua anônima, mas protegida por contexto de origem e minimizada', () => {
   const contextGuardIndex = routesSource.indexOf("app.use('/api/admin', requireAdminRequestContext)");
   const sessionIndex = routesSource.indexOf("app.get('/api/admin/session'");
-  const authGuardIndex = routesSource.indexOf("res.setHeader('Cache-Control', 'no-store');\n    res.setHeader('Pragma', 'no-cache');\n    next();\n  }, requireSameOrigin, adminApiGuard, adminMiddleware)");
+  const authGuardIndex = routesSource.indexOf('requireSameOrigin, adminApiGuard, adminMiddleware', sessionIndex);
 
   assert.ok(contextGuardIndex >= 0, 'guard de contexto administrativo ausente');
   assert.ok(sessionIndex >= 0, 'session probe ausente');

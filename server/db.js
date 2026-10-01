@@ -848,20 +848,21 @@ export async function consumeAuthChallenge(stateHash) {
 
 export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
   const db = getPool();
-  const connection = await db.getConnection();
   const now = Date.now();
   const normalizedEmail = String(email).trim().toLowerCase().slice(0, 255);
 
+  // Keep table-wide retention sweeps outside the identity-locked transaction to avoid gap-lock cycles with session inserts.
+  await db.execute(
+    'DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?',
+    [now]
+  );
+  await db.execute(
+    'DELETE FROM morada_admin_sessions WHERE revoked_at IS NOT NULL AND revoked_at < (CURRENT_TIMESTAMP - INTERVAL 7 DAY)'
+  );
+
+  const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-
-    await connection.execute(
-      'DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?',
-      [now]
-    );
-    await connection.execute(
-      'DELETE FROM morada_admin_sessions WHERE revoked_at IS NOT NULL AND revoked_at < (CURRENT_TIMESTAMP - INTERVAL 7 DAY)'
-    );
 
     const [[boundIdentity]] = await connection.execute(
       'SELECT open_id,active FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',

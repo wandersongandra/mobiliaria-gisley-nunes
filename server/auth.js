@@ -113,6 +113,17 @@ export function safeStateEqual(left, right) {
   return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);
 }
 
+export function isValidOAuthState(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+export function isValidOAuthCode(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 4096
+    && /^[\x21-\x7E]+$/.test(value);
+}
+
 export async function createSessionToken({ openId, nowMs = Date.now() }) {
   const secretValue = sessionSecret();
   if (weakSessionSecret(secretValue)) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
@@ -363,14 +374,14 @@ export async function callback(req, res) {
   try {
     assertAuthConfig();
 
-    const code = String(req.query.code || '').trim();
-    const state = String(req.query.state || '').trim();
-    const savedState = String(req.cookies?.[stateCookie] || '');
+    const code = req.query?.code;
+    const state = req.query?.state;
+    const savedState = req.cookies?.[stateCookie];
 
     res.clearCookie(stateCookie, cookieOptions(req, { path: '/', sameSite: 'lax' }));
 
-    if (!code || code.length > 4096) return res.status(400).send('Código de autenticação ausente ou inválido.');
-    if (state.length !== 43 || savedState.length !== 43 || !safeStateEqual(state, savedState)) {
+    if (!isValidOAuthCode(code)) return res.status(400).send('Código de autenticação ausente ou inválido.');
+    if (!isValidOAuthState(state) || !isValidOAuthState(savedState) || !safeStateEqual(state, savedState)) {
       return res.status(400).send('Sessão de autenticação inválida. Tente novamente.');
     }
 

@@ -10,6 +10,7 @@
     "start": "cross-env NODE_ENV=production node server/index.js",
     "preview": "cross-env NODE_ENV=production node server/index.js",
     "test": "node --test",
+    "test:mysql": "cross-env RUN_MYSQL_AUTH_INTEGRATION=true node --test test/auth-db.integration.test.js",
     "build:preview": "node scripts/build-pages-preview.mjs",
     "deploy:preview": "npx wrangler@latest deploy",
     "security:secrets": "node scripts/scan-secrets.mjs"

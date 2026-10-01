@@ -92,29 +92,57 @@ test('rota pública de storage legado fica desativada por padrão', async () => 
 
 test('rotas de autenticação usam no-store e logout global exige sessão válida', async () => {
   await withServer(async (origin) => {
-    const logoutAll = await fetch(`${origin}/api/auth/logout-all`, {
-      method: 'POST',
-      headers: {
-        Origin: origin,
-        Accept: 'application/json'
-      }
-    });
-    assert.equal(logoutAll.status, 401);
-    assert.deepEqual(await logoutAll.json(), { error: 'AUTH_REQUIRED', login: true });
-    assert.match(logoutAll.headers.get('cache-control') || '', /no-store/i);
-    assert.equal(logoutAll.headers.get('referrer-policy'), 'no-referrer');
+    const previousProxyMode = process.env.TRUST_PROXY_MODE;
+    const previousClientIpTrust = process.env.TRUST_CLIENT_IP_HEADER;
+    process.env.TRUST_PROXY_MODE = 'cloudflare';
+    process.env.TRUST_CLIENT_IP_HEADER = 'true';
+    const testClientIp = '198.51.100.17';
 
-    const logout = await fetch(`${origin}/api/auth/logout`, {
-      method: 'POST',
-      headers: {
-        Origin: origin,
-        Accept: 'application/json'
-      }
-    });
-    assert.equal(logout.status, 200);
-    assert.deepEqual(await logout.json(), { ok: true });
-    assert.match(logout.headers.get('cache-control') || '', /no-store/i);
-    assert.equal(logout.headers.get('referrer-policy'), 'no-referrer');
+    try {
+      const logoutAll = await fetch(`${origin}/api/auth/logout-all`, {
+        method: 'POST',
+        headers: {
+          Origin: origin,
+          'CF-Connecting-IP': testClientIp,
+          Accept: 'application/json'
+        }
+      });
+      assert.equal(logoutAll.status, 401);
+      assert.deepEqual(await logoutAll.json(), { error: 'AUTH_REQUIRED', login: true });
+      assert.match(logoutAll.headers.get('cache-control') || '', /no-store/i);
+      assert.equal(logoutAll.headers.get('referrer-policy'), 'no-referrer');
+
+      const logout = await fetch(`${origin}/api/auth/logout`, {
+        method: 'POST',
+        headers: {
+          Origin: origin,
+          'CF-Connecting-IP': testClientIp,
+          Accept: 'application/json'
+        }
+      });
+      assert.equal(logout.status, 200);
+      assert.deepEqual(await logout.json(), { ok: true });
+      assert.match(logout.headers.get('cache-control') || '', /no-store/i);
+      assert.equal(logout.headers.get('referrer-policy'), 'no-referrer');
+
+      const remainingAllowed = await Promise.all(Array.from({ length: 58 }, () => fetch(`${origin}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Origin: origin, 'CF-Connecting-IP': testClientIp, Accept: 'application/json' }
+      })));
+      assert.ok(remainingAllowed.every((response) => response.status === 200));
+
+      const rateLimited = await fetch(`${origin}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Origin: origin, 'CF-Connecting-IP': testClientIp, Accept: 'application/json' }
+      });
+      assert.equal(rateLimited.status, 429);
+      assert.equal((await rateLimited.json()).error, 'RATE_LIMITED');
+    } finally {
+      if (previousProxyMode === undefined) delete process.env.TRUST_PROXY_MODE;
+      else process.env.TRUST_PROXY_MODE = previousProxyMode;
+      if (previousClientIpTrust === undefined) delete process.env.TRUST_CLIENT_IP_HEADER;
+      else process.env.TRUST_CLIENT_IP_HEADER = previousClientIpTrust;
+    }
   });
 });
 

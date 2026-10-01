@@ -74,6 +74,7 @@ import { adminProperties, adminProperty, publicProperties, publicProperty } from
 
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-login' });
 const callbackLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-callback' });
+const logoutLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 60, namespace: 'auth-logout' });
 const sessionProbeLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 120, namespace: 'auth-session' });
 const contactLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 8, namespace: 'contact' });
 const adminLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 300, namespace: 'admin' });
@@ -149,8 +150,8 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.get('/api/auth/login', loginLimiter, login);
   app.get('/api/auth/callback', callbackLimiter, callback);
-  app.post('/api/auth/logout', requireSameOrigin, logout);
-  app.post('/api/auth/logout-all', requireSameOrigin, requireAdmin(), logoutAll);
+  app.post('/api/auth/logout', requireSameOrigin, logoutLimiter, logout);
+  app.post('/api/auth/logout-all', requireSameOrigin, logoutLimiter, requireAdmin(), logoutAll);
   app.get('/api/admin/session', sessionProbeLimiter, async (req, res, next) => {
     try {
       res.setHeader('Cache-Control', 'no-store');

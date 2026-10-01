@@ -165,22 +165,40 @@ function renderEditorPhotos() {
   clearPendingPreviewUrls();
   const grid = $('#photo-grid');
   const existingPhotoCount = state.editing?.photos?.length || 0;
-  const pendingMarkup = state.pendingFiles.map((file, index) => {
+  const pendingPhotos = document.createDocumentFragment();
+  state.pendingFiles.forEach((file, index) => {
     const url = URL.createObjectURL(file);
     state.pendingPreviewUrls.push(url);
     const becomesCover = existingPhotoCount === 0 && index === 0;
-    return `<div class="photo-tile pending"><img src="${url}" alt="${escapeHTML(file.name)}" /><span>${becomesCover ? 'nova capa' : 'nova'}</span><div class="photo-tile-actions"><button data-pending-remove="${index}" type="button" aria-label="Remover foto pendente">×</button></div></div>`;
-  }).join('');
+    const tile = document.createElement('div');
+    tile.className = 'photo-tile pending';
 
-  if (existingPhotoCount === 0) grid.innerHTML = pendingMarkup;
-  else grid.insertAdjacentHTML('beforeend', pendingMarkup);
+    const image = document.createElement('img');
+    image.src = url;
+    image.alt = file.name;
+    tile.append(image);
 
-  grid.querySelectorAll('[data-pending-remove]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.pendingFiles.splice(Number(button.dataset.pendingRemove), 1);
+    const label = document.createElement('span');
+    label.textContent = becomesCover ? 'nova capa' : 'nova';
+    tile.append(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'photo-tile-actions';
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.setAttribute('aria-label', 'Remover foto pendente');
+    removeButton.textContent = '×';
+    removeButton.addEventListener('click', () => {
+      state.pendingFiles.splice(index, 1);
       renderEditorPhotos();
     });
+    actions.append(removeButton);
+    tile.append(actions);
+    pendingPhotos.append(tile);
   });
+
+  if (existingPhotoCount === 0) grid.replaceChildren(pendingPhotos);
+  else grid.append(pendingPhotos);
 }
 function openEditor(property = null) {
   const isManager = state.user?.role === 'manager';
