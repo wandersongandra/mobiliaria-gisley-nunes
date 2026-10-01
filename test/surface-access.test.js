@@ -152,3 +152,22 @@ test('logout administrativo exige mesma origem e é idempotente', async () => {
     assert.match(allowed.headers.get('set-cookie') || '', /gisley_admin_session=/i);
   });
 });
+
+
+test('preflight cross-origin não recebe CORS administrativo permissivo', async () => {
+  await withServer(async (origin) => {
+    const response = await fetch(`${origin}/api/admin/site`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://evil.example',
+        'Access-Control-Request-Method': 'PUT',
+        'Access-Control-Request-Headers': 'content-type',
+        'Sec-Fetch-Site': 'cross-site'
+      }
+    });
+
+    assert.ok([401, 403, 404].includes(response.status));
+    assert.equal(response.headers.get('access-control-allow-origin'), null);
+    assert.equal(response.headers.get('access-control-allow-credentials'), null);
+  });
+});
