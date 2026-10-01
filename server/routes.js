@@ -88,7 +88,7 @@ export function registerRoutes(app) {
     try {
       const properties = publicProperties(await listProperties({ publicOnly: true }));
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-      res.json({ properties, source: hasDatabase() ? 'database' : 'fallback' });
+      res.json({ properties });
     } catch (error) {
       next(error);
     }
@@ -99,7 +99,7 @@ export function registerRoutes(app) {
       const property = await getPropertyBySlug(req.params.slug);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-      return res.json({ property: publicProperty(property), source: hasDatabase() ? 'database' : 'fallback' });
+      return res.json({ property: publicProperty(property) });
     } catch (error) {
       return next(error);
     }
