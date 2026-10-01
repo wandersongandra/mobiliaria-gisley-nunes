@@ -26,6 +26,17 @@ function assertStorageKey(filePath) {
   return key;
 }
 
+export function storagePathBelongsToProperty(filePath, propertyId) {
+  try {
+    const key = assertStorageKey(filePath);
+    const id = String(propertyId || '').trim();
+    if (!id || id.includes('/') || id.includes('\\') || id.includes('..')) return false;
+    return key.startsWith(`gisley/properties/${id}/`);
+  } catch {
+    return false;
+  }
+}
+
 function encodeRfc3986(value) {
   return encodeURIComponent(String(value))
     .replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
