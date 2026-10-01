@@ -7,6 +7,7 @@ import {
   deleteContactLead,
   findStaffAccess,
   findStaffAccessByOpenId,
+  getPhoto,
   getProperty,
   getPropertyBySlug,
   listAuditLog,
@@ -28,7 +29,15 @@ import {
 } from './db.js';
 import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin } from './auth.js';
-import { auditView, requireCapability, staffView } from './authorization.js';
+import {
+  auditView,
+  canCreateProperty,
+  canManagePropertyMedia,
+  canMutateProperty,
+  canRequestPublication,
+  requireCapability,
+  staffView
+} from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireAdminOrigin, requireSameOrigin } from './security.js';
 import {
@@ -191,6 +200,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.post('/api/admin/properties', requireCapability('property.write'), async (req, res, next) => {
     try {
+      if (!canCreateProperty(req.admin, req.body || {})) {
+        return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
+      }
       const property = await saveProperty(req.body);
       await writeAudit(req, 'property.create', 'property', property.id, { title: property.title, status: property.status });
       return res.status(201).json({ property });
@@ -211,8 +223,12 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.put('/api/admin/properties/:id', requireCapability('property.write'), async (req, res, next) => {
     try {
+      const current = await getProperty(req.params.id);
+      if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
+      if (!canMutateProperty(req.admin, current) || !canRequestPublication(req.admin, req.body || {})) {
+        return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
+      }
       const property = await saveProperty(req.body, req.params.id);
-      if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       await writeAudit(req, 'property.update', 'property', property.id, { title: property.title, status: property.status });
       return res.json({ property });
     } catch (error) {
@@ -244,6 +260,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
       const property = await getProperty(propertyId);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       if ((property.photos?.length || 0) >= 40) return res.status(409).json({ error: 'PHOTO_LIMIT_REACHED' });
 
       const storagePath = `gisley/properties/${propertyId}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
@@ -273,6 +290,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       } = req.body || {};
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       if ((property.photos?.length || 0) >= 40) return res.status(409).json({ error: 'PHOTO_LIMIT_REACHED' });
 
       const parsedSize = Number(size || 0);
@@ -343,6 +361,11 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.delete('/api/admin/photos/:id', requireCapability('media.manage'), async (req, res, next) => {
     try {
+      const photo = await getPhoto(req.params.id);
+      if (!photo) return res.status(404).json({ error: 'NOT_FOUND' });
+      const property = await getProperty(photo.property_id);
+      if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       const removed = await removePhoto(req.params.id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
       try {
@@ -363,6 +386,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       if (!Array.isArray(photoIds) || photoIds.length > 100) return res.status(400).json({ error: 'INVALID_ORDER' });
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       const photos = await reorderPhotos(req.params.id, photoIds);
       await writeAudit(req, 'photo.reorder', 'property', req.params.id, { photoCount: photos.length });
       return res.json({ photos });
@@ -373,6 +397,11 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.put('/api/admin/photos/:id/cover', requireCapability('media.manage'), async (req, res, next) => {
     try {
+      const photo = await getPhoto(req.params.id);
+      if (!photo) return res.status(404).json({ error: 'NOT_FOUND' });
+      const property = await getProperty(photo.property_id);
+      if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       const photos = await setPhotoCover(req.params.id);
       if (!photos) return res.status(404).json({ error: 'NOT_FOUND' });
       await writeAudit(req, 'photo.cover', 'photo', req.params.id);
