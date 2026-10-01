@@ -7,6 +7,7 @@ import {
   requestHostOrigin,
   requestOrigin,
   requireAdminOrigin,
+  requireAdminRequestContext,
   requireSameOrigin
 } from '../server/security.js';
 
@@ -337,6 +338,62 @@ test('callback OAuth no domínio público não é redirecionado nem processado',
     fetchSite: 'none'
   });
   const result = middlewareResult(requireAdminOrigin, req);
+
+  assert.equal(result.nextCalled, false);
+  assert.equal(result.statusCode, 404);
+  assert.deepEqual(result.body, { error: 'NOT_FOUND' });
+
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+});
+
+
+test('admin GET rejeita same-site/cross-site mesmo sem mutação', () => {
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+
+  for (const fetchSite of ['same-site', 'cross-site']) {
+    const result = middlewareResult(requireAdminRequestContext, originRequest({
+      method: 'GET',
+      host: 'painel.gisley.test',
+      originalUrl: '/api/admin/session',
+      fetchSite,
+      secure: true
+    }));
+
+    assert.equal(result.nextCalled, false);
+    assert.equal(result.statusCode, 403);
+    assert.deepEqual(result.body, { error: 'CROSS_SITE_REQUEST_BLOCKED' });
+  }
+
+  for (const fetchSite of ['same-origin', 'none', '']) {
+    const result = middlewareResult(requireAdminRequestContext, originRequest({
+      method: 'GET',
+      host: 'painel.gisley.test',
+      originalUrl: '/api/admin/session',
+      fetchSite,
+      secure: true
+    }));
+    assert.equal(result.nextCalled, true, fetchSite || 'header ausente');
+  }
+
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN;
+  else process.env.ADMIN_ORIGIN = prevAdmin;
+});
+
+test('admin request context falha fechado no host público', () => {
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+
+  const result = middlewareResult(requireAdminRequestContext, originRequest({
+    method: 'GET',
+    host: 'www.gisley.test',
+    originalUrl: '/api/admin/session',
+    fetchSite: 'same-origin',
+    secure: true
+  }));
 
   assert.equal(result.nextCalled, false);
   assert.equal(result.statusCode, 404);
