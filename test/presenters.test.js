@@ -61,7 +61,8 @@ test('adminProperty remove campos internos de storage sem quebrar gestão da gal
 
   assert.equal(result.id, 'property-id');
   assert.equal(result.photos[0].id, 'photo-id');
-  assert.equal(result.photos[0].url, 'https://media.example.com/photo.jpg');
+  assert.equal(result.photos[0].url, '/api/admin/photos/photo-id/media');
+  assert.equal(result.cover_url, '/api/admin/photos/photo-id/media');
   for (const key of ['storage_path','storage_provider','uploaded_by','mime_type','file_size','width','height','property_id']) {
     assert.equal(Object.hasOwn(result.photos[0], key), false, `campo interno vazou: ${key}`);
   }
@@ -106,7 +107,7 @@ test('adminProperty mantém metadados internos de storage fora da resposta', () 
     assert.equal(Object.hasOwn(photo, key), false, key);
   }
   assert.equal(photo.id, 'photo-id');
-  assert.equal(photo.url, 'https://media.gisley.test/gisley/properties/property-id/private.webp');
+  assert.equal(photo.url, '/api/admin/photos/photo-id/media');
 });
 
 
