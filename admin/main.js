@@ -543,13 +543,15 @@ async function addTeamMember(event) {
     await request('/api/admin/team', { method: 'POST', body: JSON.stringify(data) });
     teamForm.reset();
     await loadTeam();
-    teamNotify('Acesso vinculado ao código OAuth. A pessoa já pode entrar no CRM.');
+    teamNotify('Acesso vinculado. O código temporário foi consumido e não pode ser reutilizado.');
   } catch (error) {
     teamNotify(
       error.message === 'INVALID_TEAM_MEMBER'
-        ? 'Confira nome, e-mail e Código de identidade OAuth.'
-        : error.message === 'TEAM_MEMBER_EXISTS'
-          ? 'Esse e-mail ou Código OAuth já está vinculado a outro acesso.'
+        ? 'Confira nome, e-mail e o código temporário de vinculação.'
+        : error.message === 'INVALID_PAIRING_CODE'
+          ? 'Código expirado, inválido ou pertencente a outro e-mail.'
+          : error.message === 'TEAM_MEMBER_EXISTS'
+            ? 'Esse e-mail ou identidade já está vinculado a outro acesso.'
           : 'Não foi possível adicionar este acesso.',
       'error'
     );
