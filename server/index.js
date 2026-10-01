@@ -4,7 +4,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
 import { configuredAdminOrigin, isProduction, port } from './config.js';
-import { getPropertyBySlug, listProperties, migrate } from './db.js';
+import { closePool, getPropertyBySlug, listProperties, migrate } from './db.js';
 import { registerRoutes } from './routes.js';
 import { assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
@@ -187,6 +187,7 @@ async function start() {
   let migration;
   try {
     migration = await migrate();
+    if (isProduction && !migration.configured) throw new Error('DATABASE_NOT_CONFIGURED');
   } catch (error) {
     if (isProduction) throw error;
     console.warn('[db] migration deferred:', error.message);
@@ -215,7 +216,44 @@ async function start() {
     return res.status(404).json({ error: 'NOT_FOUND' });
   });
 
-  app.listen(port, '0.0.0.0', () => console.log(`[morada] listening on 0.0.0.0:${port} · database:${migration.configured ? 'ready' : 'fallback'}`));
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`[morada] listening on 0.0.0.0:${port} · database:${migration.configured ? 'ready' : 'fallback'}`);
+  });
+
+  server.requestTimeout = 15_000;
+  server.headersTimeout = 10_000;
+  server.keepAliveTimeout = 5_000;
+
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[morada] ${signal} received, shutting down`);
+
+    const forceExit = setTimeout(() => {
+      console.error('[morada] graceful shutdown timed out');
+      process.exit(1);
+    }, 10_000);
+    forceExit.unref();
+
+    server.close(async (error) => {
+      try {
+        await closePool();
+      } catch (dbError) {
+        console.error('[db] shutdown:', dbError.message);
+      }
+      clearTimeout(forceExit);
+      process.exit(error ? 1 : 0);
+    });
+
+    server.closeIdleConnections?.();
+  };
+
+  process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
+  process.once('SIGINT', () => { void shutdown('SIGINT'); });
 }
 
-start().catch((error) => { console.error(error); process.exit(1); });
+start().catch((error) => {
+  console.error('[startup]', isProduction ? error.message : (error.stack || error.message));
+  process.exit(1);
+});
