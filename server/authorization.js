@@ -2,7 +2,6 @@ const ROLE_CAPABILITIES = Object.freeze({
   editor: new Set([
     'property.read',
     'property.write',
-    'property.archive',
     'media.manage',
     'site.read',
     'lead.read',
@@ -11,6 +10,7 @@ const ROLE_CAPABILITIES = Object.freeze({
   manager: new Set([
     'property.read',
     'property.write',
+    'property.publish',
     'property.archive',
     'media.manage',
     'site.read',
@@ -76,4 +76,28 @@ export function auditView(entry = {}) {
     details: entry.details,
     created_at: entry.created_at
   };
+}
+
+
+export function canCreateProperty(admin, input = {}) {
+  if (!hasCapability(admin, 'property.write')) return false;
+  if (hasCapability(admin, 'property.publish')) return true;
+  return input.status !== 'published' && !Boolean(input.featured);
+}
+
+export function canMutateProperty(admin, property) {
+  if (!hasCapability(admin, 'property.write')) return false;
+  if (hasCapability(admin, 'property.publish')) return true;
+  return String(property?.status || '') === 'draft';
+}
+
+export function canManagePropertyMedia(admin, property) {
+  if (!hasCapability(admin, 'media.manage')) return false;
+  if (hasCapability(admin, 'property.publish')) return true;
+  return String(property?.status || '') === 'draft';
+}
+
+export function canRequestPublication(admin, input = {}) {
+  if (hasCapability(admin, 'property.publish')) return true;
+  return input.status !== 'published' && !Boolean(input.featured);
 }
