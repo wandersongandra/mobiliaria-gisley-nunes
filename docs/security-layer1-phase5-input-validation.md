@@ -1,144 +1,120 @@
 # Camada 1 — Fase 5: Validação de entrada
 
-Data: 2026-10-01
-Branch: `audit/security-design-2026-09-30`
+Data da revisão: 2026-10-01  
+Branch auditada: `audit/security-design-2026-09-30`
 
-## Escopo
+## Objetivo
 
-Revisar todos os `req.body`, `req.params` e `req.query`, parser JSON, tipos, enums, números, e-mails, IDs, slugs, paths, Unicode, content type e contratos fechados.
+Garantir que toda entrada externa seja rejeitada quando:
+- exceder limites;
+- tiver tipo estrutural inesperado;
+- trouxer chaves não previstas;
+- usar representação numérica ambígua;
+- contiver Unicode de controle;
+- usar IDs/slugs fora do contrato;
+- enviar body não JSON para APIs mutáveis;
+- exceder o limite global de payload.
 
-## Arquitetura validada
+## Controles revisados
 
-- JSON limitado a 256 KB.
-- Query parser simples.
-- Objetos de entrada usam contrato fechado: chaves extras são rejeitadas.
-- Arrays/objetos em campos escalares são rejeitados.
-- IDs possuem limite e charset explícito.
-- Slugs possuem formato explícito.
-- Uploads, fotos, equipe, leads, site, depoimentos e imóveis possuem normalizadores próprios.
-- Queries SQL permanecem parametrizadas.
+### Body HTTP
+- JSON limitado a 256 KB;
+- JSON malformado -> 400 `INVALID_JSON`;
+- payload excessivo -> 413 `PAYLOAD_TOO_LARGE`;
+- body com tipo não JSON -> 415 `UNSUPPORTED_MEDIA_TYPE`.
+
+### Contratos fechados
+Objetos recebidos por API rejeitam chaves extras.
+
+Exemplos:
+- imóvel não aceita `admin`, `role` ou campos arbitrários;
+- lead não aceita elevação de papel;
+- equipe aceita somente campos previstos;
+- foto/upload aceitam apenas o contrato conhecido.
+
+### Texto
+- normalização NFC;
+- limites explícitos;
+- controles C0/C1 perigosos rejeitados;
+- bidi override/isolation rejeitados;
+- newline/tab rejeitados quando o campo não é multiline.
+
+### Números
+Strings numéricas aceitam somente decimal simples.
+
+São rejeitados:
+- notação científica;
+- hexadecimal;
+- sinais;
+- `NaN`;
+- `Infinity`;
+- formatos parciais.
+
+### IDs/slugs
+- IDs rejeitam `../`, barras e tamanho excessivo;
+- slug aceita somente minúsculas, números e hífen;
+- ordem de fotos rejeita duplicados e mais de 40 itens.
+
+### E-mail
+- normalizado para lowercase;
+- domínio obrigatório;
+- local-part sem ponto inicial/final;
+- pontos consecutivos rejeitados.
+
+### Query
+`audit.limit` aceita somente 1–250.
 
 ## Achados
 
-### F5-01 — Erros de validação podiam cair em 500
-Severidade: Média
-Status: Corrigido
+### F5-01 — Logging de erro podia registrar mensagem bruta de parser JSON
+**Severidade:** Média-baixa  
+**Status:** Corrigido
 
-Códigos como `INVALID_PROPERTY`, `INVALID_ID`, `INVALID_FILE` e `INVALID_TEAM_MEMBER` não estavam todos mapeados no handler HTTP.
+Em produção, o logger agora registra apenas o código classificado do erro, não a mensagem bruta potencialmente contendo trecho do payload.
 
-Correção:
-- novo `server/errors.js`;
-- contrato HTTP central;
-- validações conhecidas retornam 4xx;
-- conflitos retornam 409;
-- configuração indisponível retorna 503;
-- erro desconhecido continua opaco como `500 INTERNAL_ERROR`.
+### F5-02 — `audit.limit=0` virava 100 silenciosamente
+**Severidade:** Baixa  
+**Status:** Corrigido
 
-### F5-02 — JSON malformado e body oversized eram tratados genericamente
-Severidade: Média-baixa
-Status: Corrigido
+Agora 0 é inválido; somente 1–250 é aceito.
 
-- JSON inválido → `400 INVALID_JSON`;
-- body acima de 256 KB → `413 PAYLOAD_TOO_LARGE`.
+### F5-03 — E-mail aceitava pontos consecutivos no local-part
+**Severidade:** Baixa  
+**Status:** Corrigido
 
-### F5-03 — Representações numéricas ambíguas
-Severidade: Baixa
-Status: Corrigido
+Foram adicionadas regras explícitas para ponto inicial/final/consecutivo.
 
-Strings como:
-- `1e6`;
-- `0x10`;
-- `+10`;
-- `.5`;
-- `1.`
+### F5-04 — Payload gigante / JSON malformado / media type incorreto
+**Resultado:** Protegido
 
-não são mais aceitas. Strings numéricas aceitam somente decimal simples.
+Foram adicionados testes HTTP reais para:
+- 400 `INVALID_JSON`;
+- 413 `PAYLOAD_TOO_LARGE`;
+- 415 `UNSUPPORTED_MEDIA_TYPE`.
 
-### F5-04 — Validação de e-mail duplicada
-Severidade: Baixa
-Status: Corrigido
+## Gate da Fase 5
 
-Foi criado `normalizeEmailAddress()` e reutilizado em:
-- formulário público;
-- configurações do site;
-- equipe;
-- parâmetros de rota da equipe.
-
-### F5-05 — Unicode bidi de override/isolamento
-Severidade: Baixa
-Status: Corrigido
-
-Caracteres de controle bidi de embedding/override/isolate são rejeitados em campos textuais para evitar spoofing visual em títulos, nomes e CRM.
-
-### F5-06 — propertyPath do contato permissivo
-Severidade: Baixa
-Status: Corrigido
-
-Agora aceita somente:
-- `/`;
-- `/contato`;
-- `/imoveis`;
-- `/imoveis/<slug-valido>`.
-
-Paths relativos manipulados, percent-encoded traversal, query strings e rotas internas são rejeitados.
-
-### F5-07 — Media type de API não era explícito
-Severidade: Baixa
-Status: Corrigido
-
-Requests de API com body agora exigem `application/json`.
-
-Body com `text/plain` ou outro media type recebe:
-`415 UNSUPPORTED_MEDIA_TYPE`.
-
-Rotas sem body, como logout, continuam funcionando sem Content-Type.
-
-### F5-08 — Slug público validado apenas implicitamente
-Severidade: Baixa
-Status: Corrigido
-
-`getPropertyBySlug()` agora normaliza/valida o slug também na fronteira do banco.
-
-## Testes adversariais adicionados
-
-- JSON quebrado;
-- >256 KB;
-- chaves extras;
-- arrays/objetos em campos escalares;
-- hexadecimal;
-- notação científica;
-- NaN/Infinity;
-- e-mails malformados;
-- Unicode bidi;
-- path traversal literal e percent-encoded;
-- IDs longos/caracteres inválidos;
-- media type não JSON;
-- validações conhecidas não virando 500.
-
-## Gate
-
-PASS quando:
-- CI verde;
-- CodeQL verde;
-- malformed JSON PASS;
-- payload oversized PASS;
-- closed contracts PASS;
-- numeric syntax PASS;
-- email normalization PASS;
-- IDs/slugs PASS;
-- bidi/control chars PASS;
-- content-type enforcement PASS;
-- error mapping PASS.
+PASS somente se:
+- JSON malformado nunca chegar à lógica de negócio;
+- payload >256 KB for bloqueado;
+- mutações com body não JSON forem rejeitadas;
+- contratos rejeitarem chaves extras;
+- tipos estruturais errados falharem;
+- números ambíguos falharem;
+- IDs/path traversal falharem;
+- controles Unicode perigosos falharem;
+- limites de query forem estritos;
+- CI e CodeQL permanecerem verdes.
 
 ## Próxima fase
 
-Fase 6 — XSS e saída para navegador:
+**Fase 6 — XSS e saída para navegador**
+
+Foco:
 - EJS escaping;
-- innerHTML;
-- atributos;
-- URLs;
+- `innerHTML`;
 - JSON embutido;
-- stored XSS em imóvel, lead, equipe e depoimento;
-- CSP;
-- javascript:/data: URLs;
-- DOM sinks.
+- atributos HTML;
+- URLs;
+- conteúdo armazenado no CRM;
+- CSP como segunda barreira.
