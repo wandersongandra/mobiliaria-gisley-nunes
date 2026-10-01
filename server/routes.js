@@ -82,7 +82,7 @@ export function registerRoutes(app) {
   app.get('/_app/ready', async (req, res, next) => {
     try {
       const database = await databaseReady();
-      return res.status(database.ok ? 200 : 503).json({ ok: database.ok, database: database.reason });
+      return res.status(database.ok ? 200 : 503).json({ ok: database.ok });
     } catch (error) {
       return next(error);
     }
@@ -95,7 +95,10 @@ export function registerRoutes(app) {
     try {
       res.setHeader('Cache-Control', 'no-store');
       const user = await currentAdmin(req);
-      res.json({ authenticated: Boolean(user), user });
+      res.json({
+        authenticated: Boolean(user),
+        user: user ? { email: user.email, name: user.name, role: user.role } : null
+      });
     } catch (error) {
       next(error);
     }
