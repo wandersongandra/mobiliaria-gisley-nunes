@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, properties: [], leads: [], team: [], audit: [], editing: null, pendingFiles: [], pendingPreviewUrls: [], search: '' };
+const state = { user: null, properties: [], leads: [], team: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -146,13 +146,12 @@ function fillForm(property = {}) {
 }
 function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
 
-function clearPendingPreviewUrls() {
-  state.pendingPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
-  state.pendingPreviewUrls = [];
+function clearPendingPreviews() {
+  state.pendingPreviewGeneration += 1;
 }
 
 function clearPendingFiles() {
-  clearPendingPreviewUrls();
+  clearPendingPreviews();
   state.pendingFiles = [];
   const input = $('#photo-input');
   if (input) input.value = '';
@@ -162,21 +161,41 @@ function renderEditorPhotos() {
   renderPhotos(state.editing?.photos || []);
   if (!state.pendingFiles.length) return;
 
-  clearPendingPreviewUrls();
+  clearPendingPreviews();
+  const previewGeneration = state.pendingPreviewGeneration;
   const grid = $('#photo-grid');
   const existingPhotoCount = state.editing?.photos?.length || 0;
   const pendingPhotos = document.createDocumentFragment();
   state.pendingFiles.forEach((file, index) => {
-    const url = URL.createObjectURL(file);
-    state.pendingPreviewUrls.push(url);
     const becomesCover = existingPhotoCount === 0 && index === 0;
     const tile = document.createElement('div');
     tile.className = 'photo-tile pending';
 
-    const image = document.createElement('img');
-    image.src = url;
-    image.alt = file.name;
-    tile.append(image);
+    const preview = document.createElement('canvas');
+    preview.width = 1;
+    preview.height = 1;
+    preview.setAttribute('role', 'img');
+    preview.setAttribute('aria-label', 'Pré-visualização da foto pendente');
+    preview.style.width = '100%';
+    preview.style.height = '100%';
+    preview.style.objectFit = 'cover';
+    preview.style.display = 'block';
+    void createImageBitmap(file).then((bitmap) => {
+      try {
+        if (previewGeneration !== state.pendingPreviewGeneration) return;
+        const scale = Math.min(1, 640 / bitmap.width, 640 / bitmap.height);
+        preview.width = Math.max(1, Math.round(bitmap.width * scale));
+        preview.height = Math.max(1, Math.round(bitmap.height * scale));
+        preview.getContext('2d')?.drawImage(bitmap, 0, 0, preview.width, preview.height);
+      } finally {
+        bitmap.close();
+      }
+    }).catch(() => {
+      if (previewGeneration === state.pendingPreviewGeneration) {
+        preview.setAttribute('aria-label', 'Pré-visualização indisponível');
+      }
+    });
+    tile.append(preview);
 
     const label = document.createElement('span');
     label.textContent = becomesCover ? 'nova capa' : 'nova';
