@@ -48,6 +48,7 @@ function validUrl(value, { httpsOnly = false } = {}) {
   try {
     const parsed = new URL(String(value || ''));
     if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (parsed.username || parsed.password) return false;
     if (httpsOnly && parsed.protocol !== 'https:') return false;
     return true;
   } catch {
@@ -73,6 +74,11 @@ function assertAuthConfig() {
     const adminOrigin = configuredAdminOrigin();
     if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
   }
+}
+
+export function assertAuthConfiguration() {
+  assertAuthConfig();
+  return true;
 }
 
 export function hashOAuthState(value) {
