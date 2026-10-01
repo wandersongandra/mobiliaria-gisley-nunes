@@ -87,9 +87,29 @@ export async function migrate() {
     expires_at_ms BIGINT UNSIGNED NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_morada_identity_pairing_openid (open_id),
-    INDEX idx_morada_identity_pairing_email (email),
+    UNIQUE KEY uq_morada_identity_pairing_email (email),
     INDEX idx_morada_identity_pairing_expiry (expires_at_ms)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  await db.query(`
+    DELETE p1 FROM morada_identity_pairings p1
+    JOIN morada_identity_pairings p2
+      ON p1.email=p2.email
+     AND (
+       p1.created_at < p2.created_at
+       OR (p1.created_at = p2.created_at AND p1.code_hash < p2.code_hash)
+     )
+  `);
+  try {
+    await db.query('ALTER TABLE morada_identity_pairings DROP INDEX idx_morada_identity_pairing_email');
+  } catch (error) {
+    if (error?.code !== 'ER_CANT_DROP_FIELD_OR_KEY') throw error;
+  }
+  try {
+    await db.query('ALTER TABLE morada_identity_pairings ADD UNIQUE KEY uq_morada_identity_pairing_email (email)');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_KEYNAME') throw error;
+  }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_auth_challenges (
     state_hash CHAR(64) PRIMARY KEY,
