@@ -36,6 +36,7 @@ import {
   storageGetSignedUrl,
   storageObjectExists,
   storageObjectLooksLikeImage,
+  storagePathBelongsToProperty,
   storagePresign,
   storageProviderName
 } from './storage.js';
@@ -271,7 +272,6 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if ((property.photos?.length || 0) >= 40) return res.status(409).json({ error: 'PHOTO_LIMIT_REACHED' });
 
-      const expectedPrefix = `gisley/properties/${req.params.id}/`;
       const parsedSize = Number(size || 0);
       const parsedWidth = Number(width || 0);
       const parsedHeight = Number(height || 0);
@@ -280,7 +280,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
       if (
         !storagePath
-        || !String(storagePath).startsWith(expectedPrefix)
+        || !storagePathBelongsToProperty(storagePath, req.params.id)
         || !extensions
         || !extensions.has(extension)
         || !Number.isFinite(parsedSize)
@@ -324,8 +324,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
           uploadedBy: req.admin.email
         });
       } catch (error) {
-        try { await storageDelete(storagePath); } catch (cleanupError) {
-          console.warn('[storage] failed to clean unpersisted upload:', cleanupError.message);
+        if (error?.message !== 'ASSET_ALREADY_REGISTERED') {
+          try { await storageDelete(storagePath); } catch (cleanupError) {
+            console.warn('[storage] failed to clean unpersisted upload:', cleanupError.message);
+          }
         }
         throw error;
       }
