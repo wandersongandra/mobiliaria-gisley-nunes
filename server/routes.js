@@ -77,7 +77,7 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
   }
 }
 
-export function registerRoutes(app) {
+export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.use(['/api/auth', '/api/admin'], requireAdminOrigin);
 
   app.get('/_app/health', (req, res) => res.json({ ok: true, service: 'morada' }));
@@ -179,7 +179,7 @@ export function registerRoutes(app) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
     next();
-  }, requireSameOrigin, adminApiGuard, requireAdmin());
+  }, requireSameOrigin, adminApiGuard, adminMiddleware);
 
   app.get('/api/admin/properties', async (req, res, next) => {
     try { res.json({ properties: await listProperties() }); } catch (error) { next(error); }
