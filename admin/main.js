@@ -437,8 +437,31 @@ function renderLeads() {
   list.innerHTML = items.length ? items.map((lead) => {
     const propertyLink = String(lead.property_path || '').startsWith('/imoveis/')
       ? `<a class="lead-property" href="${escapeHTML(lead.property_path)}" target="_blank" rel="noopener">Ver imóvel ↗</a>` : '';
-    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><button type="button" data-lead-status="contacted" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'contacted' ? 'disabled' : ''}>Contatado</button><button type="button" data-lead-status="closed" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'closed' ? 'disabled' : ''}>Concluir</button></div></article>`;
+    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><button type="button" data-lead-status="contacted" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'contacted' ? 'disabled' : ''}>Contatado</button><button type="button" data-lead-status="closed" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'closed' ? 'disabled' : ''}>Concluir</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
   }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato pendente.</h4><p>Os formulários enviados pelo site aparecerão aqui.</p></div>';
+
+  list.querySelectorAll('[data-lead-delete]').forEach((button) => button.addEventListener('click', async () => {
+    const lead = state.leads.find((item) => item.id === button.dataset.leadDelete);
+    const confirmed = window.confirm(`Apagar permanentemente os dados de ${lead?.name || 'este contato'}? Esta ação não pode ser desfeita.`);
+    if (!confirmed) return;
+
+    try {
+      await request(`/api/admin/leads/${button.dataset.leadDelete}`, { method: 'DELETE' });
+      state.leads = state.leads.filter((item) => item.id !== button.dataset.leadDelete);
+      renderLeads();
+      const status = $('#lead-status');
+      if (status) {
+        status.textContent = 'Dados pessoais apagados permanentemente.';
+        status.dataset.tone = 'success';
+      }
+    } catch {
+      const status = $('#lead-status');
+      if (status) {
+        status.textContent = 'Não foi possível apagar os dados deste contato.';
+        status.dataset.tone = 'error';
+      }
+    }
+  }));
 
   list.querySelectorAll('[data-lead-id]').forEach((button) => button.addEventListener('click', async () => {
     try {
