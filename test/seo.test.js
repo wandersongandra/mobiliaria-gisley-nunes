@@ -35,3 +35,25 @@ test('sitemapDate gera datas ISO válidas', () => {
   assert.equal(sitemapDate('inválido'), null);
   assert.equal(sitemapDate(null), null);
 });
+
+
+test('escapeJsonForHtml neutraliza fechamento de script e separadores JS', () => {
+  const malicious = {
+    title: '</script><script>alert("xss")</script>',
+    amp: '&',
+    line: '  '
+  };
+  const escaped = escapeJsonForHtml(malicious);
+
+  assert.equal(escaped.includes('</script>'), false);
+  assert.equal(escaped.includes('<'), false);
+  assert.equal(escaped.includes('>'), false);
+  assert.equal(escaped.includes('&'), false);
+  assert.equal(escaped.includes(' '), false);
+  assert.equal(escaped.includes(' '), false);
+
+  const restored = JSON.parse(escaped);
+  assert.equal(restored.title, malicious.title);
+  assert.equal(restored.amp, '&');
+  assert.equal(restored.line, malicious.line);
+});
