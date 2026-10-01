@@ -207,6 +207,7 @@ export function registerRoutes(app) {
 
       const property = await getProperty(propertyId);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      if ((property.photos?.length || 0) >= 40) return res.status(409).json({ error: 'PHOTO_LIMIT_REACHED' });
 
       const storagePath = `gisley/properties/${propertyId}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
       const uploadUrl = await storagePresign(storagePath, { contentType });
@@ -235,6 +236,7 @@ export function registerRoutes(app) {
       } = req.body || {};
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      if ((property.photos?.length || 0) >= 40) return res.status(409).json({ error: 'PHOTO_LIMIT_REACHED' });
 
       const expectedPrefix = `gisley/properties/${req.params.id}/`;
       const parsedSize = Number(size || 0);
