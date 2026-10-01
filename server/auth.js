@@ -365,9 +365,12 @@ export async function logout(req, res) {
     }
   }
 
-  res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
   res.setHeader('Cache-Control', 'no-store');
 
-  if (!revoked) return res.status(503).json({ ok: false, error: 'SESSION_REVOCATION_FAILED' });
+  if (!revoked) {
+    return res.status(503).json({ ok: false, error: 'SESSION_REVOCATION_FAILED' });
+  }
+
+  res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
   return res.json({ ok: true });
 }
