@@ -29,7 +29,7 @@ import {
   updateContactLeadStatus
 } from './db.js';
 import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
-import { callback, currentAdmin, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
+import { authCookieNames, callback, clearSessionCookie, currentAdmin, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
   canCreateProperty,
@@ -107,6 +107,12 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
 
 export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.use(['/api/auth', '/api/admin'], requireAdminOrigin);
+  app.use('/api/auth', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
 
   app.get('/_app/health', (req, res) => res.json({ ok: true, service: 'morada' }));
   app.get('/_app/ready', async (req, res, next) => {
@@ -121,11 +127,12 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.get('/api/auth/login', loginLimiter, login);
   app.get('/api/auth/callback', loginLimiter, callback);
   app.post('/api/auth/logout', requireSameOrigin, logout);
-  app.post('/api/auth/logout-all', requireSameOrigin, logoutAll);
+  app.post('/api/auth/logout-all', requireSameOrigin, requireAdmin(), logoutAll);
   app.get('/api/admin/session', async (req, res, next) => {
     try {
       res.setHeader('Cache-Control', 'no-store');
       const user = await currentAdmin(req);
+      if (!user && req.cookies?.[authCookieNames().sessionCookie]) clearSessionCookie(req, res);
       res.json({
         authenticated: Boolean(user),
         user: user ? { email: user.email, name: user.name, role: user.role } : null
