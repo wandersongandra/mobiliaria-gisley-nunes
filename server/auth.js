@@ -355,11 +355,15 @@ export async function callback(req, res) {
     const email = String(userInfo.email || '').trim().toLowerCase();
     const openId = String(userInfo.openId || userInfo.open_id || '').trim();
     const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
+    const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
     if (
       email.length > 255
       || openId.length === 0
       || openId.length > 191
+      || /\s/.test(openId)
+      || /[\u0000-\u001f\u007f]/.test(openId)
       || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      || emailVerified === false
     ) {
       return res.status(403).send('Identidade inválida para acesso administrativo.');
     }
