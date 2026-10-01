@@ -18,6 +18,17 @@ export function isAllowedEmail(email) {
   return adminEmails().includes(String(email || '').trim().toLowerCase());
 }
 
+export function adminOpenIds() {
+  return String(env.GISELY_ADMIN_OPEN_IDS || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function isAllowedOpenId(openId) {
+  return adminOpenIds().includes(String(openId || '').trim());
+}
+
 export function sessionSecret() {
   return String(env.GISELY_SESSION_SECRET || env.MORADA_SESSION_SECRET || '');
 }
