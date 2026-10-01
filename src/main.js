@@ -79,23 +79,57 @@ function initMobileMenu() {
   const mobileNav = document.querySelector('#mobile-nav');
   if (!toggle || !mobileNav) return;
 
-  const close = () => {
+  const links = [...mobileNav.querySelectorAll('a')];
+
+  const close = ({ restoreFocus = false } = {}) => {
     toggle.setAttribute('aria-expanded', 'false');
     toggle.setAttribute('aria-label', 'Abrir menu');
+    mobileNav.setAttribute('aria-hidden', 'true');
     mobileNav.classList.remove('is-open');
     document.body.classList.remove('menu-open');
+    if (restoreFocus) toggle.focus();
+  };
+
+  const open = () => {
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.setAttribute('aria-label', 'Fechar menu');
+    mobileNav.setAttribute('aria-hidden', 'false');
+    mobileNav.classList.add('is-open');
+    document.body.classList.add('menu-open');
+    requestAnimationFrame(() => links[0]?.focus());
   };
 
   toggle.addEventListener('click', () => {
-    const open = toggle.getAttribute('aria-expanded') === 'true';
-    toggle.setAttribute('aria-expanded', String(!open));
-    toggle.setAttribute('aria-label', open ? 'Abrir menu' : 'Fechar menu');
-    mobileNav.classList.toggle('is-open', !open);
-    document.body.classList.toggle('menu-open', !open);
+    if (toggle.getAttribute('aria-expanded') === 'true') close();
+    else open();
   });
 
-  mobileNav.querySelectorAll('a').forEach((link) => link.addEventListener('click', close));
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
+  mobileNav.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => close()));
+
+  document.addEventListener('keydown', (event) => {
+    if (toggle.getAttribute('aria-expanded') !== 'true') return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close({ restoreFocus: true });
+      return;
+    }
+    if (event.key !== 'Tab' || links.length < 2) return;
+    const first = links[0];
+    const last = links[links.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+
+  window.matchMedia('(min-width: 901px)').addEventListener?.('change', (event) => {
+    if (event.matches) close();
+  });
+
+  close();
 }
 
 function initListing() {
@@ -188,7 +222,13 @@ function initListing() {
       populateFilterOptions();
       renderListings(catalog);
     } catch {
-      if (filterSummary) filterSummary.textContent = 'Não foi possível carregar os imóveis agora. Tente novamente em instantes.';
+      grid.innerHTML = '';
+      if (count) count.textContent = '00';
+      if (empty) empty.hidden = true;
+      if (filterSummary) {
+        filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis agora.</span><button type="button" id="retry-properties">Tentar novamente</button>';
+        filterSummary.querySelector('#retry-properties')?.addEventListener('click', loadProperties, { once: true });
+      }
     } finally {
       grid.removeAttribute('aria-busy');
     }
@@ -299,9 +339,10 @@ function renderPropertyDetail(property) {
     <div class="gallery-main">
       <img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" fetchpriority="high" decoding="async" />
       <div class="gallery-main-overlay">
-        <span class="gallery-count" aria-live="polite"><strong data-gallery-current>${String(primaryIndex + 1).padStart(2, '0')}</strong> / ${String(photos.length).padStart(2, '0')}</span>
+        <span class="gallery-count"><strong data-gallery-current>${String(primaryIndex + 1).padStart(2, '0')}</strong> / ${String(photos.length).padStart(2, '0')}</span>
         ${photos.length > 1 ? '<div class="gallery-controls"><button type="button" data-gallery-prev aria-label="Foto anterior">←</button><button type="button" data-gallery-next aria-label="Próxima foto">→</button></div>' : ''}
       </div>
+      <span class="sr-only" data-gallery-status aria-live="polite"></span>
     </div>
     ${photos.length > 1 ? `<div class="gallery-thumbs" aria-label="Galeria de fotos">${thumbs}</div>` : ''}
   ` : '';
@@ -345,6 +386,7 @@ function initPropertyDetail() {
   const thumbs = [...root.querySelectorAll('.gallery-thumb')];
   const mainImage = root.querySelector('.gallery-main img');
   const current = root.querySelector('[data-gallery-current]');
+  const galleryStatus = root.querySelector('[data-gallery-status]');
   let activeIndex = Math.max(0, thumbs.findIndex((thumb) => thumb.classList.contains('is-active')));
 
   const selectPhoto = (index) => {
@@ -364,6 +406,7 @@ function initPropertyDetail() {
     thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
     thumb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
+    if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${thumbs.length}: ${nextAlt}`;
   };
 
   thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => selectPhoto(index)));
