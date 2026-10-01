@@ -41,7 +41,7 @@ export function cookieOptions(req, extra = {}) {
   return {
     httpOnly: true,
     secure: secureCookie(req),
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     priority: 'high',
     ...extra
@@ -252,7 +252,12 @@ export async function login(req, res, next) {
     });
 
     res.setHeader('Cache-Control', 'no-store');
-    res.cookie(stateCookie, state, cookieOptions(req, { maxAge: OAUTH_STATE_TTL_MS, path: '/' }));
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.cookie(stateCookie, state, cookieOptions(req, {
+      maxAge: OAUTH_STATE_TTL_MS,
+      path: '/',
+      sameSite: 'lax'
+    }));
 
     const url = new URL(`${oauth.portalUrl.replace(/\/$/, '')}/app-auth`);
     url.searchParams.set('appId', oauth.projectId);
@@ -290,6 +295,7 @@ async function exchangeCode({ code, redirectUri }) {
 export async function callback(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Referrer-Policy', 'no-referrer');
 
   try {
     assertAuthConfig();
@@ -298,7 +304,7 @@ export async function callback(req, res) {
     const state = String(req.query.state || '').trim();
     const savedState = String(req.cookies?.[stateCookie] || '');
 
-    res.clearCookie(stateCookie, cookieOptions(req, { path: '/' }));
+    res.clearCookie(stateCookie, cookieOptions(req, { path: '/', sameSite: 'lax' }));
 
     if (!code || code.length > 4096) return res.status(400).send('Código de autenticação ausente ou inválido.');
     if (state.length !== 43 || savedState.length !== 43 || !safeStateEqual(state, savedState)) {
