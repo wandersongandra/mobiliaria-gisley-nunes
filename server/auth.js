@@ -239,6 +239,9 @@ async function exchangeCode({ code, redirectUri }) {
 }
 
 export async function callback(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+
   try {
     assertAuthConfig();
 
@@ -248,8 +251,8 @@ export async function callback(req, res) {
 
     res.clearCookie(stateCookie, cookieOptions(req, { path: '/' }));
 
-    if (!code) return res.status(400).send('Código de autenticação ausente.');
-    if (!safeStateEqual(state, savedState)) {
+    if (!code || code.length > 4096) return res.status(400).send('Código de autenticação ausente ou inválido.');
+    if (state.length !== 43 || savedState.length !== 43 || !safeStateEqual(state, savedState)) {
       return res.status(400).send('Sessão de autenticação inválida. Tente novamente.');
     }
 
@@ -268,7 +271,13 @@ export async function callback(req, res) {
     const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
     const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
 
-    if (emailVerified === false || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !openId) {
+    if (
+      emailVerified === false
+      || email.length > 255
+      || openId.length === 0
+      || openId.length > 191
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
       return res.status(403).send('Identidade inválida para acesso administrativo.');
     }
 
