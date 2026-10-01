@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { adminEmails, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
+import { adminOpenIds, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
 import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
@@ -52,6 +52,7 @@ export async function migrate() {
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_staff_access (
     email VARCHAR(255) PRIMARY KEY,
+    open_id VARCHAR(191) NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'editor',
     active TINYINT(1) NOT NULL DEFAULT 1,
@@ -60,6 +61,17 @@ export async function migrate() {
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_morada_staff_role_active (role, active)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  try {
+    await db.query('ALTER TABLE morada_staff_access ADD COLUMN open_id VARCHAR(191) NULL');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
+  try {
+    await db.query('ALTER TABLE morada_staff_access ADD UNIQUE KEY uq_morada_staff_open_id (open_id)');
+  } catch (error) {
+    if (!['ER_DUP_KEYNAME', 'ER_MULTIPLE_PRI_KEY'].includes(error?.code)) throw error;
+  }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_auth_challenges (
     state_hash CHAR(64) PRIMARY KEY,
@@ -92,42 +104,36 @@ export async function migrate() {
     [Date.now()]
   );
 
-  const bootstrapManagers = adminEmails();
-  if (bootstrapManagers.length) {
-    const placeholders = bootstrapManagers.map(() => '?').join(',');
+  const bootstrapOpenIds = adminOpenIds();
+  if (bootstrapOpenIds.length) {
+    const placeholders = bootstrapOpenIds.map(() => '?').join(',');
     await db.execute(
       `UPDATE morada_admin_sessions s
-       JOIN morada_staff_access a ON a.email=s.email
+       LEFT JOIN morada_staff_access a ON a.open_id=s.open_id
        SET s.revoked_at=COALESCE(s.revoked_at, CURRENT_TIMESTAMP)
-       WHERE a.invited_by='environment'
-         AND a.email NOT IN (${placeholders})
-         AND s.revoked_at IS NULL`,
-      bootstrapManagers
+       WHERE (
+         a.invited_by='environment'
+         AND (a.open_id IS NULL OR a.open_id NOT IN (${placeholders}))
+       )
+       AND s.revoked_at IS NULL`,
+      bootstrapOpenIds
     );
     await db.execute(
       `UPDATE morada_staff_access
        SET active=0, updated_at=CURRENT_TIMESTAMP
-       WHERE invited_by='environment' AND email NOT IN (${placeholders})`,
-      bootstrapManagers
+       WHERE invited_by='environment'
+         AND (open_id IS NULL OR open_id NOT IN (${placeholders}))`,
+      bootstrapOpenIds
     );
   } else {
     await db.execute(
       `UPDATE morada_admin_sessions s
-       JOIN morada_staff_access a ON a.email=s.email
+       JOIN morada_staff_access a ON a.open_id=s.open_id
        SET s.revoked_at=COALESCE(s.revoked_at, CURRENT_TIMESTAMP)
        WHERE a.invited_by='environment' AND s.revoked_at IS NULL`
     );
     await db.execute(
       "UPDATE morada_staff_access SET active=0, updated_at=CURRENT_TIMESTAMP WHERE invited_by='environment'"
-    );
-  }
-
-  for (const email of bootstrapManagers) {
-    await db.execute(
-      `INSERT INTO morada_staff_access (email,name,role,active,invited_by)
-       VALUES (?,?, 'manager', 1, 'environment')
-       ON DUPLICATE KEY UPDATE role='manager', active=1, invited_by='environment', updated_at=CURRENT_TIMESTAMP`,
-      [email, email]
     );
   }
 
@@ -750,7 +756,18 @@ export async function findStaffAccess(email) {
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) return null;
   const [rows] = await db.execute(
-    'SELECT email,name,role,active,invited_by,created_at,updated_at FROM morada_staff_access WHERE email=? LIMIT 1',
+    'SELECT email,open_id,name,role,active,invited_by,created_at,updated_at FROM morada_staff_access WHERE email=? LIMIT 1',
+    [normalized]
+  );
+  return rows[0] || null;
+}
+
+export async function findStaffAccessByOpenId(openId) {
+  const db = getPool();
+  const normalized = String(openId || '').trim();
+  if (!normalized) return null;
+  const [rows] = await db.execute(
+    'SELECT email,open_id,name,role,active,invited_by,created_at,updated_at FROM morada_staff_access WHERE open_id=? LIMIT 1',
     [normalized]
   );
   return rows[0] || null;
@@ -759,23 +776,39 @@ export async function findStaffAccess(email) {
 export async function listStaffAccess() {
   const db = getPool();
   const [rows] = await db.query(
-    "SELECT email,name,role,active,invited_by,created_at,updated_at FROM morada_staff_access ORDER BY CASE role WHEN 'manager' THEN 0 ELSE 1 END, name ASC, email ASC"
+    "SELECT email,open_id,name,role,active,invited_by,created_at,updated_at FROM morada_staff_access ORDER BY CASE role WHEN 'manager' THEN 0 ELSE 1 END, name ASC, email ASC"
   );
   return rows;
 }
 
-export async function saveStaffAccess({ email, name, role = 'editor', active = true, invitedBy = null }) {
+export async function saveStaffAccess({ email, openId = null, name, role = 'editor', active = true, invitedBy = null }) {
   const db = getPool();
   const normalizedEmail = String(email || '').trim().toLowerCase().slice(0, 255);
+  const normalizedOpenId = openId ? String(openId).trim().slice(0, 191) : null;
   const normalizedName = String(name || normalizedEmail).trim().slice(0, 255);
   const normalizedRole = role === 'manager' ? 'manager' : 'editor';
   await db.execute(
-    `INSERT INTO morada_staff_access (email,name,role,active,invited_by)
-     VALUES (?,?,?,?,?)
-     ON DUPLICATE KEY UPDATE name=VALUES(name),role=VALUES(role),active=VALUES(active),invited_by=COALESCE(VALUES(invited_by),invited_by),updated_at=CURRENT_TIMESTAMP`,
-    [normalizedEmail, normalizedName, normalizedRole, active ? 1 : 0, invitedBy ? String(invitedBy).slice(0, 255) : null]
+    `INSERT INTO morada_staff_access (email,open_id,name,role,active,invited_by)
+     VALUES (?,?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE
+       open_id=COALESCE(VALUES(open_id),open_id),
+       name=VALUES(name),
+       role=VALUES(role),
+       active=VALUES(active),
+       invited_by=COALESCE(VALUES(invited_by),invited_by),
+       updated_at=CURRENT_TIMESTAMP`,
+    [
+      normalizedEmail,
+      normalizedOpenId,
+      normalizedName,
+      normalizedRole,
+      active ? 1 : 0,
+      invitedBy ? String(invitedBy).slice(0, 255) : null
+    ]
   );
-  return findStaffAccess(normalizedEmail);
+  return normalizedOpenId
+    ? (await findStaffAccessByOpenId(normalizedOpenId)) || findStaffAccess(normalizedEmail)
+    : findStaffAccess(normalizedEmail);
 }
 
 export async function removeStaffAccess(email) {
