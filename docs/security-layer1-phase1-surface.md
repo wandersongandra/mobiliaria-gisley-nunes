@@ -45,6 +45,7 @@ Inventariar todas as superfícies HTTP relevantes, classificar o nível de acess
 | GET | `/api/auth/login` | Painel público | Rate limit + `ADMIN_ORIGIN` |
 | GET | `/api/auth/callback` | Painel público | Rate limit + `ADMIN_ORIGIN` + state OAuth |
 | POST | `/api/auth/logout` | Público + mesma origem | Same-origin; operação idempotente |
+| POST | `/api/auth/logout-all` | Autenticado | Same-origin + sessão válida; revoga todos os dispositivos |
 | GET | `/api/admin/session` | Painel público | No-store; devolve apenas `name/email/role` quando autenticado |
 
 `/api/admin/session` é a única exceção anônima intencional sob `/api/admin`. Ela existe para o frontend decidir entre tela de login e CRM.
