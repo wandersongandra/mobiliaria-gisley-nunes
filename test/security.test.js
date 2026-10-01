@@ -478,3 +478,34 @@ test('CSP bloqueia atributos de script, frames, workers e objetos', () => {
   assert.equal(csp.includes("'unsafe-eval'"), false);
   assert.equal(csp.includes("script-src 'self' 'unsafe-inline'"), false);
 });
+
+
+test('Host desconhecido em produção recebe 421 antes das rotas', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const script = `
+    process.env.NODE_ENV='production';
+    process.env.PUBLIC_ORIGIN='https://www.gisley.test';
+    process.env.ADMIN_ORIGIN='https://painel.gisley.test';
+    const { requireKnownHost } = await import('./server/security.js');
+    const req = {
+      path: '/api/site',
+      socket: { remoteAddress: '203.0.113.10' },
+      get(name) { return name.toLowerCase() === 'host' ? 'evil.example' : ''; }
+    };
+    const result = { statusCode: 200, body: null, nextCalled: false };
+    const res = {
+      status(code) { result.statusCode = code; return this; },
+      json(body) { result.body = body; return this; }
+    };
+    requireKnownHost(req, res, () => { result.nextCalled = true; });
+    process.stdout.write(JSON.stringify(result));
+  `;
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    encoding: 'utf8'
+  });
+  const result = JSON.parse(output);
+  assert.equal(result.nextCalled, false);
+  assert.equal(result.statusCode, 421);
+  assert.deepEqual(result.body, { error: 'MISDIRECTED_REQUEST' });
+});
