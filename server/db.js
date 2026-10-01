@@ -181,6 +181,19 @@ export async function migrate() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_audit_log (
+    id CHAR(36) PRIMARY KEY,
+    actor_email VARCHAR(255) NOT NULL,
+    action VARCHAR(80) NOT NULL,
+    entity_type VARCHAR(60) NOT NULL,
+    entity_id VARCHAR(191),
+    details JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_morada_audit_created (created_at),
+    INDEX idx_morada_audit_actor_created (actor_email, created_at),
+    INDEX idx_morada_audit_entity_created (entity_type, entity_id, created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
   await db.query(`CREATE TABLE IF NOT EXISTS morada_contact_leads (
     id CHAR(36) PRIMARY KEY,
     name VARCHAR(120) NOT NULL,
@@ -597,4 +610,34 @@ export async function updateContactLeadStatus(id, status) {
   if (!allowed.has(status)) throw new Error('INVALID_LEAD_STATUS');
   const [result] = await db.execute('UPDATE morada_contact_leads SET status=? WHERE id=?', [status, id]);
   return result.affectedRows > 0;
+}
+
+
+export async function recordAudit({ actorEmail, action, entityType, entityId = null, details = null }) {
+  const db = getPool();
+  const { randomUUID } = await import('node:crypto');
+  const safeDetails = details && typeof details === 'object' ? JSON.stringify(details).slice(0, 8000) : null;
+  await db.execute(
+    'INSERT INTO morada_audit_log (id,actor_email,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)',
+    [
+      randomUUID(),
+      String(actorEmail || 'unknown').slice(0, 255),
+      String(action || 'unknown').slice(0, 80),
+      String(entityType || 'unknown').slice(0, 60),
+      entityId ? String(entityId).slice(0, 191) : null,
+      safeDetails
+    ]
+  );
+}
+
+export async function listAuditLog({ limit = 100 } = {}) {
+  const db = getPool();
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 250));
+  const [rows] = await db.query(
+    `SELECT id,actor_email,action,entity_type,entity_id,details,created_at
+     FROM morada_audit_log
+     ORDER BY created_at DESC
+     LIMIT ${safeLimit}`
+  );
+  return rows;
 }
