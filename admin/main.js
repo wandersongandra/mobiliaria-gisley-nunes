@@ -321,7 +321,7 @@ async function uploadPendingFiles(propertyId) {
 
     const upload = await fetch(presign.uploadUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type },
+      headers: presign.uploadHeaders || { 'Content-Type': file.type },
       body: file
     });
     if (!upload.ok) throw new Error('UPLOAD_FAILED');
