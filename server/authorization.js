@@ -70,13 +70,18 @@ export function auditView(entry = {}) {
 export function canCreateProperty(admin, input = {}) {
   if (!hasCapability(admin, 'property.write')) return false;
   if (hasCapability(admin, 'property.publish')) return true;
-  return input.status !== 'published' && !Boolean(input.featured);
+  const requestedStatus = input.status === undefined ? 'draft' : String(input.status);
+  return requestedStatus === 'draft' && input.featured !== true && input.featured !== 'true';
 }
 
 export function canMutateProperty(admin, property) {
   if (!hasCapability(admin, 'property.write')) return false;
   if (hasCapability(admin, 'property.publish')) return true;
   return String(property?.status || '') === 'draft';
+}
+
+export function canArchiveProperty(admin) {
+  return hasCapability(admin, 'property.archive');
 }
 
 export function canManagePropertyMedia(admin, property) {
@@ -87,7 +92,8 @@ export function canManagePropertyMedia(admin, property) {
 
 export function canRequestPublication(admin, input = {}) {
   if (hasCapability(admin, 'property.publish')) return true;
-  return input.status !== 'published' && !Boolean(input.featured);
+  const requestedStatus = input.status === undefined ? 'draft' : String(input.status);
+  return requestedStatus === 'draft' && input.featured !== true && input.featured !== 'true';
 }
 
 
