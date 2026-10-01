@@ -806,10 +806,11 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
       [now]
     );
 
-    await connection.execute(
-      'SELECT open_id FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',
+    const [[boundIdentity]] = await connection.execute(
+      'SELECT open_id,active FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',
       [String(openId).slice(0, 191)]
     );
+    if (!boundIdentity || !boundIdentity.active) throw new Error('SESSION_IDENTITY_NOT_BOUND');
 
     await connection.execute(
       'INSERT INTO morada_admin_sessions (jti,open_id,email,expires_at_ms,last_seen_at_ms) VALUES (?,?,?,?,?)',
