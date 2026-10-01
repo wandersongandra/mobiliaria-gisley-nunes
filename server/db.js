@@ -386,13 +386,17 @@ export async function listPhotos(propertyId) {
   return rows;
 }
 
-export async function saveProperty(input, id = null, { requireDraft = false } = {}) {
-  const db = getPool();
-  const { randomUUID } = await import('node:crypto');
-  const data = normalizePropertyInput(input);
+export function enforcePropertyWriteScope(data, { requireDraft = false } = {}) {
   if (requireDraft && (data.status !== 'draft' || data.featured)) {
     throw new Error('CAPABILITY_REQUIRED');
   }
+  return data;
+}
+
+export async function saveProperty(input, id = null, { requireDraft = false } = {}) {
+  const db = getPool();
+  const { randomUUID } = await import('node:crypto');
+  const data = enforcePropertyWriteScope(normalizePropertyInput(input), { requireDraft });
   const propertyId = id || randomUUID();
   const generatedSlug = data.title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
