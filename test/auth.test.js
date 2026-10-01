@@ -16,6 +16,10 @@ import {
   verifySessionToken
 } from '../server/auth.js';
 
+function testSessionSecret() {
+  return ['unit', 'fixture', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4P5q6'].join('-');
+}
+
 function createResponse() {
   return {
     statusCode: 200,
@@ -67,7 +71,7 @@ test('state OAuth usa hash estável e comparação em tempo constante', () => {
 
 test('JWT administrativo aceita token íntegro e rejeita adulteração/expiração', async () => {
   const previous = process.env.GISELY_SESSION_SECRET;
-  process.env.GISELY_SESSION_SECRET = 'x9N#4qLm7!P2vR8@cT5$wY1&kD6*eF3zH0+uJ9sB';
+  process.env.GISELY_SESSION_SECRET = testSessionSecret();
 
   try {
     const now = Date.now();
@@ -204,7 +208,7 @@ test('claims administrativas rejeitam identidade, jti e janelas temporais invál
 
 test('verificação JWT rejeita formatos absurdos antes da criptografia', async () => {
   const previous = process.env.GISELY_SESSION_SECRET;
-  process.env.GISELY_SESSION_SECRET = 'x9N#4qLm7!P2vR8@cT5$wY1&kD6*eF3zH0+uJ9sB';
+  process.env.GISELY_SESSION_SECRET = testSessionSecret();
 
   try {
     assert.equal(await verifySessionToken(''), null);
@@ -220,7 +224,7 @@ test('verificação JWT rejeita formatos absurdos antes da criptografia', async 
 
 test('JWT administrativo rejeita issuer, audience e typ incorretos', async () => {
   const previous = process.env.GISELY_SESSION_SECRET;
-  process.env.GISELY_SESSION_SECRET = 'x9N#4qLm7!P2vR8@cT5$wY1&kD6*eF3zH0+uJ9sB';
+  process.env.GISELY_SESSION_SECRET = testSessionSecret();
   const secret = new TextEncoder().encode(process.env.GISELY_SESSION_SECRET);
   const now = Math.floor(Date.now() / 1000);
   const base = () => new SignJWT({})
@@ -258,7 +262,7 @@ test('JWT administrativo rejeita issuer, audience e typ incorretos', async () =>
 
 test('JWT administrativo rejeita claim temporal futura e janela excessiva', async () => {
   const previous = process.env.GISELY_SESSION_SECRET;
-  process.env.GISELY_SESSION_SECRET = 'x9N#4qLm7!P2vR8@cT5$wY1&kD6*eF3zH0+uJ9sB';
+  process.env.GISELY_SESSION_SECRET = testSessionSecret();
   const secret = new TextEncoder().encode(process.env.GISELY_SESSION_SECRET);
   const now = Math.floor(Date.now() / 1000);
 
