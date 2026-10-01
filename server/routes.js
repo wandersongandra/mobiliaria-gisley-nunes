@@ -16,6 +16,7 @@ import {
   removeTestimonial,
   recordAudit,
   reorderPhotos,
+  revokeAdminSessionsByEmail,
   saveProperty,
   saveSiteSettings,
   saveStaffAccess,
@@ -490,7 +491,8 @@ export function registerRoutes(app) {
         active: typeof req.body?.active === 'boolean' ? req.body.active : Boolean(current.active),
         invitedBy: current.invited_by || req.admin.email
       });
-      await writeAudit(req, 'team.update', 'staff', email, { role: member.role, active: Boolean(member.active) });
+      await revokeAdminSessionsByEmail(email);
+      await writeAudit(req, 'team.update', 'staff', email, { role: member.role, active: Boolean(member.active), sessionsRevoked: true });
       return res.json({ member });
     } catch (error) {
       return next(error);
@@ -504,7 +506,8 @@ export function registerRoutes(app) {
       if (isAllowedEmail(email)) return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
       const removed = await removeStaffAccess(email);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
-      await writeAudit(req, 'team.remove', 'staff', email);
+      await revokeAdminSessionsByEmail(email);
+      await writeAudit(req, 'team.remove', 'staff', email, { sessionsRevoked: true });
       return res.status(204).end();
     } catch (error) {
       return next(error);
