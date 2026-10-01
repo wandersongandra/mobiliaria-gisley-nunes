@@ -45,7 +45,8 @@ function normalizeProperty(item) {
 
 function listingCard(item, index = 0) {
   const href = item.slug ? `/imoveis/${encodeURIComponent(item.slug)}` : '/contato';
-  return `<article class="listing-card listing-card-enter" data-listing-card style="--card-index:${index}">
+  const delayClass = `listing-delay-${Math.min(Math.max(Number(index) || 0, 0), 7)}`;
+  return `<article class="listing-card listing-card-enter ${delayClass}" data-listing-card>
     <a href="${href}" class="listing-image">
       <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" loading="lazy" decoding="async" />
       <span class="listing-tag">${escapeHTML(item.tag)}</span>
@@ -61,7 +62,7 @@ function listingCard(item, index = 0) {
 }
 
 function listingSkeletons(count = 6) {
-  return Array.from({ length: count }, (_, index) => `<article class="listing-card listing-skeleton" aria-hidden="true" style="--card-index:${index}"><div class="skeleton-image"></div><div class="skeleton-line skeleton-line-short"></div><div class="skeleton-line"></div><div class="skeleton-meta"></div></article>`).join('');
+  return Array.from({ length: count }, (_, index) => `<article class="listing-card listing-skeleton listing-delay-${Math.min(index, 7)}" aria-hidden="true"><div class="skeleton-image"></div><div class="skeleton-line skeleton-line-short"></div><div class="skeleton-line"></div><div class="skeleton-meta"></div></article>`).join('');
 }
 
 function activateListingCards(grid) {
