@@ -175,6 +175,7 @@ export async function migrate() {
     uploaded_by VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_morada_property_photo FOREIGN KEY (property_id) REFERENCES morada_properties(id) ON DELETE CASCADE,
+    UNIQUE KEY uniq_morada_property_photos_storage_path (storage_path),
     INDEX idx_morada_property_photos (property_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 
@@ -191,6 +192,14 @@ export async function migrate() {
     } catch (error) {
       if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
     }
+  }
+
+  try {
+    await db.query(
+      'ALTER TABLE morada_property_photos ADD UNIQUE KEY uniq_morada_property_photos_storage_path (storage_path)'
+    );
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_KEYNAME') throw error;
   }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_site_settings (
@@ -406,24 +415,29 @@ export async function addPhoto({
     );
     if (Number(photoCount) >= 40) throw new Error('PHOTO_LIMIT_REACHED');
     if (isCover) await connection.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
-    await connection.execute(
-      'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover,storage_provider,mime_type,file_size,width,height,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-      [
-        id,
-        propertyId,
-        String(storagePath).slice(0, 500),
-        String(url).slice(0, 600),
-        String(altText || 'Foto do imóvel').trim().slice(0, 255),
-        Number(sortOrder || 0),
-        isCover ? 1 : 0,
-        String(storageProvider || 'legacy').slice(0, 20),
-        String(mimeType || '').slice(0, 80),
-        Math.max(0, Number(fileSize || 0)),
-        Math.max(0, Number(width || 0)),
-        Math.max(0, Number(height || 0)),
-        String(uploadedBy || '').slice(0, 255)
-      ]
-    );
+    try {
+      await connection.execute(
+        'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover,storage_provider,mime_type,file_size,width,height,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [
+          id,
+          propertyId,
+          String(storagePath).slice(0, 500),
+          String(url).slice(0, 600),
+          String(altText || 'Foto do imóvel').trim().slice(0, 255),
+          Number(sortOrder || 0),
+          isCover ? 1 : 0,
+          String(storageProvider || 'legacy').slice(0, 20),
+          String(mimeType || '').slice(0, 80),
+          Math.max(0, Number(fileSize || 0)),
+          Math.max(0, Number(width || 0)),
+          Math.max(0, Number(height || 0)),
+          String(uploadedBy || '').slice(0, 255)
+        ]
+      );
+    } catch (error) {
+      if (error?.code === 'ER_DUP_ENTRY') throw new Error('ASSET_ALREADY_REGISTERED');
+      throw error;
+    }
     await connection.commit();
   } catch (error) {
     await connection.rollback();
