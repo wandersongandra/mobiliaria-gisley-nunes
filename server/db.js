@@ -707,6 +707,17 @@ export async function revokeAdminSessionsByEmail(email) {
   return result.affectedRows;
 }
 
+export async function revokeAdminSessionsByOpenId(openId) {
+  const db = getPool();
+  const normalized = String(openId || '').trim().slice(0, 191);
+  if (!normalized) return 0;
+  const [result] = await db.execute(
+    'UPDATE morada_admin_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE open_id=? AND revoked_at IS NULL',
+    [normalized]
+  );
+  return result.affectedRows;
+}
+
 export async function upsertAdmin({ openId, email, name }) {
   const db = getPool();
   const normalizedOpenId = String(openId).slice(0, 191);
