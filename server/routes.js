@@ -30,6 +30,7 @@ import {
   storageDelete,
   storageGetSignedUrl,
   storageObjectExists,
+  storageObjectLooksLikeImage,
   storagePresign,
   storageProviderName
 } from './storage.js';
@@ -208,7 +209,7 @@ export function registerRoutes(app) {
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
 
       const storagePath = `gisley/properties/${propertyId}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
-      const uploadUrl = await storagePresign(storagePath);
+      const uploadUrl = await storagePresign(storagePath, { contentType });
       return res.json({
         uploadUrl,
         storagePath,
@@ -262,6 +263,11 @@ export function registerRoutes(app) {
 
       if (!(await storageObjectExists(storagePath))) {
         return res.status(400).json({ error: 'ASSET_NOT_UPLOADED' });
+      }
+
+      if (!(await storageObjectLooksLikeImage(storagePath, contentType))) {
+        try { await storageDelete(storagePath); } catch {}
+        return res.status(400).json({ error: 'INVALID_ASSET' });
       }
 
       const photos = await addPhoto({
