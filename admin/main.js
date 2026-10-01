@@ -31,7 +31,68 @@ async function request(url, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
-function showLogin() { dashboard.hidden = true; loginScreen.hidden = false; $('#login-button').href = '/api/auth/login'; }
+function clearSensitiveState() {
+  state.user = null;
+  state.properties = [];
+  state.leads = [];
+  state.team = [];
+  state.audit = [];
+  state.editing = null;
+  state.search = '';
+  clearPendingFiles();
+  if (dialog?.open) dialog.close();
+  const propertyList = $('#property-list');
+  const leadList = $('#lead-list');
+  const teamList = $('#team-list');
+  const auditList = $('#audit-list');
+  if (propertyList) propertyList.innerHTML = '';
+  if (leadList) leadList.innerHTML = '';
+  if (teamList) teamList.innerHTML = '';
+  if (auditList) auditList.innerHTML = '';
+}
+
+function showLogin() {
+  clearSensitiveState();
+  dashboard.hidden = true;
+  loginScreen.hidden = false;
+  $('#login-button').href = '/api/auth/login';
+}
+
+function sessionStatus(message = '', tone = '') {
+  const element = $('#session-status');
+  if (!element) return;
+  element.textContent = message;
+  element.dataset.tone = tone;
+}
+
+async function performLogout({ all = false } = {}) {
+  const currentButton = all ? $('#logout-all-button') : $('#logout-button');
+  const otherButton = all ? $('#logout-button') : $('#logout-all-button');
+  if (currentButton) currentButton.disabled = true;
+  if (otherButton) otherButton.disabled = true;
+  sessionStatus(all ? 'Encerrando todas as sessões…' : 'Encerrando sessão…');
+
+  try {
+    const response = await fetch(all ? '/api/auth/logout-all' : '/api/auth/logout', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin'
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body?.ok !== true) throw new Error(body?.error || 'LOGOUT_FAILED');
+    showLogin();
+  } catch {
+    sessionStatus(
+      all
+        ? 'Não foi possível revogar todas as sessões. Tente novamente.'
+        : 'Não foi possível confirmar a revogação da sessão. Tente novamente.',
+      'error'
+    );
+  } finally {
+    if (currentButton) currentButton.disabled = false;
+    if (otherButton) otherButton.disabled = false;
+  }
+}
 function showDashboard() {
   loginScreen.hidden = true;
   dashboard.hidden = false;
@@ -587,7 +648,8 @@ async function init() {
 $('#new-property')?.addEventListener('click', () => openEditor());
 $('#new-property-top')?.addEventListener('click', () => openEditor());
 $('#archive-property')?.addEventListener('click', archiveProperty);
-$('#logout-button').addEventListener('click', async () => { await fetch('/api/auth/logout', { method: 'POST' }); showLogin(); });
+$('#logout-button')?.addEventListener('click', () => { void performLogout(); });
+$('#logout-all-button')?.addEventListener('click', () => { void performLogout({ all: true }); });
 form.addEventListener('submit', saveProperty);
 $('#photo-input').addEventListener('change', (event) => {
   const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
