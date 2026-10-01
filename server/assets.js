@@ -10,17 +10,26 @@ function manifest() {
   if (cached) return cached;
   try {
     cached = JSON.parse(readFileSync(path.join(root, 'dist', '.vite', 'manifest.json'), 'utf8'));
-  } catch {
+    return cached;
+  } catch (error) {
+    if (isProduction) throw new Error('ASSET_MANIFEST_MISSING', { cause: error });
     cached = {};
+    return cached;
   }
-  return cached;
 }
 
 export function assets() {
   if (!isProduction) return { js: '/src/main.js', css: '' };
-  const entry = Object.values(manifest()).find((item) => item.isEntry) || Object.values(manifest())[0];
+  const entries = Object.values(manifest());
+  const entry = entries.find((item) => item.isEntry) || entries[0];
+  if (!entry?.file) throw new Error('ASSET_MANIFEST_MISSING');
   return {
-    js: entry?.file ? `/${entry.file}` : '',
-    css: entry?.css?.[0] ? `/${entry.css[0]}` : ''
+    js: `/${entry.file}`,
+    css: entry.css?.[0] ? `/${entry.css[0]}` : ''
   };
+}
+
+export function assertAssetsReady() {
+  assets();
+  return true;
 }
