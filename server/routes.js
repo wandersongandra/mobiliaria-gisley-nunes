@@ -28,7 +28,7 @@ import {
 } from './db.js';
 import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
 import { callback, currentAdmin, login, logout, requireAdmin } from './auth.js';
-import { requireCapability, staffView } from './authorization.js';
+import { auditView, requireCapability, staffView } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireAdminOrigin, requireSameOrigin } from './security.js';
 import {
@@ -447,7 +447,8 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.get('/api/admin/audit', requireCapability('audit.read'), async (req, res, next) => {
     try {
-      return res.json({ audit: await listAuditLog({ limit: req.query?.limit }) });
+      const audit = (await listAuditLog({ limit: req.query?.limit })).map(auditView);
+      return res.json({ audit });
     } catch (error) {
       return next(error);
     }
