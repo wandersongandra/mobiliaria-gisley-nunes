@@ -22,6 +22,12 @@ export function sessionSecret() {
   return String(env.GISELY_SESSION_SECRET || env.MORADA_SESSION_SECRET || '');
 }
 
+export function maxAdminSessions() {
+  const value = Number(env.GISELY_MAX_ADMIN_SESSIONS || 5);
+  if (!Number.isFinite(value)) return 5;
+  return Math.min(Math.max(Math.trunc(value), 1), 10);
+}
+
 function configuredOrigin(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
