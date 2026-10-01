@@ -7,8 +7,10 @@ import {
   createSessionToken,
   hashOAuthState,
   hashPairingCode,
+  normalizeOAuthIdentity,
   requireManager,
   resolveAdminAccess,
+  resolveSessionIdentity,
   safeStateEqual,
   validSessionClaims,
   verifySessionToken
@@ -312,4 +314,90 @@ test('cookie OAuth permite retorno top-level sem afrouxar flags essenciais', () 
   assert.equal(options.path, '/');
   assert.equal(options.priority, 'high');
   assert.equal(options.maxAge, 10 * 60 * 1000);
+});
+
+
+test('normalizeOAuthIdentity rejeita identidade OAuth inconsistente', () => {
+  assert.deepEqual(
+    normalizeOAuthIdentity({
+      email: ' Gestor@Example.com ',
+      openId: 'oauth-user-123',
+      name: 'Gestor',
+      emailVerified: true
+    }),
+    { email: 'gestor@example.com', openId: 'oauth-user-123', name: 'Gestor' }
+  );
+
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: '', emailVerified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: 'open id', emailVerified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: 'open\ncontrol', emailVerified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'email-invalido', openId: 'oauth-user-123', emailVerified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: 'oauth-user-123', emailVerified: false }), null);
+
+  const providerWithoutVerificationClaim = normalizeOAuthIdentity({
+    email: 'gestor@example.com',
+    openId: 'oauth-user-123'
+  });
+  assert.equal(providerWithoutVerificationClaim?.openId, 'oauth-user-123');
+});
+
+test('resolveSessionIdentity exige vínculo completo entre JWT sessão usuário e acesso', () => {
+  const payload = { sub: 'open-123', jti: '123e4567-e89b-42d3-a456-426614174000' };
+  const session = {
+    jti: payload.jti,
+    open_id: payload.sub,
+    email: 'editor@example.com'
+  };
+  const user = {
+    open_id: payload.sub,
+    email: 'editor@example.com',
+    name: 'Editor'
+  };
+  const access = {
+    invited_by: 'gestor@example.com',
+    open_id: payload.sub,
+    email: 'editor@example.com',
+    active: 1,
+    role: 'editor'
+  };
+
+  assert.deepEqual(
+    resolveSessionIdentity({ payload, session, user, access }),
+    { openId: 'open-123', email: 'editor@example.com', name: 'Editor', role: 'editor' }
+  );
+
+  assert.equal(resolveSessionIdentity({
+    payload,
+    session: { ...session, jti: '223e4567-e89b-42d3-a456-426614174000' },
+    user,
+    access
+  }), null);
+
+  assert.equal(resolveSessionIdentity({
+    payload,
+    session: { ...session, open_id: 'outro-open-id' },
+    user,
+    access
+  }), null);
+
+  assert.equal(resolveSessionIdentity({
+    payload,
+    session,
+    user: { ...user, email: 'alterado@example.com' },
+    access
+  }), null);
+
+  assert.equal(resolveSessionIdentity({
+    payload,
+    session,
+    user,
+    access: { ...access, active: 0 }
+  }), null);
+
+  assert.equal(resolveSessionIdentity({
+    payload,
+    session,
+    user,
+    access: { ...access, open_id: 'outro-open-id' }
+  }), null);
 });
