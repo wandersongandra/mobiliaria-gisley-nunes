@@ -23,6 +23,8 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Secret scan
+        run: pnpm security:secrets
       - name: Syntax check
         run: node --check server/config.js && node --check server/authorization.js && node --check server/security.js && node --check server/storage.js && node --check server/auth.js && node --check server/db.js && node --check server/routes.js && node --check admin/main.js && node --check src/main.js
       - name: Test
