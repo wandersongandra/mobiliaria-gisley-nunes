@@ -27,7 +27,8 @@ import {
   updateContactLeadStatus
 } from './db.js';
 import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
-import { callback, currentAdmin, login, logout, requireAdmin, requireManager } from './auth.js';
+import { callback, currentAdmin, login, logout, requireAdmin } from './auth.js';
+import { requireCapability, staffView } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { createRateLimiter, requireAdminOrigin, requireSameOrigin } from './security.js';
 import {
@@ -183,11 +184,11 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     next();
   }, requireSameOrigin, adminApiGuard, adminMiddleware);
 
-  app.get('/api/admin/properties', async (req, res, next) => {
+  app.get('/api/admin/properties', requireCapability('property.read'), async (req, res, next) => {
     try { res.json({ properties: await listProperties() }); } catch (error) { next(error); }
   });
 
-  app.post('/api/admin/properties', async (req, res, next) => {
+  app.post('/api/admin/properties', requireCapability('property.write'), async (req, res, next) => {
     try {
       const property = await saveProperty(req.body);
       await writeAudit(req, 'property.create', 'property', property.id, { title: property.title, status: property.status });
@@ -197,7 +198,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.get('/api/admin/properties/:id', async (req, res, next) => {
+  app.get('/api/admin/properties/:id', requireCapability('property.read'), async (req, res, next) => {
     try {
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -207,7 +208,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.put('/api/admin/properties/:id', async (req, res, next) => {
+  app.put('/api/admin/properties/:id', requireCapability('property.write'), async (req, res, next) => {
     try {
       const property = await saveProperty(req.body, req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -218,7 +219,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/properties/:id', async (req, res, next) => {
+  app.delete('/api/admin/properties/:id', requireCapability('property.archive'), async (req, res, next) => {
     try {
       const removed = await softDeleteProperty(req.params.id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -229,7 +230,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.post('/api/admin/uploads/presign', async (req, res, next) => {
+  app.post('/api/admin/uploads/presign', requireCapability('media.manage'), async (req, res, next) => {
     try {
       const { propertyId, fileName, contentType, size } = req.body || {};
       const parsedSize = Number(size);
@@ -257,7 +258,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.post('/api/admin/properties/:id/photos', async (req, res, next) => {
+  app.post('/api/admin/properties/:id/photos', requireCapability('media.manage'), async (req, res, next) => {
     try {
       const {
         storagePath,
@@ -339,7 +340,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/photos/:id', async (req, res, next) => {
+  app.delete('/api/admin/photos/:id', requireCapability('media.manage'), async (req, res, next) => {
     try {
       const removed = await removePhoto(req.params.id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -355,7 +356,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.put('/api/admin/properties/:id/photos/order', async (req, res, next) => {
+  app.put('/api/admin/properties/:id/photos/order', requireCapability('media.manage'), async (req, res, next) => {
     try {
       const { photoIds } = req.body || {};
       if (!Array.isArray(photoIds) || photoIds.length > 100) return res.status(400).json({ error: 'INVALID_ORDER' });
@@ -369,7 +370,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.put('/api/admin/photos/:id/cover', async (req, res, next) => {
+  app.put('/api/admin/photos/:id/cover', requireCapability('media.manage'), async (req, res, next) => {
     try {
       const photos = await setPhotoCover(req.params.id);
       if (!photos) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -380,11 +381,11 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.get('/api/admin/site', async (req, res, next) => {
+  app.get('/api/admin/site', requireCapability('site.read'), async (req, res, next) => {
     try { res.json({ site: await getSiteInfo(), testimonials: await getTestimonials() }); } catch (error) { next(error); }
   });
 
-  app.put('/api/admin/site', requireManager(), async (req, res, next) => {
+  app.put('/api/admin/site', requireCapability('site.manage'), async (req, res, next) => {
     try {
       await saveSiteSettings(req.body || {});
       await writeAudit(req, 'site.update', 'site', '1');
@@ -394,7 +395,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.post('/api/admin/testimonials', requireManager(), async (req, res, next) => {
+  app.post('/api/admin/testimonials', requireCapability('testimonial.manage'), async (req, res, next) => {
     try {
       const data = normalizeTestimonial(req.body || {});
       const created = await addTestimonial(data);
@@ -405,7 +406,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/testimonials/:id', requireManager(), async (req, res, next) => {
+  app.delete('/api/admin/testimonials/:id', requireCapability('testimonial.manage'), async (req, res, next) => {
     try {
       const removed = await removeTestimonial(req.params.id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -416,11 +417,11 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.get('/api/admin/leads', async (req, res, next) => {
+  app.get('/api/admin/leads', requireCapability('lead.read'), async (req, res, next) => {
     try { res.json({ leads: await listContactLeads({ limit: 100 }) }); } catch (error) { next(error); }
   });
 
-  app.patch('/api/admin/leads/:id', async (req, res, next) => {
+  app.patch('/api/admin/leads/:id', requireCapability('lead.status'), async (req, res, next) => {
     try {
       const status = String(req.body?.status || '');
       const updated = await updateContactLeadStatus(req.params.id, status);
@@ -432,7 +433,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/leads/:id', requireManager(), async (req, res, next) => {
+  app.delete('/api/admin/leads/:id', requireCapability('lead.erase'), async (req, res, next) => {
     try {
       const removed = await deleteContactLead(req.params.id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -443,7 +444,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.get('/api/admin/audit', requireManager(), async (req, res, next) => {
+  app.get('/api/admin/audit', requireCapability('audit.read'), async (req, res, next) => {
     try {
       return res.json({ audit: await listAuditLog({ limit: req.query?.limit }) });
     } catch (error) {
@@ -451,16 +452,19 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.get('/api/admin/team', requireManager(), async (req, res, next) => {
+  app.get('/api/admin/team', requireCapability('team.manage'), async (req, res, next) => {
     try {
-      const team = await listStaffAccess();
+      const team = (await listStaffAccess()).map((member) => staffView({
+        ...member,
+        is_bootstrap: Boolean(member.open_id && isAllowedOpenId(member.open_id))
+      }, req.admin));
       res.json({ team });
     } catch (error) {
       next(error);
     }
   });
 
-  app.post('/api/admin/team', requireManager(), async (req, res, next) => {
+  app.post('/api/admin/team', requireCapability('team.manage'), async (req, res, next) => {
     try {
       const email = String(req.body?.email || '').trim().toLowerCase();
       const openId = String(req.body?.openId || '').trim();
@@ -492,7 +496,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.patch('/api/admin/team/:email', requireManager(), async (req, res, next) => {
+  app.patch('/api/admin/team/:email', requireCapability('team.manage'), async (req, res, next) => {
     try {
       const email = String(req.params.email || '').trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'INVALID_EMAIL' });
@@ -530,7 +534,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/team/:email', requireManager(), async (req, res, next) => {
+  app.delete('/api/admin/team/:email', requireCapability('team.manage'), async (req, res, next) => {
     try {
       const email = String(req.params.email || '').trim().toLowerCase();
       const current = await findStaffAccess(email);
