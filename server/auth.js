@@ -185,6 +185,26 @@ export async function verifySessionToken(token) {
   }
 }
 
+export function normalizeOAuthIdentity(userInfo = {}) {
+  const email = String(userInfo.email || '').trim().toLowerCase();
+  const openId = String(userInfo.openId || userInfo.open_id || '').trim();
+  const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
+  const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
+
+  if (
+    email.length === 0
+    || email.length > 255
+    || openId.length === 0
+    || openId.length > 191
+    || /\s/.test(openId)
+    || /[\u0000-\u001f\u007f]/.test(openId)
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    || emailVerified === false
+  ) return null;
+
+  return { email, openId, name };
+}
+
 export function resolveAdminAccess({ openId, email = '', access }) {
   const normalizedOpenId = String(openId || '').trim();
   const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -198,6 +218,28 @@ export function resolveAdminAccess({ openId, email = '', access }) {
   return {
     role: bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor'),
     bootstrapManager
+  };
+}
+
+export function resolveSessionIdentity({ payload, session, user, access }) {
+  const subject = String(payload?.sub || '');
+  const jti = String(payload?.jti || '');
+  if (!subject || !jti || !session || !user) return null;
+  if (String(session.jti || '') !== jti) return null;
+  if (String(session.open_id || '') !== subject) return null;
+  if (String(user.open_id || '') !== subject) return null;
+
+  const email = String(user.email || '').trim().toLowerCase();
+  if (!email || String(session.email || '').trim().toLowerCase() !== email) return null;
+
+  const resolved = resolveAdminAccess({ openId: subject, email, access });
+  if (!resolved) return null;
+
+  return {
+    openId: subject,
+    email,
+    name: String(user.name || email).slice(0, 255),
+    role: resolved.role
   };
 }
 
@@ -217,28 +259,18 @@ export async function currentAdmin(req) {
   if (!payload?.sub || !payload?.jti) return null;
 
   const session = await findActiveAdminSession(String(payload.jti));
-  if (!session || String(session.open_id) !== String(payload.sub)) return null;
+  if (!session) return null;
 
   const user = await findAdmin(String(payload.sub));
-  if (!user) {
-    await revokeAdminSession(payload.jti);
-    return null;
-  }
-
-  const email = String(user.email || '').trim().toLowerCase();
-  if (!email || String(session.email || '').trim().toLowerCase() !== email) {
-    await revokeAdminSession(payload.jti);
-    return null;
-  }
-
   const access = await findStaffAccessByOpenId(String(payload.sub));
-  const resolved = resolveAdminAccess({ openId: String(payload.sub), email, access });
+  const resolved = resolveSessionIdentity({ payload, session, user, access });
+
   if (!resolved) {
     await revokeAdminSession(payload.jti);
     return null;
   }
 
-  return { openId: user.open_id, email, name: user.name, role: resolved.role };
+  return resolved;
 }
 
 export function requireAdmin() {
@@ -352,21 +384,11 @@ export async function callback(req, res) {
     }
 
     const userInfo = await exchangeCode({ code, redirectUri: challenge.redirectUri });
-    const email = String(userInfo.email || '').trim().toLowerCase();
-    const openId = String(userInfo.openId || userInfo.open_id || '').trim();
-    const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
-    const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
-    if (
-      email.length > 255
-      || openId.length === 0
-      || openId.length > 191
-      || /\s/.test(openId)
-      || /[\u0000-\u001f\u007f]/.test(openId)
-      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-      || emailVerified === false
-    ) {
+    const identity = normalizeOAuthIdentity(userInfo);
+    if (!identity) {
       return res.status(403).send('Identidade inválida para acesso administrativo.');
     }
+    const { email, openId, name } = identity;
 
     const bootstrapManager = isAllowedOpenId(openId);
     const access = await findStaffAccessByOpenId(openId);
