@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTeamCreate } from '../server/validation.js';
+import {
+  normalizeContactLead,
+  normalizeEmailAddress,
+  normalizePhotoInput,
+  normalizePropertyInput,
+  normalizeResourceId,
+  normalizeSiteSettings,
+  normalizeTeamCreate,
+  normalizeTeamPatch,
+  normalizeUploadRequest
+} from '../server/validation.js';
 
 test('normalizePropertyInput rejeita números e enums fora do contrato', () => {
   assert.throws(
@@ -82,4 +92,111 @@ test('normalizeTeamCreate exige código temporário de vinculação válido', ()
   assert.equal(data.email, 'corretor@example.com');
   assert.equal(data.pairingCode, 'AbCdEfGhIjKlMnOp');
   assert.equal(data.role, 'editor');
+});
+
+
+test('números em string aceitam somente representação decimal simples', () => {
+  const base = { title: 'Casa', location: 'Lourdes · Belo Horizonte' };
+
+  for (const value of ['1e6', '0x10', '+10', '.5', '1.', 'NaN', 'Infinity']) {
+    assert.throws(
+      () => normalizePropertyInput({ ...base, price: value }),
+      /INVALID_PROPERTY_NUMBER/,
+      value
+    );
+  }
+
+  assert.equal(normalizePropertyInput({ ...base, price: '10' }).price, 10);
+  assert.equal(normalizePropertyInput({ ...base, price: '10.50' }).price, 10.5);
+});
+
+test('contratos fechados rejeitam chaves extras e tipos estruturais inesperados', () => {
+  const property = { title: 'Casa', location: 'Lourdes · Belo Horizonte' };
+
+  assert.throws(
+    () => normalizePropertyInput({ ...property, admin: true }),
+    /INVALID_PROPERTY/
+  );
+  assert.throws(
+    () => normalizePropertyInput({ ...property, bedrooms: [] }),
+    /INVALID_PROPERTY_NUMBER/
+  );
+  assert.throws(
+    () => normalizeContactLead({ name: 'Ana', email: 'ana@example.com', message: 'Oi', role: 'manager' }),
+    /INVALID_CONTACT/
+  );
+  assert.throws(
+    () => normalizeTeamPatch({ role: ['manager'] }),
+    /INVALID_TEAM_MEMBER/
+  );
+  assert.throws(
+    () => normalizeUploadRequest({ propertyId: {}, fileName: 'foto.jpg', contentType: 'image/jpeg', size: 100 }),
+    /INVALID_ID/
+  );
+  assert.throws(
+    () => normalizePhotoInput({ storagePath: 'x', contentType: 'image/jpeg', size: 10, width: 10, height: {} }),
+    /INVALID_ASSET/
+  );
+});
+
+test('e-mail usa contrato canônico compartilhado', () => {
+  assert.equal(normalizeEmailAddress('  USER.Name+tag@Example.COM '), 'user.name+tag@example.com');
+
+  for (const value of [
+    'sem-arroba.example.com',
+    'a@localhost',
+    '"quoted"@example.com',
+    'a b@example.com',
+    'a@example..com',
+    'a@-example.com',
+    'a@example-.com'
+  ]) {
+    assert.throws(() => normalizeEmailAddress(value), /INVALID_EMAIL/, value);
+  }
+});
+
+test('controles bidi de override/isolamento são rejeitados em textos', () => {
+  const malicious = 'Casa \u202Egpj.exe';
+  assert.throws(
+    () => normalizePropertyInput({ title: malicious, location: 'Lourdes · Belo Horizonte' }),
+    /TITLE_REQUIRED|INVALID_PROPERTY/
+  );
+
+  assert.throws(
+    () => normalizeContactLead({
+      name: `Ana\u2066admin\u2069`,
+      email: 'ana@example.com',
+      message: 'Olá'
+    }),
+    /INVALID_CONTACT/
+  );
+});
+
+test('propertyPath do contato aceita somente rotas públicas previstas', () => {
+  const base = { name: 'Ana', email: 'ana@example.com', message: 'Olá' };
+  for (const propertyPath of ['/', '/contato', '/imoveis', '/imoveis/casa-ipe']) {
+    assert.equal(normalizeContactLead({ ...base, propertyPath }).propertyPath, propertyPath);
+  }
+
+  for (const propertyPath of [
+    '//evil.example',
+    '/imoveis/../admin',
+    '/imoveis/%2e%2e/admin',
+    '/api/admin/team',
+    '/imoveis/casa-ipe?x=1',
+    '/imoveis/casa_ipe'
+  ]) {
+    assert.throws(
+      () => normalizeContactLead({ ...base, propertyPath }),
+      /INVALID_CONTACT/,
+      propertyPath
+    );
+  }
+});
+
+test('IDs rejeitam tamanho e caracteres fora do contrato', () => {
+  assert.equal(normalizeResourceId('abc-DEF_123', { max: 36 }), 'abc-DEF_123');
+  assert.throws(() => normalizeResourceId('../abc', { max: 36 }), /INVALID_ID/);
+  assert.throws(() => normalizeResourceId('a/b', { max: 36 }), /INVALID_ID/);
+  assert.throws(() => normalizeResourceId('x'.repeat(37), { max: 36 }), /INVALID_ID/);
 });
