@@ -58,5 +58,5 @@ test('proteções contra auto-rebaixamento e remoção de gestor bootstrap perma
   assert.ok(routesSource.includes('CANNOT_CHANGE_SELF_ACCESS'));
   assert.ok(routesSource.includes('CANNOT_REMOVE_SELF'));
   assert.ok(routesSource.includes('BOOTSTRAP_MANAGER_PROTECTED'));
-  assert.ok(routesSource.includes('revokeAdminSessionsByEmail(email)'));
+  assert.ok(routesSource.includes('revokeAdminSessionsByOpenId(current.open_id)'));
 });
