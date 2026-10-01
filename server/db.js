@@ -390,6 +390,9 @@ export async function saveProperty(input, id = null, { requireDraft = false } = 
   const db = getPool();
   const { randomUUID } = await import('node:crypto');
   const data = normalizePropertyInput(input);
+  if (requireDraft && (data.status !== 'draft' || data.featured)) {
+    throw new Error('CAPABILITY_REQUIRED');
+  }
   const propertyId = id || randomUUID();
   const generatedSlug = data.title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
