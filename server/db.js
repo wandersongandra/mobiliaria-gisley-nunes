@@ -934,6 +934,14 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
   }
 }
 
+export function adminSessionState(session, { nowMs = Date.now(), idleTimeoutMs = sessionIdleTimeoutMs() } = {}) {
+  if (!session) return 'missing';
+  if (session.revoked_at) return 'revoked';
+  if (!Number.isFinite(Number(session.expires_at_ms)) || Number(session.expires_at_ms) <= nowMs) return 'absolute_expired';
+  if (!Number.isFinite(Number(session.last_seen_at_ms)) || Number(session.last_seen_at_ms) <= nowMs - idleTimeoutMs) return 'idle_expired';
+  return 'active';
+}
+
 export async function findActiveAdminSession(jti) {
   const db = getPool();
   const now = Date.now();
@@ -946,11 +954,10 @@ export async function findActiveAdminSession(jti) {
     [normalizedJti]
   );
   const session = rows[0] || null;
-  if (!session || session.revoked_at) return null;
+  const state = adminSessionState(session, { nowMs: now });
+  if (state === 'missing' || state === 'revoked') return null;
 
-  const absoluteExpired = Number(session.expires_at_ms) <= now;
-  const idleExpired = Number(session.last_seen_at_ms) <= now - sessionIdleTimeoutMs();
-  if (absoluteExpired || idleExpired) {
+  if (state === 'absolute_expired' || state === 'idle_expired') {
     await db.execute(
       'UPDATE morada_admin_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE jti=?',
       [normalizedJti]
