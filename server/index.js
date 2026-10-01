@@ -9,7 +9,7 @@ import { registerRoutes } from './routes.js';
 import { assertAuthConfiguration } from './auth.js';
 import { assertAssetsReady, assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { escapeJsonForHtml, escapeLd, organizationLd, propertyLd, sitemapDate } from './seo.js';
+import { escapeJsonForHtml, escapeLd, escapeXml, organizationLd, propertyLd, sitemapDate } from './seo.js';
 import {
   assertSecurityConfiguration,
   requestHostOrigin,
@@ -173,7 +173,7 @@ app.get('/sitemap.xml', async (req, res, next) => {
       { path: '/privacidade', priority: '0.1', changefreq: 'yearly' },
       ...properties.map((property) => ({ path: `/imoveis/${property.slug}`, priority: '0.8', changefreq: 'weekly', lastmod: sitemapDate(property.updated_at) }))
     ];
-    const urls = entries.map((entry) => `  <url><loc>${origin}${entry.path}</loc>${entry.lastmod ? `<lastmod>${entry.lastmod}</lastmod>` : ''}<changefreq>${entry.changefreq}</changefreq><priority>${entry.priority}</priority></url>`).join('\n');
+    const urls = entries.map((entry) => `  <url><loc>${escapeXml(`${origin}${entry.path}`)}</loc>${entry.lastmod ? `<lastmod>${escapeXml(entry.lastmod)}</lastmod>` : ''}<changefreq>${escapeXml(entry.changefreq)}</changefreq><priority>${escapeXml(entry.priority)}</priority></url>`).join('\n');
     res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
   } catch (error) { next(error); }
 });
