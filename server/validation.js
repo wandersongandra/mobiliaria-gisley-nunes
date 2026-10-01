@@ -58,7 +58,12 @@ export function normalizePropertyInput(input = {}) {
 
 export function normalizeSiteSettings(input = {}) {
   const email = text(input.email, 120).toLowerCase();
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('INVALID_EMAIL');
+  const whatsapp = text(input.whatsapp, 30).replace(/\D/g, '').slice(0, 20);
+  const area = text(input.area, 120);
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('INVALID_EMAIL');
+  if (whatsapp.length < 10 || whatsapp.length > 15) throw new Error('INVALID_WHATSAPP');
+  if (!area) throw new Error('INVALID_SITE_SETTINGS');
 
   const instagramUrl = text(input.instagramUrl, 200);
   if (instagramUrl) {
@@ -69,11 +74,11 @@ export function normalizeSiteSettings(input = {}) {
 
   return {
     phoneDisplay: text(input.phoneDisplay, 50),
-    whatsapp: text(input.whatsapp, 30).replace(/\D/g, '').slice(0, 20),
+    whatsapp,
     email,
     address: text(input.address, 180),
     crci: text(input.crci, 30),
-    area: text(input.area, 120),
+    area,
     instagramUrl,
     instagramDisplay: text(input.instagramDisplay, 60)
   };
