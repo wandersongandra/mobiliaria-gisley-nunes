@@ -45,7 +45,7 @@ import {
   staffView
 } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { createRateLimiter, requireAdminOrigin, requireAdminRequestContext, requireSameOrigin } from './security.js';
+import { createRateLimiter, ensureCsrfToken, requireAdminOrigin, requireAdminRequestContext, requireCsrfToken, requireSameOrigin } from './security.js';
 import {
   safeFileName,
   storageAssetUrl,
@@ -150,16 +150,18 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.get('/api/auth/login', loginLimiter, login);
   app.get('/api/auth/callback', callbackLimiter, callback);
-  app.post('/api/auth/logout', requireSameOrigin, logoutLimiter, logout);
-  app.post('/api/auth/logout-all', requireSameOrigin, logoutLimiter, requireAdmin(), logoutAll);
+  app.post('/api/auth/logout', requireSameOrigin, requireCsrfToken, logoutLimiter, logout);
+  app.post('/api/auth/logout-all', requireSameOrigin, logoutLimiter, requireAdmin(), requireCsrfToken, logoutAll);
   app.get('/api/admin/session', sessionProbeLimiter, async (req, res, next) => {
     try {
       res.setHeader('Cache-Control', 'no-store');
       const user = await currentAdmin(req);
       if (!user && req.cookies?.[authCookieNames().sessionCookie]) clearSessionCookie(req, res);
+      const csrfToken = ensureCsrfToken(req, res);
       res.json({
         authenticated: Boolean(user),
-        user: user ? { email: user.email, name: user.name, role: user.role } : null
+        user: user ? { email: user.email, name: user.name, role: user.role } : null,
+        csrfToken
       });
     } catch (error) {
       next(error);
@@ -243,7 +245,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
     next();
-  }, requireSameOrigin, adminApiGuard, adminMiddleware);
+  }, requireSameOrigin, adminApiGuard, adminMiddleware, requireCsrfToken);
 
   app.get('/api/admin/properties', requireCapability('property.read'), async (req, res, next) => {
     try { res.json({ properties: adminProperties(await listProperties()) }); } catch (error) { next(error); }
