@@ -161,7 +161,7 @@ test('método inesperado não contorna o guard administrativo do editor', async 
   });
 });
 
-test('staffView minimiza openId e marca self/bootstrap no servidor', () => {
+test('staffView não expõe OpenID nem fragmentos e marca self/bootstrap no servidor', () => {
   const view = staffView({
     email: 'owner@gisley.test',
     open_id: 'oauth-identity-abcdefghijklmnop',
@@ -173,13 +173,13 @@ test('staffView minimiza openId e marca self/bootstrap no servidor', () => {
   }, { openId: 'oauth-identity-abcdefghijklmnop' });
 
   assert.equal(Object.hasOwn(view, 'open_id'), false);
-  assert.equal(view.identity_hint, 'oauth-id…mnop');
+  assert.equal(Object.hasOwn(view, 'identity_hint'), false);
   assert.equal(view.is_self, true);
   assert.equal(view.is_bootstrap, true);
 });
 
 
-test('auditView mantém openId bruto somente no banco e entrega hint ao CRM', () => {
+test('auditView não expõe OpenID nem detalhes internos ao CRM', () => {
   const view = auditView({
     id: 'event-id',
     actor_email: 'owner@gisley.test',
@@ -192,8 +192,8 @@ test('auditView mantém openId bruto somente no banco e entrega hint ao CRM', ()
   });
 
   assert.equal(Object.hasOwn(view, 'actor_open_id'), false);
+  assert.equal(Object.hasOwn(view, 'actor_identity_hint'), false);
   assert.equal(Object.hasOwn(view, 'details'), false);
-  assert.equal(view.actor_identity_hint, 'oauth-id…mnop');
   assert.equal(view.actor_email, 'owner@gisley.test');
 });
 
