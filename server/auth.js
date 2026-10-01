@@ -282,6 +282,12 @@ export async function callback(req, res) {
 
     await upsertAdmin({ openId, email, name });
 
+    const previousToken = req.cookies?.[sessionCookie];
+    if (previousToken) {
+      const previousPayload = await verifySessionToken(previousToken);
+      if (previousPayload?.jti) await revokeAdminSession(previousPayload.jti);
+    }
+
     const issued = await createSessionToken({ openId });
     await createAdminSession({
       jti: issued.jti,
