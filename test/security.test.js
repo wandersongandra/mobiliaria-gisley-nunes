@@ -268,3 +268,62 @@ test('Host público não pode virar origem administrativa por X-Forwarded-Proto'
   if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
   if (prevProxy === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = prevProxy;
 });
+
+
+test('Origin null é rejeitada em mutações com origem canônica configurada', () => {
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+
+  const result = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/contact',
+    host: 'www.gisley.test',
+    origin: 'null',
+    fetchSite: 'same-origin'
+  }));
+
+  assert.equal(result.nextCalled, false);
+  assert.equal(result.statusCode, 403);
+  assert.deepEqual(result.body, { error: 'CROSS_SITE_REQUEST_BLOCKED' });
+
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+});
+
+test('same-site não é aceito como same-origin mesmo com Origin correto', () => {
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+
+  const result = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/admin/site',
+    host: 'painel.gisley.test',
+    origin: 'https://painel.gisley.test',
+    fetchSite: 'same-site'
+  }));
+
+  assert.equal(result.nextCalled, false);
+  assert.equal(result.statusCode, 403);
+
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+});
+
+test('callback OAuth no domínio público não é redirecionado nem processado', () => {
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+
+  const req = originRequest({
+    method: 'GET',
+    host: 'www.gisley.test',
+    originalUrl: '/api/auth/callback?code=abc&state=xyz',
+    origin: '',
+    fetchSite: 'none'
+  });
+  const result = middlewareResult(requireAdminOrigin, req);
+
+  assert.equal(result.nextCalled, false);
+  assert.equal(result.statusCode, 404);
+  assert.deepEqual(result.body, { error: 'NOT_FOUND' });
+
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+});
