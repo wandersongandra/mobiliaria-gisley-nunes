@@ -8,6 +8,7 @@ import {
   deleteContactLead,
   findStaffAccess,
   findStaffAccessByOpenId,
+  findPublishedPhotoByStoragePath,
   getPhoto,
   getProperty,
   getPropertyBySlug,
@@ -188,6 +189,8 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.get(/^\/media\/(.+)$/, async (req, res, next) => {
     try {
       const key = String(req.params[0] || '').replace(/^\/+/, '');
+      const publishedPhoto = await findPublishedPhotoByStoragePath(key);
+      if (!publishedPhoto) return res.status(404).json({ error: 'NOT_FOUND' });
       const signedUrl = await storageGetSignedUrl(key);
       res.setHeader('Cache-Control', 'private, max-age=300');
       return res.redirect(307, signedUrl);
@@ -408,6 +411,21 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       }
       await writeAudit(req, 'photo.add', 'photo', photoId, { propertyId, storagePath });
       return res.status(201).json({ photos });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get('/api/admin/photos/:id/media', requireCapability('property.read'), async (req, res, next) => {
+    try {
+      const photoId = normalizeResourceId(req.params.id, { max: 36 });
+      const photo = await getPhoto(photoId);
+      if (!photo) return res.status(404).json({ error: 'NOT_FOUND' });
+      const property = await getProperty(photo.property_id);
+      if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      const signedUrl = await storageGetSignedUrl(photo.storage_path);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.redirect(307, signedUrl);
     } catch (error) {
       return next(error);
     }
