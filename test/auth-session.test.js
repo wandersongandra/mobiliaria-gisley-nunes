@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { decodeJwt, SignJWT } from 'jose';
 import {
   authCookieNames,
+  cookieOptions,
   createSessionToken,
   hashOAuthState,
   resolveAdminAccess,
@@ -156,6 +157,7 @@ test('produção exige configuração de autenticação fechada e HTTPS', () => 
   assert.equal(authConfigResult({ MANUS_OAUTH_API_URL: 'http://oauth-api.example.test' }), 'OAUTH_URL_INVALID');
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'troque-por-um-segredo' }), 'SESSION_SECRET_NOT_CONFIGURED');
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'a'.repeat(64) }), 'SESSION_SECRET_NOT_CONFIGURED');
+  assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'abcdefghijkl'.repeat(4) }), 'SESSION_SECRET_NOT_CONFIGURED');
   assert.equal(authConfigResult({ MANUS_OAUTH_PORTAL_URL: 'https://user:pass@oauth.example.test' }), 'OAUTH_URL_INVALID');
 });
 
@@ -335,4 +337,51 @@ test('produção nomeia cookies de sessão e OAuth com prefixo __Host', () => {
     sessionCookie: '__Host-gisley_admin_session',
     stateCookie: '__Host-gisley_oauth_state'
   });
+});
+
+
+test('cookie administrativo em produção é host-only e seguro', () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+
+  try {
+    const options = cookieOptions({
+      secure: false,
+      headers: {},
+      get() { return ''; }
+    });
+
+    assert.equal(options.httpOnly, true);
+    assert.equal(options.secure, true);
+    assert.equal(options.sameSite, 'lax');
+    assert.equal(options.path, '/');
+    assert.equal(options.priority, 'high');
+    assert.equal(Object.hasOwn(options, 'domain'), false);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test('vínculo de acesso rejeita openId diferente do registro', () => {
+  const previous = process.env.GISELY_ADMIN_OPEN_IDS;
+  process.env.GISELY_ADMIN_OPEN_IDS = 'owner-open-id';
+
+  try {
+    assert.equal(
+      resolveAdminAccess({
+        openId: 'attacker-open-id',
+        access: {
+          open_id: 'editor-open-id',
+          role: 'editor',
+          active: 1,
+          invited_by: 'owner@gisley.test'
+        }
+      }),
+      null
+    );
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_ADMIN_OPEN_IDS;
+    else process.env.GISELY_ADMIN_OPEN_IDS = previous;
+  }
 });
