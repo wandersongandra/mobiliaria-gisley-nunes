@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { propertyLd, sitemapDate } from '../server/seo.js';
+import { escapeJsonForHtml, propertyLd, sitemapDate } from '../server/seo.js';
 
 test('propertyLd omite oferta quando preço é desconhecido', () => {
   const ld = propertyLd({
