@@ -119,7 +119,9 @@ export async function verifySessionToken(token) {
     const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(secretValue), {
       algorithms: ['HS256'],
       issuer: sessionIssuer,
-      audience: sessionAudience
+      audience: sessionAudience,
+      maxTokenAge: '8h',
+      clockTolerance: '30s'
     });
 
     if (protectedHeader.typ !== 'JWT') return null;
