@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
-import { configuredAdminOrigin, isProduction, port } from './config.js';
+import { assertStorageConfiguration, configuredAdminOrigin, isProduction, port } from './config.js';
 import { closePool, getPropertyBySlug, listProperties, migrate } from './db.js';
 import { registerRoutes } from './routes.js';
 import { assertAuthConfiguration } from './auth.js';
@@ -208,6 +208,7 @@ async function start() {
     assertAssetsReady();
     assertSecurityConfiguration();
     assertAuthConfiguration();
+    assertStorageConfiguration();
   }
   let migration;
   try {
