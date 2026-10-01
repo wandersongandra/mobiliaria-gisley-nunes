@@ -34,7 +34,7 @@ function secureCookie(req) {
   return process.env.NODE_ENV === 'production' || forwardedProto === 'https' || req.secure;
 }
 
-function cookieOptions(req, extra = {}) {
+export function cookieOptions(req, extra = {}) {
   return {
     httpOnly: true,
     secure: secureCookie(req),
@@ -62,8 +62,9 @@ function weakSessionSecret(value) {
   if (Buffer.byteLength(secret, 'utf8') < 32) return true;
   if (/troque-por|change-me|example/i.test(secret)) return true;
   const unique = new Set(secret).size;
-  if (unique < 8) return true;
+  if (unique < 12) return true;
   if (/^(.)\1+$/.test(secret)) return true;
+  if (/^(.{1,16})\1+$/.test(secret)) return true;
   return false;
 }
 
