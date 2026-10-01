@@ -6,16 +6,16 @@ import {
   createAuthChallenge,
   findActiveAdminSession,
   findAdmin,
-  findStaffAccess,
+  findStaffAccessByOpenId,
   revokeAdminSession,
   saveStaffAccess,
   upsertAdmin
 } from './db.js';
 import {
-  adminEmails,
+  adminOpenIds,
   configuredAdminOrigin,
   hasDatabase,
-  isAllowedEmail,
+  isAllowedOpenId,
   oauth,
   sessionSecret
 } from './config.js';
@@ -82,10 +82,10 @@ function assertAuthConfig() {
   if (production) {
     const adminOrigin = configuredAdminOrigin();
     if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
-    const bootstrapManagers = adminEmails();
-    if (bootstrapManagers.length === 0) throw new Error('BOOTSTRAP_MANAGER_NOT_CONFIGURED');
-    if (bootstrapManagers.some((email) => email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
-      throw new Error('BOOTSTRAP_MANAGER_INVALID');
+    const bootstrapOpenIds = adminOpenIds();
+    if (bootstrapOpenIds.length === 0) throw new Error('BOOTSTRAP_IDENTITY_NOT_CONFIGURED');
+    if (bootstrapOpenIds.some((openId) => openId.length > 191 || !/^\S+$/.test(openId))) {
+      throw new Error('BOOTSTRAP_IDENTITY_INVALID');
     }
   }
 }
@@ -146,12 +146,13 @@ export async function verifySessionToken(token) {
   }
 }
 
-export function resolveAdminAccess({ email, access }) {
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-  const bootstrapManager = isAllowedEmail(normalizedEmail);
+export function resolveAdminAccess({ openId, access }) {
+  const normalizedOpenId = String(openId || '').trim();
+  const bootstrapManager = isAllowedOpenId(normalizedOpenId);
 
   if (access?.invited_by === 'environment' && !bootstrapManager) return null;
   if (!bootstrapManager && (!access || !access.active)) return null;
+  if (access?.open_id && String(access.open_id) !== normalizedOpenId) return null;
 
   return {
     role: bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor'),
@@ -185,8 +186,8 @@ export async function currentAdmin(req) {
     return null;
   }
 
-  const access = await findStaffAccess(email);
-  const resolved = resolveAdminAccess({ email, access });
+  const access = await findStaffAccessByOpenId(String(payload.sub));
+  const resolved = resolveAdminAccess({ openId: String(payload.sub), access });
   if (!resolved) {
     await revokeAdminSession(payload.jti);
     return null;
@@ -299,11 +300,8 @@ export async function callback(req, res) {
     const email = String(userInfo.email || '').trim().toLowerCase();
     const openId = String(userInfo.openId || userInfo.open_id || '').trim();
     const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
-    const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
-
     if (
-      emailVerified === false
-      || email.length > 255
+      email.length > 255
       || openId.length === 0
       || openId.length > 191
       || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -311,15 +309,21 @@ export async function callback(req, res) {
       return res.status(403).send('Identidade inválida para acesso administrativo.');
     }
 
-    const bootstrapManager = isAllowedEmail(email);
-    const access = await findStaffAccess(email);
+    const bootstrapManager = isAllowedOpenId(openId);
+    const access = await findStaffAccessByOpenId(openId);
     if (!bootstrapManager && (!access || !access.active)) {
-      return res.status(403).send('Este e-mail não está autorizado a administrar a Gisley Nunes Imóveis.');
+      return res.status(403)
+        .type('text/plain; charset=utf-8')
+        .send(
+          'Acesso administrativo ainda não liberado.\n\n'
+          + `Código de identidade OAuth: ${openId}\n\n`
+          + 'Envie este código ao gestor para vincular seu acesso.'
+        );
     }
 
     const role = bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor');
     if (bootstrapManager) {
-      await saveStaffAccess({ email, name, role: 'manager', active: true, invitedBy: 'environment' });
+      await saveStaffAccess({ email, openId, name, role: 'manager', active: true, invitedBy: 'environment' });
     }
 
     await upsertAdmin({ openId, email, name });
