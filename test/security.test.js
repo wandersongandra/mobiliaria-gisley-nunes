@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { configuredAdminOrigin, configuredPublicOrigin } from '../server/config.js';
-import { requestHostOrigin, requestOrigin, requireAdminOrigin } from '../server/security.js';
+import {
+  hostIsKnown,
+  requestHostOrigin,
+  requestOrigin,
+  requireAdminOrigin,
+  requireSameOrigin
+} from '../server/security.js';
 
 function mockRequest({ host = 'localhost:3000', proto = '' } = {}) {
   return {
@@ -86,4 +92,119 @@ test('requireAdminOrigin redireciona login iniciado no domínio público', () =>
 
   if (previousAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = previousAdmin;
   if (previousPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = previousPublic;
+});
+
+
+function middlewareResult(middleware, req) {
+  const result = { nextCalled: false, statusCode: 200, body: null };
+  const res = {
+    status(code) { result.statusCode = code; return this; },
+    json(value) { result.body = value; return this; },
+    redirect(code, location) { result.statusCode = code; result.location = location; return this; }
+  };
+  middleware(req, res, () => { result.nextCalled = true; });
+  return result;
+}
+
+function originRequest({
+  method = 'POST',
+  host = 'www.gisley.test',
+  originalUrl = '/api/contact',
+  origin = '',
+  fetchSite = '',
+  secure = true
+} = {}) {
+  return {
+    method,
+    originalUrl,
+    url: originalUrl,
+    path: originalUrl,
+    secure,
+    socket: { remoteAddress: '127.0.0.1' },
+    headers: {
+      origin,
+      'sec-fetch-site': fetchSite,
+      'x-forwarded-proto': secure ? 'https' : ''
+    },
+    get(name) {
+      const key = name.toLowerCase();
+      if (key === 'host') return host;
+      if (key === 'origin') return origin;
+      if (key === 'sec-fetch-site') return fetchSite;
+      return '';
+    }
+  };
+}
+
+test('hostIsKnown aceita somente hosts canônicos quando configurados', () => {
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+
+  assert.equal(hostIsKnown(originRequest({ host: 'www.gisley.test' })), true);
+  assert.equal(hostIsKnown(originRequest({ host: 'painel.gisley.test' })), true);
+  assert.equal(hostIsKnown(originRequest({ host: 'evil.example' })), false);
+  assert.equal(hostIsKnown(originRequest({ host: 'www.gisley.test.evil.example' })), false);
+
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+});
+
+test('origens canônicas separam mutações públicas e administrativas', () => {
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+
+  const publicOk = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/contact',
+    host: 'www.gisley.test',
+    origin: 'https://www.gisley.test',
+    fetchSite: 'same-origin'
+  }));
+  assert.equal(publicOk.nextCalled, true);
+
+  const panelCannotPostContact = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/contact',
+    host: 'www.gisley.test',
+    origin: 'https://painel.gisley.test',
+    fetchSite: 'same-site'
+  }));
+  assert.equal(panelCannotPostContact.statusCode, 403);
+
+  const adminOk = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/admin/site',
+    host: 'painel.gisley.test',
+    origin: 'https://painel.gisley.test',
+    fetchSite: 'same-origin'
+  }));
+  assert.equal(adminOk.nextCalled, true);
+
+  const publicCannotMutateAdmin = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/admin/site',
+    host: 'painel.gisley.test',
+    origin: 'https://www.gisley.test',
+    fetchSite: 'same-site'
+  }));
+  assert.equal(publicCannotMutateAdmin.statusCode, 403);
+
+  const missingOrigin = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/admin/site',
+    host: 'painel.gisley.test',
+    origin: '',
+    fetchSite: 'same-origin'
+  }));
+  assert.equal(missingOrigin.statusCode, 403);
+
+  const contradictoryFetchMetadata = middlewareResult(requireSameOrigin, originRequest({
+    originalUrl: '/api/admin/site',
+    host: 'painel.gisley.test',
+    origin: 'https://painel.gisley.test',
+    fetchSite: 'cross-site'
+  }));
+  assert.equal(contradictoryFetchMetadata.statusCode, 403);
+
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
 });
