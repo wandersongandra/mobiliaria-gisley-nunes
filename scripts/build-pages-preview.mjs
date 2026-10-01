@@ -157,6 +157,15 @@ await render('contato.ejs', 'contato/index.html', {
   })
 });
 
+await render('termos.ejs', 'termos/index.html', {
+  assets,
+  page: page({
+    title: 'Termos de uso — Gisley Nunes Imóveis',
+    description: 'Termos de uso do site Gisley Nunes Imóveis.',
+    pathname: '/termos'
+  })
+});
+
 await render('privacidade.ejs', 'privacidade/index.html', {
   assets,
   page: page({
@@ -206,4 +215,4 @@ await writeFile(path.join(outDir, '_headers'), `/*
   Referrer-Policy: strict-origin-when-cross-origin
 `, 'utf8');
 
-console.log(`[preview] generated ${properties.length + 6} pages in dist-preview`);
+console.log(`[preview] generated ${properties.length + 7} pages in dist-preview`);
