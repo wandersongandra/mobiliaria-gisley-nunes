@@ -149,11 +149,24 @@ export function validSessionClaims(payload, nowMs = Date.now()) {
   return true;
 }
 
+function canonicalJwtCompact(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+  return parts.every((part) => {
+    if (!part || !/^[A-Za-z0-9_-]+$/.test(part)) return false;
+    try {
+      return Buffer.from(part, 'base64url').toString('base64url') === part;
+    } catch {
+      return false;
+    }
+  });
+}
+
 export async function verifySessionToken(token) {
   const secretValue = sessionSecret();
   if (weakSessionSecret(secretValue)) return null;
   if (typeof token !== 'string' || token.length < 32 || token.length > 4096) return null;
-  if (token.split('.').length !== 3) return null;
+  if (!canonicalJwtCompact(token)) return null;
 
   try {
     const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(secretValue), {
