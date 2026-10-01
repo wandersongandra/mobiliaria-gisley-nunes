@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { adminOpenIds, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
+import { adminOpenIds, databaseSslConfig, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
 import { normalizeContactLead, normalizePropertyInput, normalizePropertySlug, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
@@ -15,7 +15,9 @@ export function getPool() {
       queueLimit: 100,
       connectTimeout: 10000,
       enableKeepAlive: true,
-      keepAliveInitialDelay: 0
+      keepAliveInitialDelay: 0,
+      multipleStatements: false,
+      ssl: databaseSslConfig()
     });
   }
   return pool;
@@ -1077,7 +1079,10 @@ export async function createContactLead(input = {}) {
 export async function listContactLeads({ limit = 100 } = {}) {
   const db = getPool();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 250));
-  const [rows] = await db.query(`SELECT id, name, email, interest, message, property_path, status, created_at, updated_at FROM morada_contact_leads ORDER BY created_at DESC LIMIT ${safeLimit}`);
+  const [rows] = await db.execute(
+    'SELECT id, name, email, interest, message, property_path, status, created_at, updated_at FROM morada_contact_leads ORDER BY created_at DESC LIMIT ?',
+    [safeLimit]
+  );
   return rows;
 }
 
@@ -1123,11 +1128,12 @@ export async function recordAudit({ actorEmail, actorOpenId = null, action, enti
 export async function listAuditLog({ limit = 100 } = {}) {
   const db = getPool();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 250));
-  const [rows] = await db.query(
+  const [rows] = await db.execute(
     `SELECT id,actor_email,actor_open_id,action,entity_type,entity_id,details,created_at
      FROM morada_audit_log
      ORDER BY created_at DESC
-     LIMIT ${safeLimit}`
+     LIMIT ?`,
+    [safeLimit]
   );
   return rows;
 }
