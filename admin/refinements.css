@@ -46,3 +46,9 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 
 .team-identity{display:block;max-width:250px;margin-top:5px;color:#718182;font:8px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .team-form label small{color:#8a9899;font-size:8px;font-weight:400}
+
+.session-status{min-height:14px;margin:0 0 7px;color:#718182;font-size:9px;line-height:1.45;text-align:center}
+.session-status[data-tone="error"]{color:#a76052}
+.logout-all-button{width:100%;margin-bottom:7px;padding:8px 10px;border:0;background:transparent;color:#7b898a;font-size:9px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.logout-all-button:hover:not(:disabled){color:#123c46}
+.logout-all-button:disabled,.logout-button:disabled{opacity:.55;cursor:not-allowed}
