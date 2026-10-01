@@ -42,9 +42,13 @@ test('JWT administrativo válido contém apenas identidade e controles de sessã
 test('JWT adulterado é rejeitado', async () => {
   await withSecret(strongSecret, async () => {
     const issued = await createSessionToken({ openId: 'oauth-user-123' });
-    const last = issued.token.at(-1);
-    const replacement = last === 'a' ? 'b' : 'a';
-    const tampered = issued.token.slice(0, -1) + replacement;
+    const parts = issued.token.split('.');
+    const signature = parts[2];
+    const index = Math.floor(signature.length / 2);
+    const current = signature[index];
+    const replacement = current === 'A' ? 'B' : 'A';
+    parts[2] = signature.slice(0, index) + replacement + signature.slice(index + 1);
+    const tampered = parts.join('.');
     assert.equal(await verifySessionToken(tampered), null);
   });
 });
