@@ -1,3 +1,4 @@
+import { SignJWT } from 'jose';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -208,6 +209,93 @@ test('verificação JWT rejeita formatos absurdos antes da criptografia', async 
     assert.equal(await verifySessionToken('a.b'), null);
     assert.equal(await verifySessionToken('x'.repeat(5000)), null);
     assert.equal(await verifySessionToken(null), null);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
+    else process.env.GISELY_SESSION_SECRET = previous;
+  }
+});
+
+
+test('JWT administrativo rejeita issuer, audience e typ incorretos', async () => {
+  const previous = process.env.GISELY_SESSION_SECRET;
+  process.env.GISELY_SESSION_SECRET = 'x9N#4qLm7!P2vR8@cT5$wY1&kD6*eF3zH0+uJ9sB';
+  const secret = new TextEncoder().encode(process.env.GISELY_SESSION_SECRET);
+  const now = Math.floor(Date.now() / 1000);
+  const base = () => new SignJWT({})
+    .setSubject('oauth-user-123')
+    .setJti('123e4567-e89b-42d3-a456-426614174000')
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600);
+
+  try {
+    const wrongIssuer = await base()
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuer('outro-sistema')
+      .setAudience('gisley-admin')
+      .sign(secret);
+    assert.equal(await verifySessionToken(wrongIssuer), null);
+
+    const wrongAudience = await base()
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuer('gisley-nunes-imoveis')
+      .setAudience('outro-painel')
+      .sign(secret);
+    assert.equal(await verifySessionToken(wrongAudience), null);
+
+    const wrongTyp = await base()
+      .setProtectedHeader({ alg: 'HS256', typ: 'NOT-JWT' })
+      .setIssuer('gisley-nunes-imoveis')
+      .setAudience('gisley-admin')
+      .sign(secret);
+    assert.equal(await verifySessionToken(wrongTyp), null);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
+    else process.env.GISELY_SESSION_SECRET = previous;
+  }
+});
+
+test('JWT administrativo rejeita claim temporal futura e janela excessiva', async () => {
+  const previous = process.env.GISELY_SESSION_SECRET;
+  process.env.GISELY_SESSION_SECRET = 'x9N#4qLm7!P2vR8@cT5$wY1&kD6*eF3zH0+uJ9sB';
+  const secret = new TextEncoder().encode(process.env.GISELY_SESSION_SECRET);
+  const now = Math.floor(Date.now() / 1000);
+
+  try {
+    const futureIssued = await new SignJWT({})
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuer('gisley-nunes-imoveis')
+      .setAudience('gisley-admin')
+      .setSubject('oauth-user-123')
+      .setJti('123e4567-e89b-42d3-a456-426614174000')
+      .setIssuedAt(now + 120)
+      .setExpirationTime(now + 3600)
+      .sign(secret);
+    assert.equal(await verifySessionToken(futureIssued), null);
+
+    const tooLong = await new SignJWT({})
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuer('gisley-nunes-imoveis')
+      .setAudience('gisley-admin')
+      .setSubject('oauth-user-123')
+      .setJti('123e4567-e89b-42d3-a456-426614174000')
+      .setIssuedAt(now)
+      .setExpirationTime(now + (9 * 60 * 60))
+      .sign(secret);
+    assert.equal(await verifySessionToken(tooLong), null);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
+    else process.env.GISELY_SESSION_SECRET = previous;
+  }
+});
+
+test('segredo administrativo fraco nunca emite sessão', async () => {
+  const previous = process.env.GISELY_SESSION_SECRET;
+  process.env.GISELY_SESSION_SECRET = 'change-me';
+  try {
+    await assert.rejects(
+      () => createSessionToken({ openId: 'oauth-user-123' }),
+      /SESSION_SECRET_NOT_CONFIGURED/
+    );
   } finally {
     if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
     else process.env.GISELY_SESSION_SECRET = previous;
