@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { propertyLd } from '../server/seo.js';
+import { propertyLd, sitemapDate } from '../server/seo.js';
 
 test('propertyLd omite oferta quando preço é desconhecido', () => {
   const ld = propertyLd({
@@ -26,4 +26,12 @@ test('propertyLd representa aluguel com preço mensal', () => {
   assert.equal(ld.offers.priceCurrency, 'BRL');
   assert.equal(ld.offers.priceSpecification.unitText, 'MONTH');
   assert.equal(ld.offers.priceSpecification.price, 18500);
+});
+
+
+test('sitemapDate gera datas ISO válidas', () => {
+  assert.equal(sitemapDate(new Date('2026-10-01T12:30:00Z')), '2026-10-01');
+  assert.equal(sitemapDate('2026-09-30T23:59:00Z'), '2026-09-30');
+  assert.equal(sitemapDate('inválido'), null);
+  assert.equal(sitemapDate(null), null);
 });
