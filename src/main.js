@@ -5,8 +5,13 @@ function escapeHTML(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]);
 }
 
-function priceBand(price) {
+function priceBand(price, purpose = 'Comprar') {
   const value = Number(price || 0);
+  if (purpose === 'Alugar') {
+    if (value <= 5000) return 1;
+    if (value <= 10000) return 2;
+    return 3;
+  }
   if (value < 1500000) return 1;
   if (value <= 3000000) return 2;
   return 3;
@@ -26,9 +31,13 @@ function normalizeProperty(item) {
     type: String(item.type || ''),
     purpose: String(item.purpose || 'Comprar'),
     price: String(item.price_label ?? item.priceLabel ?? ''),
-    priceValue: Number(item.price_band ?? item.priceBand ?? priceBand(item.price)),
+    priceValue: priceBand(item.price, String(item.purpose || 'Comprar')),
     bedrooms,
-    meta: [`${bedrooms} quartos`, `${bathrooms} banheiros`, `${areaM2} m²`],
+    meta: [
+      bedrooms > 0 ? `${bedrooms} ${bedrooms === 1 ? 'quarto' : 'quartos'}` : null,
+      bathrooms > 0 ? `${bathrooms} ${bathrooms === 1 ? 'banheiro' : 'banheiros'}` : null,
+      areaM2 > 0 ? `${areaM2} m²` : null
+    ].filter(Boolean),
     image: String(item.cover_url ?? item.coverUrl ?? ''),
     tag: item.is_featured ? 'destaque' : 'curadoria'
   };
@@ -177,6 +186,7 @@ function initListing() {
 
   function clearFilters() {
     Object.values(filters).forEach((filter) => { if (filter) filter.value = 'all'; });
+    updatePriceOptions();
     renderListings(catalog);
   }
 
@@ -193,7 +203,37 @@ function initListing() {
     fillSelect(filters.type, types, 'Todos os tipos');
   }
 
+  function updatePriceOptions() {
+    const select = filters.price;
+    if (!select) return;
+    const purpose = filters.purpose?.value || 'all';
+    if (purpose === 'all') {
+      select.innerHTML = '<option value="all">Escolha comprar ou alugar</option>';
+      select.value = 'all';
+      select.disabled = true;
+      return;
+    }
+
+    select.disabled = false;
+    const options = purpose === 'Alugar'
+      ? [
+          ['all', 'Qualquer valor'],
+          ['1', 'Até R$ 5 mil / mês'],
+          ['2', 'R$ 5 mil a R$ 10 mil / mês'],
+          ['3', 'Acima de R$ 10 mil / mês']
+        ]
+      : [
+          ['all', 'Qualquer valor'],
+          ['1', 'Até R$ 1,5 mi'],
+          ['2', 'R$ 1,5 mi a R$ 3 mi'],
+          ['3', 'Acima de R$ 3 mi']
+        ];
+    select.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+    select.value = 'all';
+  }
+
   Object.values(filters).forEach((filter) => filter?.addEventListener('change', () => form?.classList.add('has-pending-filters')));
+  filters.purpose?.addEventListener('change', updatePriceOptions);
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -220,6 +260,7 @@ function initListing() {
       const payload = await response.json();
       catalog = Array.isArray(payload?.properties) ? payload.properties.map(normalizeProperty) : [];
       populateFilterOptions();
+      updatePriceOptions();
       renderListings(catalog);
     } catch {
       grid.innerHTML = '';
