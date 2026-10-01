@@ -8,7 +8,7 @@ import { closePool, getPropertyBySlug, listProperties, migrate } from './db.js';
 import { registerRoutes } from './routes.js';
 import { assertAssetsReady, assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { escapeLd, organizationLd, propertyLd } from './seo.js';
+import { escapeLd, organizationLd, propertyLd, sitemapDate } from './seo.js';
 import { requestHostOrigin, requestOrigin, securityHeaders } from './security.js';
 import { publicProperty } from './presenters.js';
 
@@ -50,12 +50,6 @@ function originFrom(req) {
   return requestOrigin(req) || `http://localhost:${port}`;
 }
 
-export function sitemapDate(value) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
-}
 
 app.use(async (req, res, next) => {
   const skipPageLocals = req.path.startsWith('/api/')
