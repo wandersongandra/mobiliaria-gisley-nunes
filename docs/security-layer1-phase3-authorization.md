@@ -153,7 +153,7 @@ Requisitos:
 - payload administrativo minimizado;
 - papel desconhecido fail-closed;
 - CI: PASS;
-- CodeQL: aguardando confirmação final desta revisão no momento da escrita.
+- CodeQL: PASS.
 
 ## Próxima fase
 
