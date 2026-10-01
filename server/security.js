@@ -95,6 +95,9 @@ export function assertSecurityConfiguration() {
 
   const proxyMode = String(process.env.TRUST_PROXY_MODE || '').trim();
   if (proxyMode && proxyMode !== 'cloudflare') throw new Error('INVALID_TRUST_PROXY_MODE');
+
+  const trustClientIp = String(process.env.TRUST_CLIENT_IP_HEADER || '').trim().toLowerCase() === 'true';
+  if (trustClientIp && proxyMode !== 'cloudflare') throw new Error('UNSAFE_CLIENT_IP_TRUST');
   return true;
 }
 
@@ -191,11 +194,15 @@ export function requireSameOrigin(req, res, next) {
   return res.status(403).json({ error: 'CROSS_SITE_REQUEST_BLOCKED' });
 }
 
-function clientAddress(req) {
-  if (process.env.TRUST_PROXY_MODE === 'cloudflare') {
+export function clientAddress(req) {
+  const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
+  const trustClientIp = String(process.env.TRUST_CLIENT_IP_HEADER || '').trim().toLowerCase() === 'true';
+
+  if (trustCloudflare && trustClientIp) {
     const candidate = firstHeader(req.headers['cf-connecting-ip']);
     if (isIP(candidate)) return candidate;
   }
+
   return String(req.socket?.remoteAddress || 'unknown');
 }
 
