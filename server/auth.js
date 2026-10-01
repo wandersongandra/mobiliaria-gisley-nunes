@@ -12,6 +12,7 @@ import {
   upsertAdmin
 } from './db.js';
 import {
+  adminEmails,
   configuredAdminOrigin,
   hasDatabase,
   isAllowedEmail,
@@ -73,6 +74,7 @@ function assertAuthConfig() {
   if (production) {
     const adminOrigin = configuredAdminOrigin();
     if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
+    if (adminEmails().length === 0) throw new Error('BOOTSTRAP_MANAGER_NOT_CONFIGURED');
   }
 }
 
