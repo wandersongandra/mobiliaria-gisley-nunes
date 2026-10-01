@@ -13,6 +13,8 @@ import {
   capabilitiesForRole,
   hasCapability,
   requireCapability,
+  staffMutationError,
+  staffRemovalError,
   staffView
 } from '../server/authorization.js';
 
@@ -336,4 +338,54 @@ test('persistência também impede Editor de publicar ou destacar', () => {
     { status: 'published', featured: true },
     { requireDraft: false }
   ));
+});
+
+
+test('gestor não consegue remover ou rebaixar a própria identidade', () => {
+  const actor = { openId: 'manager-open-id', role: 'manager' };
+  const self = {
+    open_id: 'manager-open-id',
+    role: 'manager',
+    active: 1,
+    is_bootstrap: false
+  };
+
+  assert.equal(
+    staffMutationError(actor, self, { role: 'editor' }),
+    'CANNOT_CHANGE_SELF_ACCESS'
+  );
+  assert.equal(
+    staffMutationError(actor, self, { active: false }),
+    'CANNOT_CHANGE_SELF_ACCESS'
+  );
+  assert.equal(staffMutationError(actor, self, { name: 'Novo nome' }), null);
+  assert.equal(staffRemovalError(actor, self), 'CANNOT_REMOVE_SELF');
+});
+
+test('gestor bootstrap não pode ser rebaixado desativado ou removido', () => {
+  const actor = { openId: 'other-manager', role: 'manager' };
+  const bootstrap = {
+    open_id: 'bootstrap-open-id',
+    role: 'manager',
+    active: 1,
+    is_bootstrap: true
+  };
+
+  assert.equal(
+    staffMutationError(actor, bootstrap, { role: 'editor' }),
+    'BOOTSTRAP_MANAGER_PROTECTED'
+  );
+  assert.equal(
+    staffMutationError(actor, bootstrap, { active: false }),
+    'BOOTSTRAP_MANAGER_PROTECTED'
+  );
+  assert.equal(staffMutationError(actor, bootstrap, { name: 'Nome atualizado' }), null);
+  assert.equal(staffRemovalError(actor, bootstrap), 'BOOTSTRAP_MANAGER_PROTECTED');
+});
+
+test('ator sem papel manager falha fechado nas mutações de equipe', () => {
+  const editor = { openId: 'editor-open-id', role: 'editor' };
+  const target = { open_id: 'other-open-id', role: 'editor', active: 1, is_bootstrap: false };
+  assert.equal(staffMutationError(editor, target, { role: 'manager' }), 'CAPABILITY_REQUIRED');
+  assert.equal(staffRemovalError(editor, target), 'CAPABILITY_REQUIRED');
 });
