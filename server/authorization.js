@@ -53,11 +53,27 @@ export function staffView(member, actor) {
     name: String(member?.name || ''),
     role: member?.role === 'manager' ? 'manager' : 'editor',
     active: Boolean(member?.active),
-    invited_by: member?.invited_by || null,
     identity_hint: identityHint,
     is_self: Boolean(openId && actor?.openId && openId === String(actor.openId)),
-    is_bootstrap: Boolean(member?.is_bootstrap),
-    created_at: member?.created_at || null,
-    updated_at: member?.updated_at || null
+    is_bootstrap: Boolean(member?.is_bootstrap)
+  };
+}
+
+
+export function auditView(entry = {}) {
+  const openId = String(entry.actor_open_id || '');
+  const identityHint = openId
+    ? (openId.length <= 12 ? openId : `${openId.slice(0, 8)}…${openId.slice(-4)}`)
+    : '';
+
+  return {
+    id: entry.id,
+    actor_email: entry.actor_email,
+    actor_identity_hint: identityHint,
+    action: entry.action,
+    entity_type: entry.entity_type,
+    entity_id: entry.entity_id,
+    details: entry.details,
+    created_at: entry.created_at
   };
 }
