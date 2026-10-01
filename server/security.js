@@ -38,6 +38,26 @@ function configuredHost(origin) {
   try { return new URL(origin).host.toLowerCase(); } catch { return ''; }
 }
 
+function hostMatchesOrigin(host, origin) {
+  if (!host || !origin) return false;
+  try {
+    const parsedOrigin = new URL(origin);
+    const expectedHost = parsedOrigin.hostname.toLowerCase();
+    const candidate = new URL(`http://${host}`);
+    const candidateHost = candidate.hostname.toLowerCase();
+    if (candidateHost !== expectedHost) return false;
+
+    const candidatePort = candidate.port ? Number(candidate.port) : 0;
+    const expectedPort = parsedOrigin.port
+      ? Number(parsedOrigin.port)
+      : (parsedOrigin.protocol === 'https:' ? 443 : 80);
+
+    return candidatePort === 0 || candidatePort === expectedPort;
+  } catch {
+    return false;
+  }
+}
+
 function isLoopbackAddress(value) {
   const address = String(value || '').replace(/^::ffff:/, '');
   return address === '127.0.0.1' || address === '::1';
@@ -53,7 +73,9 @@ export function hostIsKnown(req) {
   ].filter(Boolean));
 
   if (!allowed.size) return true;
-  return allowed.has(host);
+  return [configuredPublicOrigin(), configuredAdminOrigin()]
+    .filter(Boolean)
+    .some((origin) => hostMatchesOrigin(host, origin));
 }
 
 export function requireKnownHost(req, res, next) {
@@ -73,8 +95,8 @@ export function requestHostOrigin(req) {
 
   const publicOrigin = configuredPublicOrigin();
   const adminOrigin = configuredAdminOrigin();
-  if (publicOrigin && configuredHost(publicOrigin) === host) return publicOrigin;
-  if (adminOrigin && configuredHost(adminOrigin) === host) return adminOrigin;
+  if (publicOrigin && hostMatchesOrigin(host, publicOrigin)) return publicOrigin;
+  if (adminOrigin && hostMatchesOrigin(host, adminOrigin)) return adminOrigin;
 
   const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
   const forwardedProto = trustCloudflare ? firstHeader(req.headers['x-forwarded-proto']) : '';
