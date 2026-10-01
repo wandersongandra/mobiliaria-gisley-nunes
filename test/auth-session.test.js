@@ -57,6 +57,30 @@ test('JWT adulterado ou expirado é rejeitado', async () => {
   }
 });
 
+test('JWT com idade absoluta maior que oito horas é rejeitado mesmo com expiração futura', async () => {
+  const previous = process.env.GISELY_SESSION_SECRET;
+  process.env.GISELY_SESSION_SECRET = strongSecret;
+
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const secret = new TextEncoder().encode(strongSecret);
+    const token = await new SignJWT({})
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuer('gisley-nunes-imoveis')
+      .setAudience('gisley-admin')
+      .setSubject('oauth-user-123')
+      .setJti('22222222-2222-4222-8222-222222222222')
+      .setIssuedAt(now - (9 * 60 * 60))
+      .setExpirationTime(now + 60 * 60)
+      .sign(secret);
+
+    assert.equal(await verifySessionToken(token), null);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
+    else process.env.GISELY_SESSION_SECRET = previous;
+  }
+});
+
 test('JWT com audiência antiga ou diferente é rejeitado', async () => {
   const previous = process.env.GISELY_SESSION_SECRET;
   process.env.GISELY_SESSION_SECRET = strongSecret;
