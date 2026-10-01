@@ -216,7 +216,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       if (!canCreateProperty(req.admin, req.body || {})) {
         return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       }
-      const property = await saveProperty(req.body);
+      const property = await saveProperty(req.body, null, {
+        requireDraft: !hasCapability(req.admin, 'property.publish')
+      });
       await writeAudit(req, 'property.create', 'property', property.id, { title: property.title, status: property.status });
       return res.status(201).json({ property: adminProperty(property) });
     } catch (error) {
