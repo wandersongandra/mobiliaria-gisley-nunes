@@ -509,3 +509,25 @@ test('Host desconhecido em produção recebe 421 antes das rotas', async () => {
   assert.equal(result.statusCode, 421);
   assert.deepEqual(result.body, { error: 'MISDIRECTED_REQUEST' });
 });
+
+
+test('CSP não permite unsafe-inline unsafe-eval nem atributos script', () => {
+  const req = { headers: {}, get() { return ''; } };
+  const headers = new Map();
+  const res = {
+    locals: {},
+    setHeader(name, value) { headers.set(String(name).toLowerCase(), String(value)); }
+  };
+  let called = false;
+  securityHeaders(req, res, () => { called = true; });
+
+  assert.equal(called, true);
+  const csp = headers.get('content-security-policy') || '';
+  assert.match(csp, /script-src 'self' 'nonce-[^']+'/);
+  assert.match(csp, /script-src-attr 'none'/);
+  assert.match(csp, /object-src 'none'/);
+  assert.match(csp, /frame-src 'none'/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.equal(csp.includes("'unsafe-inline'"), false);
+  assert.equal(csp.includes("'unsafe-eval'"), false);
+});
