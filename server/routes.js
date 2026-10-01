@@ -6,12 +6,14 @@ import {
   databaseReady,
   getProperty,
   getPropertyBySlug,
+  listAuditLog,
   listContactLeads,
   listProperties,
   listStaffAccess,
   removePhoto,
   removeStaffAccess,
   removeTestimonial,
+  recordAudit,
   reorderPhotos,
   saveProperty,
   saveSiteSettings,
@@ -56,6 +58,20 @@ function extensionOf(fileName) {
 function adminApiGuard(req, res, next) {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return adminLimiter(req, res, next);
   return next();
+}
+
+async function writeAudit(req, action, entityType, entityId, details = null) {
+  try {
+    await recordAudit({
+      actorEmail: req.admin?.email || 'system',
+      action,
+      entityType,
+      entityId,
+      details
+    });
+  } catch (error) {
+    console.warn('[audit] write failed:', error.message);
+  }
 }
 
 export function registerRoutes(app) {
@@ -162,7 +178,13 @@ export function registerRoutes(app) {
   });
 
   app.post('/api/admin/properties', async (req, res, next) => {
-    try { res.status(201).json({ property: await saveProperty(req.body) }); } catch (error) { next(error); }
+    try {
+      const property = await saveProperty(req.body);
+      await writeAudit(req, 'property.create', 'property', property.id, { title: property.title, status: property.status });
+      return res.status(201).json({ property });
+    } catch (error) {
+      return next(error);
+    }
   });
 
   app.get('/api/admin/properties/:id', async (req, res, next) => {
@@ -179,6 +201,7 @@ export function registerRoutes(app) {
     try {
       const property = await saveProperty(req.body, req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'property.update', 'property', property.id, { title: property.title, status: property.status });
       return res.json({ property });
     } catch (error) {
       return next(error);
@@ -188,7 +211,9 @@ export function registerRoutes(app) {
   app.delete('/api/admin/properties/:id', async (req, res, next) => {
     try {
       const removed = await softDeleteProperty(req.params.id);
-      return removed ? res.status(204).end() : res.status(404).json({ error: 'NOT_FOUND' });
+      if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'property.archive', 'property', req.params.id);
+      return res.status(204).end();
     } catch (error) {
       return next(error);
     }
@@ -272,8 +297,9 @@ export function registerRoutes(app) {
         return res.status(400).json({ error: 'INVALID_ASSET' });
       }
 
+      const photoId = crypto.randomUUID();
       const photos = await addPhoto({
-        id: crypto.randomUUID(),
+        id: photoId,
         propertyId: req.params.id,
         storagePath,
         url: storageAssetUrl(storagePath),
@@ -287,6 +313,7 @@ export function registerRoutes(app) {
         height: parsedHeight,
         uploadedBy: req.admin.email
       });
+      await writeAudit(req, 'photo.add', 'photo', photoId, { propertyId: req.params.id, storagePath });
       return res.status(201).json({ photos });
     } catch (error) {
       return next(error);
@@ -302,6 +329,7 @@ export function registerRoutes(app) {
       } catch (error) {
         console.warn('[storage] orphan cleanup deferred:', error.message);
       }
+      await writeAudit(req, 'photo.remove', 'photo', req.params.id, { propertyId: removed.property_id });
       return res.status(204).end();
     } catch (error) {
       return next(error);
@@ -314,7 +342,9 @@ export function registerRoutes(app) {
       if (!Array.isArray(photoIds) || photoIds.length > 100) return res.status(400).json({ error: 'INVALID_ORDER' });
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
-      return res.json({ photos: await reorderPhotos(req.params.id, photoIds) });
+      const photos = await reorderPhotos(req.params.id, photoIds);
+      await writeAudit(req, 'photo.reorder', 'property', req.params.id, { photoCount: photos.length });
+      return res.json({ photos });
     } catch (error) {
       return next(error);
     }
@@ -324,6 +354,7 @@ export function registerRoutes(app) {
     try {
       const photos = await setPhotoCover(req.params.id);
       if (!photos) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'photo.cover', 'photo', req.params.id);
       return res.json({ photos });
     } catch (error) {
       return next(error);
@@ -337,6 +368,7 @@ export function registerRoutes(app) {
   app.put('/api/admin/site', requireManager(), async (req, res, next) => {
     try {
       await saveSiteSettings(req.body || {});
+      await writeAudit(req, 'site.update', 'site', '1');
       res.json({ site: await getSiteInfo() });
     } catch (error) {
       next(error);
@@ -346,7 +378,10 @@ export function registerRoutes(app) {
   app.post('/api/admin/testimonials', requireManager(), async (req, res, next) => {
     try {
       const data = normalizeTestimonial(req.body || {});
-      res.status(201).json({ testimonials: await addTestimonial(data) });
+      const testimonials = await addTestimonial(data);
+      const created = testimonials.find((item) => item.author === data.author && item.quote === data.quote);
+      await writeAudit(req, 'testimonial.create', 'testimonial', created?.id || null, { author: data.author });
+      res.status(201).json({ testimonials });
     } catch (error) {
       next(error);
     }
@@ -355,7 +390,9 @@ export function registerRoutes(app) {
   app.delete('/api/admin/testimonials/:id', requireManager(), async (req, res, next) => {
     try {
       const removed = await removeTestimonial(req.params.id);
-      return removed ? res.status(204).end() : res.status(404).json({ error: 'NOT_FOUND' });
+      if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'testimonial.remove', 'testimonial', req.params.id);
+      return res.status(204).end();
     } catch (error) {
       return next(error);
     }
@@ -367,8 +404,19 @@ export function registerRoutes(app) {
 
   app.patch('/api/admin/leads/:id', async (req, res, next) => {
     try {
-      const updated = await updateContactLeadStatus(req.params.id, String(req.body?.status || ''));
-      return updated ? res.json({ ok: true }) : res.status(404).json({ error: 'NOT_FOUND' });
+      const status = String(req.body?.status || '');
+      const updated = await updateContactLeadStatus(req.params.id, status);
+      if (!updated) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'lead.status', 'lead', req.params.id, { status });
+      return res.json({ ok: true });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get('/api/admin/audit', requireManager(), async (req, res, next) => {
+    try {
+      return res.json({ audit: await listAuditLog({ limit: req.query?.limit }) });
     } catch (error) {
       return next(error);
     }
@@ -392,6 +440,7 @@ export function registerRoutes(app) {
         return res.status(400).json({ error: 'INVALID_TEAM_MEMBER' });
       }
       const member = await saveStaffAccess({ email, name, role, active: true, invitedBy: req.admin.email });
+      await writeAudit(req, 'team.upsert', 'staff', email, { role: member.role, active: Boolean(member.active) });
       return res.status(201).json({ member });
     } catch (error) {
       return next(error);
@@ -417,6 +466,7 @@ export function registerRoutes(app) {
         active: typeof req.body?.active === 'boolean' ? req.body.active : Boolean(current.active),
         invitedBy: current.invited_by || req.admin.email
       });
+      await writeAudit(req, 'team.update', 'staff', email, { role: member.role, active: Boolean(member.active) });
       return res.json({ member });
     } catch (error) {
       return next(error);
@@ -429,7 +479,9 @@ export function registerRoutes(app) {
       if (email === req.admin.email) return res.status(400).json({ error: 'CANNOT_REMOVE_SELF' });
       if (isAllowedEmail(email)) return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
       const removed = await removeStaffAccess(email);
-      return removed ? res.status(204).end() : res.status(404).json({ error: 'NOT_FOUND' });
+      if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'team.remove', 'staff', email);
+      return res.status(204).end();
     } catch (error) {
       return next(error);
     }
