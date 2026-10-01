@@ -190,6 +190,8 @@ export function securityHeaders(req, res, next) {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Origin-Agent-Cluster', '?1');
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
   if (isProduction) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 }
