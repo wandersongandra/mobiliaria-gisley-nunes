@@ -65,7 +65,7 @@ function canonicalQuery(params) {
     .join('&');
 }
 
-function r2PresignedUrl(filePath, { method = 'GET', expiresSeconds = 600, contentType = '' } = {}) {
+function r2PresignedUrl(filePath, { method = 'GET', expiresSeconds = 600, contentType = '', ifNoneMatch = '' } = {}) {
   if (!hasR2Storage()) throw new Error('R2_NOT_CONFIGURED');
   const key = assertStorageKey(filePath);
   const verb = String(method || 'GET').toUpperCase();
@@ -78,10 +78,14 @@ function r2PresignedUrl(filePath, { method = 'GET', expiresSeconds = 600, conten
   const scope = `${date}/auto/s3/aws4_request`;
   const expires = Math.min(Math.max(Number(expiresSeconds || 600), 1), 604800);
   const normalizedContentType = String(contentType || '').trim().toLowerCase();
-  const signedHeaders = normalizedContentType ? 'content-type;host' : 'host';
-  const canonicalHeaders = normalizedContentType
-    ? `content-type:${normalizedContentType}\nhost:${host}\n`
-    : `host:${host}\n`;
+  const normalizedIfNoneMatch = String(ifNoneMatch || '').trim();
+  const headerEntries = [
+    normalizedContentType ? ['content-type', normalizedContentType] : null,
+    ['host', host],
+    normalizedIfNoneMatch ? ['if-none-match', normalizedIfNoneMatch] : null
+  ].filter(Boolean).sort(([a], [b]) => a.localeCompare(b));
+  const signedHeaders = headerEntries.map(([name]) => name).join(';');
+  const canonicalHeaders = headerEntries.map(([name, value]) => `${name}:${value}\n`).join('');
   const params = {
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
     'X-Amz-Credential': `${r2Storage.accessKeyId}/${scope}`,
@@ -137,7 +141,8 @@ export async function storagePresign(filePath, { contentType = '' } = {}) {
     return r2PresignedUrl(key, {
       method: 'PUT',
       expiresSeconds: r2Storage.uploadExpiresSeconds,
-      contentType
+      contentType,
+      ifNoneMatch: '*'
     });
   }
 
