@@ -57,14 +57,22 @@ function validUrl(value, { httpsOnly = false } = {}) {
   }
 }
 
+function weakSessionSecret(value) {
+  const secret = String(value || '');
+  if (Buffer.byteLength(secret, 'utf8') < 32) return true;
+  if (/troque-por|change-me|example/i.test(secret)) return true;
+  const unique = new Set(secret).size;
+  if (unique < 8) return true;
+  if (/^(.)\1+$/.test(secret)) return true;
+  return false;
+}
+
 function assertAuthConfig() {
   if (!hasDatabase()) throw new Error('AUTH_DATABASE_NOT_CONFIGURED');
   if (!oauth.portalUrl || !oauth.apiUrl || !oauth.projectId) throw new Error('OAUTH_NOT_CONFIGURED');
 
   const secret = sessionSecret();
-  if (Buffer.byteLength(secret, 'utf8') < 32 || /troque-por|change-me|example/i.test(secret)) {
-    throw new Error('SESSION_SECRET_NOT_CONFIGURED');
-  }
+  if (weakSessionSecret(secret)) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
 
   const production = process.env.NODE_ENV === 'production';
   if (!validUrl(oauth.portalUrl, { httpsOnly: production }) || !validUrl(oauth.apiUrl, { httpsOnly: production })) {
