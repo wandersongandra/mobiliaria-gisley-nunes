@@ -27,17 +27,18 @@ function allowed(match) {
   return allowedFragments.some((fragment) => value.includes(fragment.toLowerCase()));
 }
 
-function scan(text, scope) {
+function scanText(text, { scope, location }) {
   const findings = [];
   for (const { name, re } of patterns) {
     re.lastIndex = 0;
-    for (const match of text.matchAll(re)) {
+    for (const match of String(text || '').matchAll(re)) {
       const value = match[0];
       const captured = String(match[1] || match[2] || '').replace(/^['"]|['"]$/g, '');
       if (allowed(value)) continue;
       if (name === 'sensitive-env' && captured.length < 20) continue;
       findings.push({
         scope,
+        location,
         type: name,
         preview: value.slice(0, 12) + (value.length > 12 ? '…' : '')
       });
@@ -55,7 +56,18 @@ function git(args, maxBuffer = 100 * 1024 * 1024) {
   });
 }
 
+const findings = [];
 const tracked = git(['grep', '-nI', '-e', '.', 'HEAD', '--', ':!pnpm-lock.yaml']).toString();
+for (const line of tracked.split('\n')) {
+  if (!line) continue;
+  const match = line.match(/^HEAD:(.*?):(\d+):(.*)$/);
+  if (!match) continue;
+  findings.push(...scanText(match[3], {
+    scope: 'tracked-files',
+    location: `${match[1]}:${match[2]}`
+  }));
+}
+
 const history = git([
   'log',
   '-p',
@@ -68,15 +80,31 @@ const history = git([
   ':(exclude)pnpm-lock.yaml'
 ]);
 
-const findings = [
-  ...scan(tracked, 'tracked-files'),
-  ...scan(history, 'git-history')
-];
+let currentCommit = 'unknown';
+let currentPath = 'unknown';
+for (const line of history.split('\n')) {
+  if (line.startsWith('commit:')) {
+    currentCommit = line.slice('commit:'.length).trim();
+    currentPath = 'unknown';
+    continue;
+  }
+  if (line.startsWith('+++ b/')) {
+    currentPath = line.slice('+++ b/'.length).trim();
+    continue;
+  }
+  if (!line.startsWith('+') && !line.startsWith('-')) continue;
+  if (line.startsWith('+++') || line.startsWith('---')) continue;
+  findings.push(...scanText(line.slice(1), {
+    scope: 'git-history',
+    location: `${currentCommit.slice(0, 12)}:${currentPath}`
+  }));
+  if (findings.length >= 50) break;
+}
 
 if (findings.length) {
   console.error('Potential secrets detected. Values are redacted:');
   for (const finding of findings) {
-    console.error(`- [${finding.scope}] ${finding.type}: ${finding.preview}`);
+    console.error(`- [${finding.scope}] ${finding.location} ${finding.type}: ${finding.preview}`);
   }
   process.exit(1);
 }
