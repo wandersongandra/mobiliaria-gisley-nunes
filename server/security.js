@@ -67,7 +67,9 @@ export function clearCsrfToken(req, res) {
 export function requireCsrfToken(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
 
-  const csrfCookie = requestCsrfCookie(req);
+  const csrfCookie = isProduction
+    ? req.cookies?.['__Host-gisley_csrf']
+    : req.cookies?.gisley_csrf;
   const csrfHeader = String(req.get('x-csrf-token') || '').trim();
 
   if (!verifyCsrfToken(csrfCookie, csrfHeader)) {
