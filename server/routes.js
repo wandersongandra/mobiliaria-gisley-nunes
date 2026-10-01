@@ -44,7 +44,7 @@ import {
   staffView
 } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { createRateLimiter, requireAdminOrigin, requireSameOrigin } from './security.js';
+import { createRateLimiter, requireAdminOrigin, requireAdminRequestContext, requireSameOrigin } from './security.js';
 import {
   safeFileName,
   storageAssetUrl,
@@ -108,6 +108,7 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
 
 export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.use(['/api/auth', '/api/admin'], requireAdminOrigin);
+  app.use('/api/admin', requireAdminRequestContext);
   app.use('/api/auth', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
