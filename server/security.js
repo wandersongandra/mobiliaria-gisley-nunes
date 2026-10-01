@@ -167,12 +167,15 @@ export function securityHeaders(req, res, next) {
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
+    "script-src-attr 'none'",
     "style-src 'self' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     `img-src ${[...new Set(imageSources)].join(' ')}`,
     `connect-src ${[...new Set(connectSources)].join(' ')}`,
     `media-src ${[...new Set(mediaSources)].join(' ')}`,
     "object-src 'none'",
+    "frame-src 'none'",
+    "worker-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'"
