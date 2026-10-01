@@ -70,6 +70,7 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
   try {
     await recordAudit({
       actorEmail: req.admin?.email || 'system',
+      actorOpenId: req.admin?.openId || null,
       action,
       entityType,
       entityId,
