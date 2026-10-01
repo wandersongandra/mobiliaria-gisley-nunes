@@ -5,217 +5,178 @@ Branch auditada: `audit/security-design-2026-09-30`
 
 ## Objetivo
 
-Garantir que autenticação administrativa, emissão de sessão, revogação, logout e retorno OAuth sejam resistentes a replay, token roubado, configuração incompleta e mudanças de permissão.
+Garantir que o painel administrativo dependa de identidade autenticada, sessão verificável e revogável, sem confiar em papel, e-mail ou permissões vindos do navegador.
 
-## Modelo atual
+## Controles validados
 
-- OAuth externo inicia o login.
-- O backend gera um `state` aleatório de 256 bits.
-- Apenas o hash SHA-256 do state é persistido.
-- O challenge é consumido atomicamente e só pode ser usado uma vez.
-- O JWT administrativo contém apenas `sub`, `jti`, issuer, audience, iat e exp.
-- Cada `jti` emitido também é persistido no banco.
-- Toda requisição administrativa revalida:
-  - assinatura/idade do JWT;
-  - sessão server-side ativa;
-  - identidade OAuth atual;
-  - e-mail atual;
-  - acesso ativo;
-  - papel atual.
-- Logout revoga a sessão no banco antes de responder.
-- Mudanças de acesso da equipe revogam todas as sessões do usuário alterado.
+### OAuth
+- `state` aleatório de 32 bytes;
+- cookie `HttpOnly`;
+- challenge armazenado no banco apenas como SHA-256;
+- challenge consumido uma única vez;
+- challenge possui expiração de 10 minutos;
+- callback exige igualdade timing-safe entre query e cookie;
+- redirect URI é salvo no challenge e comparado antes da troca do código;
+- código OAuth tem limite de tamanho;
+- access token do provedor não é persistido no banco nem no navegador;
+- identidade recebida do provedor é validada antes de criar sessão;
+- `emailVerified=false` é rejeitado quando o provider informa explicitamente esse estado.
 
-## Achados e correções
+### Sessão administrativa
+- JWT HS256 com algoritmo fixado na verificação;
+- `typ=JWT` obrigatório;
+- issuer `gisley-nunes-imoveis`;
+- audience `gisley-admin`;
+- `sub` contém apenas o identificador técnico da identidade;
+- `jti` único por sessão;
+- JWT não contém e-mail, nome ou papel;
+- expiração absoluta de 8 horas;
+- `maxTokenAge=8h`;
+- tolerância de relógio limitada a 30 segundos;
+- sessão também precisa existir ativa no banco;
+- sessão revogada/expirada é rejeitada;
+- papel é recalculado a partir do banco/configuração a cada request;
+- remoção/desativação de usuário invalida acesso;
+- mudança de equipe revoga sessões persistidas;
+- secret rotacionado invalida tokens antigos;
+- produção exige secret forte e configuração completa.
 
-### F2-01 — Logout apagava apenas o cookie
-**Severidade:** Alta  
-**Status:** Corrigido
+## Cookies
 
-Antes, o JWT continuaria criptograficamente válido após logout até expirar.
+Em produção:
 
-**Correção:** nova tabela `morada_admin_sessions`, com `jti`, identidade, e-mail, expiração e revogação. Logout revoga o `jti` server-side.
+- sessão: `__Host-gisley_admin_session`;
+- state OAuth: `__Host-gisley_oauth_state`;
+- `HttpOnly`;
+- `Secure`;
+- `SameSite=Lax`;
+- `Path=/`;
+- sem atributo `Domain`;
+- prioridade alta.
 
----
+O prefixo `__Host-` impede compartilhamento do cookie com outros subdomínios e exige cookie Secure com Path raiz.
 
-### F2-02 — OAuth state não tinha consumo server-side de uso único
-**Severidade:** Alta  
-**Status:** Corrigido
+## Achados
 
-O state era comparado com cookie, mas não existia registro atômico para impedir replay concorrente.
-
-**Correção:** nova tabela `morada_auth_challenges`. O state:
-- é gerado com 32 bytes aleatórios;
-- é armazenado apenas como hash SHA-256;
-- expira em 10 minutos;
-- é bloqueado em transação e removido no primeiro uso;
-- falha em qualquer tentativa posterior.
-
----
-
-### F2-03 — JWT carregava dados desnecessários
+### F2-01 — Sessões ligadas a identidade OAuth anterior podiam permanecer no banco
 **Severidade:** Média  
 **Status:** Corrigido
 
-O token continha e-mail, nome e papel.
+Ao atualizar a identidade administrativa, uma sessão antiga associada ao mesmo e-mail com outro OpenID — ou ao mesmo OpenID com outro e-mail — só seria invalidada quando utilizada e revalidada.
 
-**Correção:** JWT agora contém somente identificadores técnicos. E-mail, nome e papel vêm do banco em cada requisição.
+**Correção:** `upsertAdmin` agora revoga, dentro da mesma transação, sessões ativas ligadas às combinações de identidade substituídas antes de atualizar o usuário.
 
----
-
-### F2-04 — Sessão tinha duração de 12 horas sem idade máxima adicional
-**Severidade:** Média  
-**Status:** Corrigido
-
-**Correção:** duração absoluta reduzida para 8 horas e verificação usa `maxTokenAge: 8h`, além do `exp`.
-
----
-
-### F2-05 — OAuth state usava cookie `__Secure-`
+### F2-02 — Quantidade ilimitada de sessões administrativas simultâneas
 **Severidade:** Média-baixa  
 **Status:** Corrigido
 
-**Correção:** em produção, state e sessão usam prefixo `__Host-`, sem Domain e com Path=/, Secure, HttpOnly e SameSite=Lax.
+Cada novo login criava um novo JTI válido por até oito horas, sem limite de sessões simultâneas.
 
----
+**Correção:** limite configurável por `GISELY_MAX_ADMIN_SESSIONS`, padrão 5, mínimo 1 e máximo 10.
 
-### F2-06 — Reautenticação não invalidava a sessão anterior do navegador
+A criação de sessão:
+1. serializa por usuário através da linha de acesso da equipe;
+2. cria a nova sessão;
+3. preserva explicitamente a sessão recém-criada;
+4. mantém somente as sessões anteriores mais recentes permitidas;
+5. revoga as excedentes.
+
+### F2-03 — Secret longo, porém previsível, era aceito
 **Severidade:** Média  
 **Status:** Corrigido
 
-**Correção:** ao concluir novo login, o `jti` anterior presente no navegador é revogado antes da emissão da nova sessão.
+O requisito anterior verificava principalmente comprimento e placeholders conhecidos. Uma sequência repetitiva com 64 caracteres poderia passar.
 
----
+**Correção:** secrets de baixa diversidade e padrões repetitivos são rejeitados, além dos controles de comprimento e placeholders.
 
-### F2-07 — Mudança de papel/acesso não encerrava sessões já emitidas
-**Severidade:** Alta  
+### F2-04 — Configuração de gestor bootstrap não validava formato
+**Severidade:** Baixa  
 **Status:** Corrigido
 
-**Correção:** alteração ou remoção de membro da equipe chama `revokeAdminSessionsByEmail`. O usuário precisa autenticar novamente.
+Produção exigia pelo menos um valor em `GISELY_ADMIN_EMAILS`, mas não validava se os valores eram e-mails utilizáveis.
 
-Gestores bootstrap removidos da configuração de ambiente também têm sessões revogadas durante a reconciliação da migração.
+**Correção:** produção falha fechada com `BOOTSTRAP_MANAGER_INVALID` quando qualquer gestor bootstrap tiver formato inválido ou comprimento excessivo.
 
----
+### F2-05 — Mudança de papel/acesso precisava invalidar sessões persistidas
+**Severidade:** Média se ausente  
+**Resultado:** Controle já presente no HEAD atual
 
-### F2-08 — Produção podia iniciar antes de validar toda configuração de autenticação
-**Severidade:** Alta  
-**Status:** Corrigido
+`PATCH` e `DELETE` de membros da equipe chamam `revokeAdminSessionsByEmail`. A sessão deixa de ser apenas “logicamente bloqueada” e passa a ficar explicitamente revogada no banco.
 
-Produção agora falha antes de aceitar tráfego se faltar:
-- banco configurado;
-- secret de sessão forte;
-- `ADMIN_ORIGIN` HTTPS;
-- URLs OAuth válidas e HTTPS;
-- project id.
+### F2-06 — Replay de OAuth state
+**Severidade:** Crítica se existente  
+**Resultado:** Não encontrado
 
-URLs OAuth com credenciais embutidas também são rejeitadas.
+O challenge é bloqueado com `FOR UPDATE`, removido na mesma transação e não pode ser consumido novamente.
 
----
+### F2-07 — Session fixation
+**Severidade:** Alta se existente  
+**Resultado:** Não encontrado
 
-### F2-09 — Callback OAuth aceitava parâmetros sem limites explícitos
-**Severidade:** Média-baixa  
-**Status:** Corrigido
+Um login concluído sempre cria novo JTI. Quando o cookie de sessão anterior chega ao callback, sua sessão é revogada antes da emissão da nova.
 
-**Correção:**
-- state precisa ter exatamente o tamanho do token esperado;
-- código OAuth tem limite;
-- e-mail e OpenID respeitam os tamanhos persistidos;
-- e-mail inválido é rejeitado;
-- e-mail explicitamente informado como não verificado pelo provider é rejeitado;
-- respostas do callback usam `no-store`.
+### F2-08 — Papel/role armazenado no JWT
+**Severidade:** Alta se existente  
+**Resultado:** Não encontrado
 
----
+O token não contém papel. O papel efetivo é resolvido no servidor a partir de `GISELY_ADMIN_EMAILS` e `morada_staff_access` em cada request.
 
-### F2-10 — Múltiplas identidades OAuth podiam permanecer associadas ao mesmo e-mail
-**Severidade:** Média  
-**Status:** Corrigido
+## Decisão de compatibilidade — emailVerified
 
-**Correção:** ao atualizar a identidade administrativa, registros antigos daquele e-mail com outro OpenID são removidos transacionalmente. Sessões antigas deixam de encontrar uma identidade válida.
+A implementação rejeita explicitamente `emailVerified=false`.
 
----
+Não foi alterada para exigir estritamente `emailVerified===true`, porque o endpoint WebDevAuth utilizado atualmente não possui contrato público suficiente garantindo a presença desse campo em todas as respostas. Exigir o campo sem confirmação poderia derrubar todo o login legítimo.
 
-### F2-11 — Audiência legada do token ainda era aceita pelas sessões antigas
-**Severidade:** Média-baixa  
-**Status:** Corrigido
+Essa decisão deve ser revisitada se o provedor formalizar o campo no contrato da API ou quando a autenticação for migrada para o OAuth2 público documentado.
 
-A audience foi alterada para `gisley-admin`. Tokens anteriores com `morada-admin` deixam de validar.
-
-## Testes adicionados
+## Testes adversariais
 
 A suíte cobre:
 
-- JWT válido;
-- payload mínimo;
-- JWT adulterado;
-- JWT expirado;
-- JWT com idade absoluta superior a 8 horas;
-- JWT com audience antiga;
-- hash do OAuth state;
-- comparação segura do state;
-- produção sem banco;
-- produção com ADMIN_ORIGIN HTTP;
+- token válido;
+- token adulterado;
+- token expirado;
+- token com idade absoluta acima de oito horas;
+- audiência incorreta;
+- issuer incorreto;
+- `typ` incorreto;
+- secret rotacionado;
+- ausência de dados pessoais/papel dentro do JWT;
+- hash de state;
+- comparação timing-safe;
+- secret fraco;
+- origem administrativa HTTP em produção;
 - OAuth HTTP em produção;
-- secret placeholder/fraco;
-- URL OAuth com usuário/senha embutidos;
-- logout cross-site bloqueado;
-- logout same-origin idempotente;
-- todas as rotas administrativas anônimas continuam bloqueadas.
-
-## Propriedades de segurança resultantes
-
-### Token roubado após logout
-**Resultado:** rejeitado porque o `jti` foi revogado.
-
-### Usuário removido da equipe
-**Resultado:** sessões são revogadas imediatamente e o acesso é revalidado no banco.
-
-### Papel Editor → Gestor ou Gestor → Editor
-**Resultado:** sessões existentes são revogadas; novo login recebe contexto atualizado.
-
-### OAuth callback repetido
-**Resultado:** o challenge já foi consumido e a segunda tentativa falha.
-
-### State OAuth adulterado
-**Resultado:** falha na comparação constante e/ou não encontra challenge válido.
-
-### JWT adulterado
-**Resultado:** assinatura inválida.
-
-### JWT antigo com audience anterior
-**Resultado:** rejeitado.
-
-### Banco indisponível
-**Resultado:** sessão administrativa não é considerada válida; produção também usa readiness/fail-closed.
-
-## Itens deliberadamente deixados para Camada 2
-
-Não são blockers da Camada 1, mas podem ser adicionados depois:
-
-- MFA/2FA;
-- rotação de chaves com `kid`;
-- secret rotation com período de transição;
-- painel de “sessões ativas” por usuário;
-- revogação manual de todos os dispositivos;
-- idle timeout separado do timeout absoluto;
-- autenticação adaptativa por risco;
-- WebAuthn/passkeys;
-- detecção de login anômalo.
+- banco ausente;
+- gestor bootstrap ausente;
+- gestor bootstrap inválido;
+- limite configurável de sessões.
 
 ## Gate da Fase 2
 
-A fase só é PASS se:
+A fase é **PASS** somente quando:
 
-- state OAuth for aleatório, expirável e de uso único;
-- sessão puder ser revogada server-side;
-- logout revogar a sessão;
-- alteração de acesso revogar sessões;
-- JWT não carregar papel ou dados pessoais desnecessários;
-- JWT adulterado/expirado/antigo for rejeitado;
-- produção falhar fechada com configuração inválida;
-- cookies administrativos forem host-only/secure em produção;
-- CI, Docker e CodeQL permanecerem verdes.
+- JWT adulterado/expirado é rejeitado;
+- issuer/audience/algoritmo/typ são estritos;
+- state OAuth é one-time e timing-safe;
+- produção exige banco, OAuth, origem HTTPS, gestor e secret forte;
+- sessão depende simultaneamente do JWT e do registro server-side;
+- papel é sempre resolvido no backend;
+- alteração/remoção de acesso revoga sessões;
+- troca de identidade revoga sessões antigas;
+- sessões simultâneas são limitadas;
+- CI está verde;
+- CodeQL está verde.
 
 ## Próxima fase
 
 **Fase 3 — Autorização e privilégio mínimo**
 
-A próxima fase deverá validar IDOR, ações Editor vs Gestor, manipulação direta de IDs/payloads, tentativa de autopromoção, ações cruzadas entre entidades e enforcement exclusivamente no backend.
+Próximos testes:
+- Editor tentando executar ações de Gestor;
+- promoção indevida de papel via payload;
+- autoelevação;
+- alteração/removal do próprio acesso;
+- proteção dos gestores bootstrap;
+- IDOR em imóvel, foto, lead e membro da equipe;
+- autorização aplicada sempre no backend, independentemente do frontend.
