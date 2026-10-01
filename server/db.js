@@ -61,11 +61,26 @@ export async function migrate() {
     INDEX idx_morada_staff_role_active (role, active)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 
-  for (const email of adminEmails()) {
+  const bootstrapManagers = adminEmails();
+  if (bootstrapManagers.length) {
+    const placeholders = bootstrapManagers.map(() => '?').join(',');
+    await db.execute(
+      `UPDATE morada_staff_access
+       SET active=0, updated_at=CURRENT_TIMESTAMP
+       WHERE invited_by='environment' AND email NOT IN (${placeholders})`,
+      bootstrapManagers
+    );
+  } else {
+    await db.execute(
+      "UPDATE morada_staff_access SET active=0, updated_at=CURRENT_TIMESTAMP WHERE invited_by='environment'"
+    );
+  }
+
+  for (const email of bootstrapManagers) {
     await db.execute(
       `INSERT INTO morada_staff_access (email,name,role,active,invited_by)
        VALUES (?,?, 'manager', 1, 'environment')
-       ON DUPLICATE KEY UPDATE role='manager', active=1, updated_at=CURRENT_TIMESTAMP`,
+       ON DUPLICATE KEY UPDATE role='manager', active=1, invited_by='environment', updated_at=CURRENT_TIMESTAMP`,
       [email, email]
     );
   }
