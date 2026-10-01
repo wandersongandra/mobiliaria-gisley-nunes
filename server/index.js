@@ -209,7 +209,16 @@ async function start() {
     migration = { configured: false };
   }
   if (isProduction) {
-    const publicHeaders = (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); else if (/\.(?:js|css|woff2?|png|jpe?g|webp|avif|svg)$/i.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=604800, immutable'); };
+    const publicHeaders = (res, filePath) => {
+      const normalized = filePath.replace(/\\/g, '/');
+      if (normalized.includes('/assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (/\.(?:png|jpe?g|webp|avif|svg|ico)$/i.test(normalized)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      } else if (normalized.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    };
     app.use(express.static(path.join(root, 'dist'), { etag: true, maxAge: '7d', index: false, setHeaders: publicHeaders }));
     app.use('/admin', express.static(path.join(root, 'admin'), { etag: true, maxAge: 0, index: 'index.html', setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate') }));
   } else {
