@@ -851,24 +851,31 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
 export async function findActiveAdminSession(jti) {
   const db = getPool();
   const now = Date.now();
-  const idleCutoff = now - sessionIdleTimeoutMs();
+  const normalizedJti = String(jti || '').slice(0, 36);
   const [rows] = await db.execute(
-    `SELECT jti,open_id,email,expires_at_ms,last_seen_at_ms
+    `SELECT jti,open_id,email,expires_at_ms,last_seen_at_ms,revoked_at
      FROM morada_admin_sessions
      WHERE jti=?
-       AND revoked_at IS NULL
-       AND expires_at_ms>?
-       AND last_seen_at_ms>?
      LIMIT 1`,
-    [String(jti).slice(0, 36), now, idleCutoff]
+    [normalizedJti]
   );
   const session = rows[0] || null;
-  if (!session) return null;
+  if (!session || session.revoked_at) return null;
+
+  const absoluteExpired = Number(session.expires_at_ms) <= now;
+  const idleExpired = Number(session.last_seen_at_ms) <= now - sessionIdleTimeoutMs();
+  if (absoluteExpired || idleExpired) {
+    await db.execute(
+      'UPDATE morada_admin_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE jti=?',
+      [normalizedJti]
+    );
+    return null;
+  }
 
   if (now - Number(session.last_seen_at_ms) >= 5 * 60 * 1000) {
     await db.execute(
       'UPDATE morada_admin_sessions SET last_seen_at_ms=? WHERE jti=? AND revoked_at IS NULL',
-      [now, session.jti]
+      [now, normalizedJti]
     );
     session.last_seen_at_ms = now;
   }
