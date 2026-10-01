@@ -301,3 +301,15 @@ test('segredo administrativo fraco nunca emite sessão', async () => {
     else process.env.GISELY_SESSION_SECRET = previous;
   }
 });
+
+
+test('cookie OAuth permite retorno top-level sem afrouxar flags essenciais', () => {
+  const req = { secure: true, headers: {} };
+  const options = cookieOptions(req, { sameSite: 'lax', maxAge: 10 * 60 * 1000 });
+  assert.equal(options.httpOnly, true);
+  assert.equal(options.secure, true);
+  assert.equal(options.sameSite, 'lax');
+  assert.equal(options.path, '/');
+  assert.equal(options.priority, 'high');
+  assert.equal(options.maxAge, 10 * 60 * 1000);
+});
