@@ -125,8 +125,6 @@ export function storageProviderName() {
 export function storageAssetUrl(filePath) {
   const key = assertStorageKey(filePath);
   if (hasR2Storage()) {
-    const mediaOrigin = configuredMediaOrigin();
-    if (mediaOrigin) return `${mediaOrigin}/${encodePath(key)}`;
     return `/media/${encodePath(key)}`;
   }
   if (hasLegacyStorage()) return `/manus-storage/${encodePath(key)}`;
