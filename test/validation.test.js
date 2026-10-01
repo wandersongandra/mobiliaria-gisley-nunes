@@ -4,6 +4,7 @@ import {
   normalizeContactLead,
   normalizeEmailAddress,
   normalizePhotoInput,
+  normalizePhotoOrder,
   normalizePropertyInput,
   normalizeResourceId,
   normalizeSiteSettings,
@@ -199,4 +200,25 @@ test('IDs rejeitam tamanho e caracteres fora do contrato', () => {
   assert.throws(() => normalizeResourceId('../abc', { max: 36 }), /INVALID_ID/);
   assert.throws(() => normalizeResourceId('a/b', { max: 36 }), /INVALID_ID/);
   assert.throws(() => normalizeResourceId('x'.repeat(37), { max: 36 }), /INVALID_ID/);
+});
+
+
+test('ordem de fotos rejeita duplicados e IDs fora do contrato', () => {
+  assert.deepEqual(
+    normalizePhotoOrder({ photoIds: ['photo-1', 'photo_2'] }),
+    ['photo-1', 'photo_2']
+  );
+
+  assert.throws(
+    () => normalizePhotoOrder({ photoIds: ['photo-1', 'photo-1'] }),
+    /INVALID_ORDER/
+  );
+  assert.throws(
+    () => normalizePhotoOrder({ photoIds: ['../photo-1'] }),
+    /INVALID_ID/
+  );
+  assert.throws(
+    () => normalizePhotoOrder({ photoIds: Array.from({ length: 41 }, (_, i) => `photo-${i}`) }),
+    /INVALID_ORDER/
+  );
 });
