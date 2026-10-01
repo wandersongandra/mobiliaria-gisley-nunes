@@ -531,3 +531,46 @@ test('CSP não permite unsafe-inline unsafe-eval nem atributos script', () => {
   assert.equal(csp.includes("'unsafe-inline'"), false);
   assert.equal(csp.includes("'unsafe-eval'"), false);
 });
+
+
+test('headers defensivos básicos são emitidos em todas as respostas', () => {
+  const req = { headers: {}, get() { return ''; } };
+  const headers = new Map();
+  const res = {
+    locals: {},
+    setHeader(name, value) { headers.set(String(name).toLowerCase(), String(value)); }
+  };
+  securityHeaders(req, res, () => {});
+
+  assert.equal(headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(headers.get('x-frame-options'), 'DENY');
+  assert.equal(headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+  assert.equal(headers.get('cross-origin-opener-policy'), 'same-origin');
+  assert.equal(headers.get('cross-origin-resource-policy'), 'same-origin');
+  assert.equal(headers.get('origin-agent-cluster'), '?1');
+  assert.equal(headers.get('x-permitted-cross-domain-policies'), 'none');
+  assert.match(headers.get('permissions-policy') || '', /camera=\(\)/);
+  assert.match(headers.get('permissions-policy') || '', /microphone=\(\)/);
+  assert.match(headers.get('permissions-policy') || '', /geolocation=\(\)/);
+});
+
+test('produção habilita HSTS e upgrade de conteúdo inseguro', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const script = `
+    process.env.NODE_ENV='production';
+    process.env.PUBLIC_ORIGIN='https://www.gisley.test';
+    process.env.ADMIN_ORIGIN='https://painel.gisley.test';
+    const { securityHeaders } = await import('./server/security.js');
+    const headers = {};
+    const res = { locals:{}, setHeader(k,v){ headers[String(k).toLowerCase()] = String(v); } };
+    securityHeaders({ headers:{}, get(){ return ''; } }, res, () => {});
+    process.stdout.write(JSON.stringify(headers));
+  `;
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    encoding: 'utf8'
+  });
+  const headers = JSON.parse(output);
+  assert.equal(headers['strict-transport-security'], 'max-age=31536000; includeSubDomains');
+  assert.match(headers['content-security-policy'], /upgrade-insecure-requests/);
+});
