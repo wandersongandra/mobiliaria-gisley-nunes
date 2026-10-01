@@ -50,13 +50,14 @@ test('editor recebe apenas capacidades operacionais previstas', () => {
     'lead.read',
     'lead.status',
     'media.manage',
-    'property.archive',
     'property.read',
     'property.write',
     'site.read'
   ].sort());
 
   for (const denied of [
+    'property.publish',
+    'property.archive',
     'site.manage',
     'testimonial.manage',
     'lead.erase',
