@@ -12,12 +12,20 @@ export function getPool() {
       uri: process.env.DATABASE_URL,
       connectionLimit: 5,
       waitForConnections: true,
+      queueLimit: 100,
       connectTimeout: 10000,
       enableKeepAlive: true,
       keepAliveInitialDelay: 0
     });
   }
   return pool;
+}
+
+export async function closePool() {
+  if (!pool) return;
+  const current = pool;
+  pool = undefined;
+  await current.end();
 }
 
 export async function databaseReady() {
