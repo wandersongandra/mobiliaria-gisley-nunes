@@ -38,6 +38,7 @@ function text(
   const normalized = value.normalize('NFC').trim();
   if (
     /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(normalized)
+    || /[\u202A-\u202E\u2066-\u2069]/.test(normalized)
     || (!multiline && /[\r\n\t]/.test(normalized))
     || normalized.length > max
   ) throw new Error(error);
@@ -205,13 +206,7 @@ export function normalizeContactLead(input = {}) {
 
   if (
     propertyPath
-    && (
-      !propertyPath.startsWith('/')
-      || propertyPath.startsWith('//')
-      || propertyPath.includes('\\')
-      || propertyPath.includes('..')
-      || /[\r\n?#]/.test(propertyPath)
-    )
+    && !/^\/(?:|contato|imoveis(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?)$/.test(propertyPath)
   ) throw new Error('INVALID_CONTACT');
 
   return { name, email, interest, message, propertyPath };
