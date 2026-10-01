@@ -13,6 +13,7 @@ test('publicProperty remove identificadores e caminhos internos', () => {
     type: 'Casa',
     price: 1000000,
     price_label: 'R$ 1.000.000',
+    price_band: 1,
     photos: [{
       id: 'internal-photo-id',
       property_id: 'internal-property-id',
@@ -26,6 +27,7 @@ test('publicProperty remove identificadores e caminhos internos', () => {
 
   assert.equal(result.slug, 'casa-teste');
   assert.equal(Object.hasOwn(result, 'id'), false);
+  assert.equal(Object.hasOwn(result, 'price_band'), false);
   assert.equal(Object.hasOwn(result.photos[0], 'id'), false);
   assert.equal(Object.hasOwn(result.photos[0], 'property_id'), false);
   assert.equal(Object.hasOwn(result.photos[0], 'storage_path'), false);
