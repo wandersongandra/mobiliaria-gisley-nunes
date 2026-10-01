@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 import {
   addPhoto,
   addTestimonial,
@@ -45,7 +46,7 @@ import {
   staffView
 } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { createRateLimiter, ensureCsrfToken, requireAdminOrigin, requireAdminRequestContext, requireCsrfToken, requireSameOrigin } from './security.js';
+import { clientAddress, createRateLimiter, ensureCsrfToken, requireAdminOrigin, requireAdminRequestContext, requireCsrfToken, requireSameOrigin } from './security.js';
 import {
   safeFileName,
   storageAssetUrl,
@@ -71,6 +72,23 @@ import {
   normalizeUploadRequest
 } from './validation.js';
 import { adminProperties, adminProperty, publicProperties, publicProperty } from './presenters.js';
+
+const apiSafetyLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 5000,
+  standardHeaders: 'draft-6',
+  legacyHeaders: false,
+  identifier: 'api-safety',
+  keyGenerator: (req) => ipKeyGenerator(clientAddress(req), 56),
+  handler: (req, res, _next, options) => {
+    const resetTime = req.rateLimit?.resetTime;
+    const retryAfter = resetTime instanceof Date
+      ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+      : Math.max(1, Math.ceil(options.windowMs / 1000));
+    res.setHeader('Retry-After', String(retryAfter));
+    return res.status(options.statusCode).json({ error: 'RATE_LIMITED', retryAfter });
+  }
+});
 
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-login' });
 const callbackLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-callback' });
@@ -128,7 +146,7 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
 }
 
 export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
-  app.use('/api', requireJsonApiBody);
+  app.use('/api', apiSafetyLimiter, requireJsonApiBody);
   app.use(['/api/auth', '/api/admin'], requireAdminOrigin);
   app.use('/api/admin', requireAdminRequestContext);
   app.use('/api/auth', (req, res, next) => {
