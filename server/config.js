@@ -19,7 +19,7 @@ export function isAllowedOpenId(openId) {
 }
 
 export function sessionSecret() {
-  return String(env.GISELY_SESSION_SECRET || env.MORADA_SESSION_SECRET || '');
+  return String(env.GISELY_SESSION_SECRET || '');
 }
 
 export function maxAdminSessions() {
@@ -86,12 +86,18 @@ export const oauth = {
   projectId: env.MANUS_PROJECT_ID || ''
 };
 
+export function r2UploadExpiresSeconds() {
+  const value = Number(env.R2_UPLOAD_EXPIRES_SECONDS || 600);
+  if (!Number.isFinite(value)) return 600;
+  return Math.min(Math.max(Math.trunc(value), 60), 3600);
+}
+
 export const r2Storage = {
   accountId: env.R2_ACCOUNT_ID || '',
   bucket: env.R2_BUCKET || '',
   accessKeyId: env.R2_ACCESS_KEY_ID || '',
   secretAccessKey: env.R2_SECRET_ACCESS_KEY || '',
-  uploadExpiresSeconds: Math.min(Math.max(Number(env.R2_UPLOAD_EXPIRES_SECONDS || 600), 60), 3600)
+  get uploadExpiresSeconds() { return r2UploadExpiresSeconds(); }
 };
 
 export const storage = {
@@ -102,4 +108,27 @@ export const storage = {
 
 export function legacyStorageRouteEnabled() {
   return String(env.ENABLE_LEGACY_STORAGE_ROUTE || '').trim().toLowerCase() === 'true';
+}
+
+
+export function assertStorageConfiguration() {
+  if (!isProduction) return true;
+  if (!hasR2Storage()) throw new Error('R2_STORAGE_NOT_CONFIGURED');
+
+  if (!/^[a-f0-9]{32}$/i.test(String(r2Storage.accountId))) {
+    throw new Error('R2_ACCOUNT_ID_INVALID');
+  }
+  if (!/^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/.test(String(r2Storage.bucket))) {
+    throw new Error('R2_BUCKET_INVALID');
+  }
+  if (String(r2Storage.accessKeyId).trim().length < 16) {
+    throw new Error('R2_ACCESS_KEY_INVALID');
+  }
+  if (String(r2Storage.secretAccessKey).trim().length < 32) {
+    throw new Error('R2_SECRET_KEY_INVALID');
+  }
+  if (legacyStorageRouteEnabled()) {
+    throw new Error('LEGACY_STORAGE_ROUTE_FORBIDDEN_IN_PRODUCTION');
+  }
+  return true;
 }
