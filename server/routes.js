@@ -287,7 +287,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/properties/:id', destructiveLimiter, requireCapability('property.archive'), async (req, res, next) => {
+  app.delete('/api/admin/properties/:id', requireCapability('property.archive'), destructiveLimiter, async (req, res, next) => {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
       const removed = await softDeleteProperty(id, {
@@ -498,7 +498,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/testimonials/:id', destructiveLimiter, requireCapability('testimonial.manage'), async (req, res, next) => {
+  app.delete('/api/admin/testimonials/:id', requireCapability('testimonial.manage'), destructiveLimiter, async (req, res, next) => {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
       const removed = await removeTestimonial(id);
@@ -527,7 +527,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/leads/:id', destructiveLimiter, requireCapability('lead.erase'), async (req, res, next) => {
+  app.delete('/api/admin/leads/:id', requireCapability('lead.erase'), destructiveLimiter, async (req, res, next) => {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
       const removed = await deleteContactLead(id);
@@ -626,7 +626,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/team/:email', destructiveLimiter, requireCapability('team.manage'), async (req, res, next) => {
+  app.delete('/api/admin/team/:email', requireCapability('team.manage'), destructiveLimiter, async (req, res, next) => {
     try {
       const email = normalizeEmailAddress(req.params.email, { error: 'INVALID_EMAIL' });
       const current = await findStaffAccess(email);
