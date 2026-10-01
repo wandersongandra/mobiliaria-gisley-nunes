@@ -5,175 +5,167 @@ Branch auditada: `audit/security-design-2026-09-30`
 
 ## Objetivo
 
-Garantir que o backend, e não apenas a interface, imponha os papéis Gestor e Editor; impedir promoção indevida, bypass por método HTTP, manipulação de equipe e referências cruzadas de objetos.
+Garantir que autenticação válida não seja suficiente por si só: cada ação sensível deve exigir capacidade explícita, respeitar o estado do recurso e permanecer segura mesmo sob concorrência.
 
-## Modelo de autorização
+## Modelo de capacidades
 
 ### Editor
-Pode:
-- listar, criar, editar e arquivar imóveis;
-- trabalhar com fotos, capa e ordem da galeria;
-- consultar dados públicos do site;
-- consultar leads;
-- alterar status de leads.
+- `property.read`
+- `property.write`
+- `media.manage`
+- `site.read`
+- `lead.read`
+- `lead.status`
 
-Não pode:
-- alterar dados institucionais;
-- criar/remover depoimentos;
-- apagar dados pessoais de leads;
-- consultar auditoria;
-- listar ou administrar equipe.
+Editor não possui:
+- `property.publish`
+- `property.archive`
+- `site.manage`
+- `testimonial.manage`
+- `lead.erase`
+- `audit.read`
+- `team.manage`
 
 ### Gestor
-Possui as permissões do Editor e também:
+Possui todas as capacidades operacionais do Editor mais:
+- publicação;
+- arquivamento;
 - dados institucionais;
 - depoimentos;
-- exclusão LGPD de leads;
+- exclusão de dados pessoais de leads;
 - auditoria;
-- equipe e permissões.
+- gestão de equipe.
 
-### Gestor bootstrap
-Além do papel Gestor:
-- é definido por `GISELY_ADMIN_EMAILS`;
-- não pode ser removido;
-- não pode ser rebaixado;
-- não pode ser desativado;
-- pelo menos um precisa existir em produção.
+## Regras de recurso
+
+- Editor cria apenas rascunho não destacado.
+- Editor edita somente imóvel que continue `draft`.
+- Editor gerencia mídia somente de imóvel que continue `draft`.
+- Gestor pode publicar, destacar, editar publicado/arquivado e arquivar.
+- Exclusão LGPD, equipe e auditoria permanecem exclusivas de Gestor.
+- Papel desconhecido falha fechado e recebe zero capacidades.
 
 ## Achados e correções
 
-### F3-01 — POST de equipe funcionava como upsert
+### F3-01 — Janela TOCTOU entre autorização HTTP e gravação
 **Severidade:** Média  
 **Status:** Corrigido
 
-`POST /api/admin/team` podia alterar um e-mail já existente, permitindo contornar proteções implementadas somente no PATCH.
+A rota verificava o estado do imóvel antes da operação. Em uma corrida, um Editor poderia receber autorização enquanto o imóvel era rascunho, um Gestor publicá-lo logo depois, e a gravação do Editor chegar ao banco após a publicação.
 
-**Correção:** POST agora cria somente novos membros. E-mail existente retorna `409 TEAM_MEMBER_EXISTS`. Alterações obrigatoriamente passam pelo PATCH protegido.
+**Correção:** a autorização de estado passou a ser revalidada dentro da própria transação com lock da linha.
 
----
+As seguintes operações agora aceitam `requireDraft` e falham com `CAPABILITY_REQUIRED` se o estado mudar antes da gravação:
+- atualização de imóvel;
+- inclusão de foto;
+- remoção de foto;
+- definição de capa;
+- reordenação da galeria.
 
-### F3-02 — Gestor bootstrap podia receber `active=false` via PATCH
-**Severidade:** Média  
+Assim, a autorização permanece válida no mesmo instante lógico da mutação.
+
+### F3-02 — Payload administrativo entregava metadados internos de storage
+**Severidade:** Baixa-média  
 **Status:** Corrigido
 
-Embora o e-mail de ambiente continuasse sendo reconhecido como gestor no runtime, o estado persistido poderia ficar incoerente.
+A API do CRM retornava campos que o frontend não utiliza:
+- `storage_path`;
+- `storage_provider`;
+- `uploaded_by`;
+- MIME;
+- tamanho;
+- largura/altura;
+- `property_id` interno da foto.
 
-**Correção:** bootstrap manager não pode receber role diferente de manager nem `active=false`.
+**Correção:** criado presenter administrativo explícito. O navegador recebe apenas os campos necessários para operação do CRM.
 
----
-
-### F3-03 — Produção não exigia gestor bootstrap
-**Severidade:** Alta  
+### F3-03 — API de auditoria entregava detalhes internos do evento
+**Severidade:** Baixa-média  
 **Status:** Corrigido
 
-Uma produção com autenticação válida, porém sem gestor protegido, poderia depender somente de registros mutáveis no banco e perder o caminho de recuperação administrativa.
+O banco preserva `details` para investigação, mas alguns eventos podem conter informações como caminho interno de storage. O frontend de Atividade não usa esse conteúdo.
 
-**Correção:** `assertAuthConfiguration()` exige ao menos um `GISELY_ADMIN_EMAILS` em produção.
+**Correção:** `auditView` remove `details` e o OpenID bruto. O CRM recebe somente identificação minimizada, ação, entidade, ID e horário.
 
----
+### F3-04 — Escalada de Editor por payload
+**Severidade:** Alta se existente  
+**Resultado:** Bloqueada e coberta por testes
 
-### F3-04 — Bypass Editor → Gestor
-**Severidade:** Crítica se existente  
-**Resultado:** Não encontrado
-
-Foi criada uma aplicação de teste com identidade Editor injetada no middleware administrativo. O teste chama diretamente todos os endpoints exclusivos de Gestor e exige `403 MANAGER_REQUIRED`.
-
-Cobertos:
-- PUT site;
-- POST/DELETE depoimentos;
-- DELETE lead;
-- GET auditoria;
-- GET/POST/PATCH/DELETE equipe.
-
----
-
-### F3-05 — Método HTTP inesperado
-**Severidade:** Média se contornasse middleware  
-**Resultado:** Sem bypass
-
-Método não implementado em rota administrativa não executa ação alternativa nem evita o guard de autenticação/autorização.
-
----
-
-### F3-06 — Referência de storage de outro imóvel
-**Severidade:** Alta  
-**Status:** Corrigido
-
-A finalização da foto já verificava prefixo, mas a regra foi centralizada e tornada explícita.
-
-**Correção:** `storagePathBelongsToProperty()` exige namespace:
-`gisley/properties/<propertyId>/...`
-
-Rejeita:
-- outro propertyId;
-- traversal `..`;
-- propertyId malformado com barras;
-- namespace legado na finalização nova.
-
----
-
-### F3-07 — Mesmo objeto de storage podia ser registrado mais de uma vez
-**Severidade:** Alta  
-**Status:** Corrigido
-
-Duas linhas apontando para o mesmo objeto criariam risco de uma exclusão quebrar a outra referência.
-
-**Correção:**
-- `storage_path` agora é UNIQUE;
-- replay gera `409 ASSET_ALREADY_REGISTERED`;
-- em conflito por objeto já registrado, o backend **não apaga** o objeto existente;
-- em falhas de persistência reais, o upload órfão continua sendo limpo.
-
----
-
-### F3-08 — IDOR entre usuários
-**Resultado:** Não aplicável no modelo atual
-
-O produto é single-tenant: todos os Editores autorizados pertencem à mesma imobiliária e, por desenho, podem trabalhar em todo o portfólio e nos leads da empresa.
-
-Portanto:
-- Editor A acessar imóvel criado por Editor B é comportamento autorizado;
-- Editor A atualizar lead recebido pela imobiliária é comportamento autorizado.
-
-Se o produto evoluir para múltiplas imobiliárias/tenants, esta premissa deixa de ser válida e toda entidade deverá receber `tenant_id` com enforcement obrigatório no banco e nas queries.
-
-## Decisões de privilégio aceitas
-
-Nesta versão, Editor pode:
-- publicar imóvel;
+Foram testadas tentativas de:
+- criar imóvel com `status=published`;
+- criar imóvel `featured=true`;
+- editar imóvel já publicado;
+- iniciar upload de mídia em imóvel publicado;
 - arquivar imóvel;
-- alterar capa;
-- remover foto;
-- alterar status do lead.
+- utilizar valor textual enganoso para `featured`.
 
-Essas ações são consideradas operações normais do catálogo e foram mantidas por produto. Se futuramente for desejado fluxo de aprovação, deve ser criado papel adicional como `publisher` ou workflow Draft → Review → Published.
+Todas falham antes da lógica sensível.
 
-## Testes adicionados
+### F3-05 — IDOR de mídia
+**Severidade:** Alta se existente  
+**Resultado:** Não identificado
 
-- Editor autenticado recebe 403 em toda rota exclusiva de Gestor.
-- Método inesperado não contorna autorização.
-- Caminho de storage do imóvel correto é aceito.
-- Caminho de outro imóvel é rejeitado.
-- Traversal é rejeitado.
-- Namespace legado não pode ser usado para novo vínculo.
-- Produção sem gestor bootstrap falha configuração.
-- Rotas administrativas anônimas continuam retornando 401.
+Controles confirmados:
+- exclusão/capa resolvem a foto pelo ID e depois o imóvel associado;
+- autorização usa o estado do imóvel real associado à foto;
+- `storagePath` precisa pertencer ao `propertyId` da rota;
+- reordenação aceita somente o conjunto exato de IDs de fotos pertencentes ao imóvel;
+- IDs externos não são silenciosamente incorporados.
+
+### F3-06 — Escalada de papel e gestão de equipe
+**Severidade:** Alta se existente  
+**Resultado:** Bloqueada
+
+- Editor não possui `team.manage`;
+- usuário não pode remover a própria conta;
+- usuário não pode reduzir o próprio papel;
+- gestor bootstrap não pode ser desativado/rebaixado pelo CRM;
+- alterações de acesso revogam sessões anteriores.
+
+## Minimização
+
+- OpenID bruto não é retornado na lista de equipe; apenas hint.
+- OpenID bruto do autor não é retornado na trilha de auditoria.
+- Metadados internos de storage permanecem somente no backend/banco.
+- API pública continua usando presenter ainda mais restrito.
+
+## Testes adversariais adicionados
+
+- matriz exata de capacidades do Editor;
+- matriz administrativa do Gestor;
+- papel desconhecido fail-closed;
+- rotas exclusivas do Gestor retornam 403 para Editor;
+- método HTTP inesperado não contorna guard;
+- payload de publicação/destaque por Editor;
+- edição direta de imóvel publicado;
+- presign de mídia em imóvel publicado;
+- arquivamento por Editor;
+- minimização de equipe/auditoria;
+- minimização de propriedades/fotos administrativas.
 
 ## Gate da Fase 3
 
-A fase é PASS somente se:
-
-- Editor não alcançar nenhuma ação exclusiva de Gestor;
-- backend aplicar autorização independentemente da UI;
-- bootstrap manager permanecer protegido;
-- produção possuir caminho de recuperação administrativo;
-- objetos de storage não puderem ser associados a outro imóvel;
-- o mesmo objeto não puder ser registrado duas vezes;
-- métodos inesperados não contornarem guards;
-- CI, Docker e CodeQL permanecerem verdes.
+Requisitos:
+- capability explícita em toda rota sensível;
+- Editor não publica/arquiva;
+- estado do recurso revalidado transacionalmente;
+- IDOR de foto/imóvel bloqueado;
+- payload administrativo minimizado;
+- papel desconhecido fail-closed;
+- CI: PASS;
+- CodeQL: aguardando confirmação final desta revisão no momento da escrita.
 
 ## Próxima fase
 
 **Fase 4 — Origem, CSRF e domínio administrativo**
 
-A próxima fase deverá testar Host, Origin, Sec-Fetch-Site, spoofing de proxy, domínio público vs painel, callback OAuth em host incorreto, mutações sem Origin, requests cross-site e comportamento atrás do Cloudflare.
+A próxima etapa revisará:
+- `Origin`;
+- `Sec-Fetch-Site`;
+- Host;
+- subdomínios público/painel;
+- spoof de proxy;
+- métodos mutáveis;
+- login/callback;
+- requisições cross-site;
+- comportamento atrás do Cloudflare.
