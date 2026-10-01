@@ -77,6 +77,18 @@ test('toda rota administrativa conhecida bloqueia acesso sem sessão', async () 
   });
 });
 
+test('logout global exige sessão autenticada', async () => {
+  await withServer(async (origin) => {
+    const response = await fetch(`${origin}/api/auth/logout-all`, {
+      method: 'POST',
+      headers: { Origin: origin, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: '{}'
+    });
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: 'AUTH_REQUIRED', login: true });
+  });
+});
+
 test('sonda de sessão é a única exceção anônima sob /api/admin', async () => {
   await withServer(async (origin) => {
     const response = await fetch(`${origin}/api/admin/session`, {
