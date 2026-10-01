@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { configuredAdminOrigin, isProduction, port } from './config.js';
 import { closePool, getPropertyBySlug, listProperties, migrate } from './db.js';
 import { registerRoutes } from './routes.js';
-import { assets } from './assets.js';
+import { assertAssetsReady, assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { escapeLd, organizationLd, propertyLd } from './seo.js';
 import { requestHostOrigin, requestOrigin, securityHeaders } from './security.js';
@@ -199,6 +199,7 @@ app.use((error, req, res, next) => {
 });
 
 async function start() {
+  if (isProduction) assertAssetsReady();
   let migration;
   try {
     migration = await migrate();
