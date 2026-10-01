@@ -4,6 +4,7 @@ import {
   addTestimonial,
   createContactLead,
   databaseReady,
+  deleteContactLead,
   getProperty,
   getPropertyBySlug,
   listAuditLog,
@@ -417,6 +418,17 @@ export function registerRoutes(app) {
       if (!updated) return res.status(404).json({ error: 'NOT_FOUND' });
       await writeAudit(req, 'lead.status', 'lead', req.params.id, { status });
       return res.json({ ok: true });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.delete('/api/admin/leads/:id', requireManager(), async (req, res, next) => {
+    try {
+      const removed = await deleteContactLead(req.params.id);
+      if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'lead.delete', 'lead', req.params.id, { reason: 'privacy_or_admin_request' });
+      return res.status(204).end();
     } catch (error) {
       return next(error);
     }
