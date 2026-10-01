@@ -64,9 +64,8 @@ export function classifyHttpError(error) {
 }
 
 export function apiErrorHandler(error, req, res, next) {
-  console.error('[api]', isProduction ? error?.message : (error?.stack || error?.message));
-  if (res.headersSent) return next(error);
-
   const contract = classifyHttpError(error);
+  console.error('[api]', isProduction ? contract.code : (error?.stack || error?.message));
+  if (res.headersSent) return next(error);
   return res.status(contract.status).json({ error: contract.code });
 }
