@@ -5,27 +5,30 @@ import { readFileSync } from 'node:fs';
 const routesSource = readFileSync(new URL('../server/routes.js', import.meta.url), 'utf8');
 const authorizationSource = readFileSync(new URL('../server/authorization.js', import.meta.url), 'utf8');
 
-const managerOnlyDeclarations = [
-  "app.put('/api/admin/site', requireCapability('site.manage')",
-  "app.post('/api/admin/testimonials', requireCapability('testimonial.manage')",
-  "app.delete('/api/admin/testimonials/:id', requireCapability('testimonial.manage')",
-  "app.delete('/api/admin/leads/:id', requireCapability('lead.erase')",
-  "app.get('/api/admin/audit', requireCapability('audit.read')",
-  "app.get('/api/admin/team', requireCapability('team.manage')",
-  "app.post('/api/admin/team', requireCapability('team.manage')",
-  "app.patch('/api/admin/team/:email', requireCapability('team.manage')",
-  "app.delete('/api/admin/team/:email', requireCapability('team.manage')"
+const managerOnlyRoutes = [
+  ['put', '/api/admin/site', 'site.manage'],
+  ['post', '/api/admin/testimonials', 'testimonial.manage'],
+  ['delete', '/api/admin/testimonials/:id', 'testimonial.manage'],
+  ['delete', '/api/admin/leads/:id', 'lead.erase'],
+  ['get', '/api/admin/audit', 'audit.read'],
+  ['get', '/api/admin/team', 'team.manage'],
+  ['post', '/api/admin/team', 'team.manage'],
+  ['patch', '/api/admin/team/:email', 'team.manage'],
+  ['delete', '/api/admin/team/:email', 'team.manage']
 ];
 
 test('operações sensíveis permanecem explicitamente restritas por capacidade', () => {
-  for (const declaration of managerOnlyDeclarations) {
+  for (const [method, route, capability] of managerOnlyRoutes) {
+    const routePrefix = `app.${method}('${route}'`;
+    const start = routesSource.indexOf(routePrefix);
+    assert.ok(start >= 0, `rota sensível ausente: ${method.toUpperCase()} ${route}`);
+    const declaration = routesSource.slice(start, routesSource.indexOf('\n', start));
     assert.ok(
-      routesSource.includes(declaration),
-      `capacidade sensível ausente ou alterada: ${declaration}`
+      declaration.includes(`requireCapability('${capability}')`),
+      `capacidade sensível ausente ou alterada: ${method.toUpperCase()} ${route} -> ${capability}`
     );
   }
 });
-
 test('API administrativa mantém autenticação global antes das rotas de negócio', () => {
   assert.ok(
     routesSource.includes("app.use('/api/admin'"),
