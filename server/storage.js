@@ -176,7 +176,7 @@ export async function storageDelete(filePath) {
 }
 
 
-function matchesImageSignature(bytes, contentType) {
+export function matchesImageSignature(bytes, contentType) {
   const type = String(contentType || '').toLowerCase();
   if (type === 'image/jpeg') {
     return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
