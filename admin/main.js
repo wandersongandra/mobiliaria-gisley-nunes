@@ -359,7 +359,7 @@ const auditLabels = {
   'testimonial.remove': 'Depoimento removido',
   'lead.status': 'Status do contato alterado',
   'lead.delete': 'Dados de contato apagados',
-  'team.upsert': 'Acesso de equipe criado',
+  'team.create': 'Acesso de equipe criado',
   'team.update': 'Acesso de equipe atualizado',
   'team.remove': 'Acesso de equipe removido'
 };
@@ -398,15 +398,16 @@ function teamNotify(message, tone = 'success') {
 function renderTeam() {
   const list = $('#team-list');
   if (!list) return;
-  const selfEmail = String(state.user?.email || '').toLowerCase();
   list.innerHTML = state.team.length ? state.team.map((member) => {
-    const isSelf = String(member.email).toLowerCase() === selfEmail;
+    const isSelf = Boolean(member.is_self);
+    const isBootstrap = Boolean(member.is_bootstrap);
     const roleLabel = member.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
+    const identityLabel = member.identity_hint ? `OAuth · ${escapeHTML(member.identity_hint)}` : 'Identidade não disponível';
     return `<article class="team-row">
-      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a><code class="team-identity" title="${escapeHTML(member.open_id || '')}">${member.open_id ? 'OAuth · ' + escapeHTML(String(member.open_id).slice(0, 18)) + (String(member.open_id).length > 18 ? '…' : '') : 'Identidade ainda não vinculada'}</code></div></div>
-      <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${isSelf ? '<small>você</small>' : ''}</div>
+      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a><code class="team-identity">${identityLabel}</code></div></div>
+      <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${isSelf ? '<small>você</small>' : ''}${isBootstrap ? '<small>principal</small>' : ''}</div>
       <div class="team-actions">
-        ${!isSelf ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
+        ${!isSelf && !isBootstrap ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
       </div>
     </article>`;
   }).join('') : '<div class="empty-properties compact"><span>◎</span><h4>Nenhum acesso adicional.</h4><p>Adicione um corretor ou outro gestor para começar.</p></div>';
