@@ -9,6 +9,7 @@ import {
   requireManager,
   resolveAdminAccess,
   safeStateEqual,
+  validSessionClaims,
   verifySessionToken
 } from '../server/auth.js';
 
@@ -175,4 +176,40 @@ test('produção usa prefixo __Host nos cookies administrativos', async () => {
   const names = JSON.parse(output);
   assert.equal(names.sessionCookie, '__Host-gisley_admin_session');
   assert.equal(names.stateCookie, '__Host-gisley_oauth_state');
+});
+
+
+test('claims administrativas rejeitam identidade, jti e janelas temporais inválidas', () => {
+  const now = Date.now();
+  const nowSec = Math.floor(now / 1000);
+  const good = {
+    sub: 'oauth-user-123',
+    jti: '123e4567-e89b-42d3-a456-426614174000',
+    iat: nowSec,
+    exp: nowSec + (8 * 60 * 60)
+  };
+
+  assert.equal(validSessionClaims(good, now), true);
+  assert.equal(validSessionClaims({ ...good, sub: '' }, now), false);
+  assert.equal(validSessionClaims({ ...good, sub: 'x'.repeat(192) }, now), false);
+  assert.equal(validSessionClaims({ ...good, sub: 'open id' }, now), false);
+  assert.equal(validSessionClaims({ ...good, jti: 'not-a-uuid' }, now), false);
+  assert.equal(validSessionClaims({ ...good, iat: nowSec + 120 }, now), false);
+  assert.equal(validSessionClaims({ ...good, exp: nowSec - 1 }, now), false);
+  assert.equal(validSessionClaims({ ...good, exp: nowSec + (9 * 60 * 60) }, now), false);
+});
+
+test('verificação JWT rejeita formatos absurdos antes da criptografia', async () => {
+  const previous = process.env.GISELY_SESSION_SECRET;
+  process.env.GISELY_SESSION_SECRET = 'x9N#4qLm7!P2vR8@cT5$wY1&kD6*eF3zH0+uJ9sB';
+
+  try {
+    assert.equal(await verifySessionToken(''), null);
+    assert.equal(await verifySessionToken('a.b'), null);
+    assert.equal(await verifySessionToken('x'.repeat(5000)), null);
+    assert.equal(await verifySessionToken(null), null);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
+    else process.env.GISELY_SESSION_SECRET = previous;
+  }
 });
