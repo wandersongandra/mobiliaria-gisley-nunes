@@ -19,7 +19,9 @@ function firstHeader(value) {
 }
 
 function safeHost(value) {
-  const host = firstHeader(value).toLowerCase();
+  const raw = String(value || '').trim();
+  if (!raw || raw.includes(',')) return '';
+  const host = raw.toLowerCase();
   if (!/^[a-z0-9.-]+(?::\d{1,5})?$/.test(host)) return '';
 
   try {
