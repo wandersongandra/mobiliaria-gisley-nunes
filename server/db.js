@@ -609,6 +609,12 @@ export async function listContactLeads({ limit = 100 } = {}) {
   return rows;
 }
 
+export async function deleteContactLead(id) {
+  const db = getPool();
+  const [result] = await db.execute('DELETE FROM morada_contact_leads WHERE id=?', [String(id || '').slice(0, 36)]);
+  return result.affectedRows > 0;
+}
+
 export async function updateContactLeadStatus(id, status) {
   const db = getPool();
   const allowed = new Set(['new', 'contacted', 'closed']);
