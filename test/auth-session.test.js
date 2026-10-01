@@ -148,6 +148,7 @@ test('produção exige configuração de autenticação fechada e HTTPS', () => 
   assert.equal(authConfigResult({ DATABASE_URL: '' }), 'AUTH_DATABASE_NOT_CONFIGURED');
   assert.equal(authConfigResult({ ADMIN_ORIGIN: 'http://painel.gisley.test' }), 'ADMIN_ORIGIN_NOT_CONFIGURED');
   assert.equal(authConfigResult({ GISELY_ADMIN_EMAILS: '' }), 'BOOTSTRAP_MANAGER_NOT_CONFIGURED');
+  assert.equal(authConfigResult({ GISELY_ADMIN_EMAILS: 'nao-e-email' }), 'BOOTSTRAP_MANAGER_INVALID');
   assert.equal(authConfigResult({ MANUS_OAUTH_API_URL: 'http://oauth-api.example.test' }), 'OAUTH_URL_INVALID');
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'troque-por-um-segredo' }), 'SESSION_SECRET_NOT_CONFIGURED');
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'a'.repeat(64) }), 'SESSION_SECRET_NOT_CONFIGURED');
