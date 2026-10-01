@@ -1,121 +1,123 @@
 # Camada 1 — Fase 3: Autorização e privilégio mínimo
 
-Data da revisão: 2026-10-01  
-Branch auditada: `audit/security-design-2026-09-30`
+Data: 2026-10-01
+Branch: `audit/security-design-2026-09-30`
 
-## Objetivo
+## Escopo
 
-Garantir que toda ação administrativa dependa de capacidade explícita, que Editor não consiga escalar privilégios por chamada direta e que regras críticas sejam revalidadas na persistência.
+Validar capacidades por papel, escalada Editor → Gestor, publicação/arquivamento indevidos, mutação de mídia em recursos publicados, alteração de equipe, exposição de dados administrativos e consistência entre guard de rota e persistência.
 
 ## Modelo de capacidades
 
 ### Editor
-- `property.read`
-- `property.write`
-- `media.manage`
-- `site.read`
-- `lead.read`
-- `lead.status`
+- property.read
+- property.write
+- media.manage
+- site.read
+- lead.read
+- lead.status
 
 ### Gestor
-Inclui todas as capacidades do Editor e:
-- `property.publish`
-- `property.archive`
-- `site.manage`
-- `testimonial.manage`
-- `lead.erase`
-- `audit.read`
-- `team.manage`
+Inclui todas as capacidades do Editor, mais:
+- property.publish
+- property.archive
+- site.manage
+- testimonial.manage
+- lead.erase
+- audit.read
+- team.manage
 
-Papéis desconhecidos falham fechados e não recebem capacidades.
+Papel desconhecido falha fechado.
 
-## Achados e correções
+## Achados
 
-### F3-01 — Identificadores OAuth parcialmente expostos no CRM
-**Severidade:** Baixa  
-**Status:** Corrigido
+### F3-01 — Regra de status do Editor divergente da persistência
+Severidade: Média-baixa
+Status: Corrigido
 
-`staffView` e `auditView` ainda entregavam fragmentos estáveis do OpenID.
+O helper de autorização aceitava qualquer status diferente de `published`, enquanto a persistência exigia estritamente `draft`.
 
-**Correção:** OpenID permanece somente no backend/banco. API e UI não recebem nem hints.
+A persistência já impedia o bypass real, mas a inconsistência criava dependência perigosa da segunda barreira.
 
-### F3-02 — Regra draft-only existia apenas na rota
-**Severidade:** Média  
-**Status:** Corrigido
+Correção:
+- Editor só pode criar/alterar imóvel permanecendo em `draft`;
+- tentativa de `published` ou `archived` falha no guard e na persistência.
 
-A rota impedia Editor de publicar/destacar, porém a função de persistência aceitava estado final publicado caso o guard superior fosse removido por regressão futura.
+### F3-02 — Representações alternativas de booleano
+Severidade: Média-baixa
+Status: Corrigido
 
-**Correção:** `saveProperty(..., { requireDraft: true })` agora exige:
-- recurso atual em draft;
-- estado final em draft;
-- `featured=false`.
+O normalizador aceita `true`, `1`, `"1"` e `"true"` como verdadeiro. O guard agora reconhece todas as mesmas formas ao avaliar `featured`.
 
-A mesma regra é usada em criação e atualização.
+A persistência já bloqueava destaque indevido; agora as duas camadas usam semântica equivalente.
 
-### F3-03 — Nova rota administrativa poderia esquecer capability específica
-**Severidade:** Média  
-**Status:** Corrigido
+### F3-03 — Arquivamento protegido somente na rota
+Severidade: Baixa
+Status: Corrigido
 
-A autenticação global protegeria a rota, mas Editor e Gestor poderiam receber o mesmo acesso por engano.
+`softDeleteProperty` agora também exige autorização explícita na fronteira de persistência.
 
-**Correção:** novo teste estrutural mantém matriz explícita rota → capability e falha o CI se:
-- nova rota surgir sem classificação;
-- capability esperada mudar;
-- rota desaparecer sem atualizar a matriz.
+Resultado: uma chamada interna futura sem `allowArchive` falha com `CAPABILITY_REQUIRED`.
 
-### F3-04 — Regras de proteção de equipe estavam espalhadas na rota
-**Severidade:** Média-baixa  
-**Status:** Corrigido
+### F3-04 — Rotas administrativas futuras sem capability
+Severidade: Potencialmente alta
+Status: Mitigado por gate estrutural
 
-Auto-rebaixamento, auto-remoção e proteção do gestor bootstrap estavam corretos, porém acoplados à implementação da rota.
+Foi criado um teste que lê `server/routes.js` e exige que toda rota `/api/admin/*` possua `requireCapability(...)`, exceto a sonda pública de sessão.
 
-**Correção:** regras centralizadas em:
-- `staffMutationError`;
-- `staffRemovalError`.
+Qualquer nova rota administrativa sem capability faz o CI falhar.
 
-Cobertura direta garante:
-- gestor não se rebaixa;
-- gestor não se desativa;
-- gestor não remove a própria identidade;
-- bootstrap não é rebaixado/desativado/removido;
-- ator não-manager falha fechado.
+## Proteções confirmadas
 
-## IDOR e recursos
+- Editor não publica;
+- Editor não destaca;
+- Editor não arquiva;
+- Editor não altera mídia de imóvel publicado/arquivado;
+- Editor não altera dados institucionais;
+- Editor não gerencia depoimentos;
+- Editor não apaga lead;
+- Editor não acessa auditoria;
+- Editor não gerencia equipe;
+- Gestor não remove/rebaixa a própria identidade;
+- Gestor bootstrap não pode ser removido/rebaixado/desativado;
+- mudança/removal de equipe revoga sessões;
+- API de equipe não expõe OpenID;
+- auditoria não expõe OpenID nem detalhes internos;
+- persistência também aplica restrições críticas de propriedade/mídia.
 
-O produto atual é single-tenant: toda a equipe pertence à mesma imobiliária. Portanto, não existe fronteira de tenant a inventar.
+## IDOR
 
-As fronteiras relevantes foram verificadas:
+O sistema atual é single-tenant: os usuários autorizados operam a carteira da mesma imobiliária, portanto não existe fronteira de tenant/cliente entre imóveis.
 
-- foto é resolvida pelo ID e depois vinculada ao imóvel real antes da autorização;
-- storage path precisa pertencer ao imóvel esperado;
-- reordenação aceita exatamente o conjunto de fotos daquele imóvel;
-- Editor não consegue operar mídia de imóvel publicado/arquivado;
-- checks de status são repetidos dentro da transação com lock;
-- payload adulterado não permite publicação/destaque.
+Ainda assim:
+- IDs são validados;
+- queries são parametrizadas;
+- foto é resolvida para seu imóvel antes da mutação;
+- mídia só pode ser gerenciada se o papel puder atuar sobre o status daquele imóvel;
+- storage path é vinculado ao propertyId esperado.
 
-## Gate da Fase 3
+## Gate
 
-**PASS**
-
-- capability matrix: PASS
-- Editor → Manager escalation: PASS
-- draft-only persistence: PASS
-- resource-state TOCTOU: PASS
-- staff self-protection: PASS
-- bootstrap protection: PASS
-- OAuth identifier minimization: PASS
-- CI: PASS
-- CodeQL: PASS
+PASS quando:
+- CI verde;
+- CodeQL verde;
+- capability matrix PASS;
+- papel desconhecido fail-closed PASS;
+- Editor → Gestor via API FAIL;
+- publish/archive/featured por Editor FAIL;
+- mídia de imóvel publicado por Editor FAIL;
+- team/audit/site/lead.erase por Editor FAIL;
+- self/bootstrap protection PASS;
+- persistência de archive/draft scope PASS.
 
 ## Próxima fase
 
-**Fase 4 — Origem, CSRF e domínio administrativo**
-
-Foco:
-- Host e Origin;
-- `ADMIN_ORIGIN`;
-- requisições cross-site;
-- `Sec-Fetch-Site`;
-- spoofing de `X-Forwarded-*`;
-- separação real `www` × `painel`;
-- callbacks e redirects.
+Fase 4 — Origem, CSRF e domínio administrativo:
+- Host malformado;
+- Origin null;
+- same-site vs same-origin;
+- X-Forwarded-* spoofing;
+- callback OAuth no host errado;
+- domínio público tentando chamar painel;
+- painel tentando mutar endpoint público;
+- comportamento com e sem Cloudflare proxy confiável.
