@@ -148,13 +148,15 @@ export async function verifySessionToken(token) {
   }
 }
 
-export function resolveAdminAccess({ openId, access }) {
+export function resolveAdminAccess({ openId, email = '', access }) {
   const normalizedOpenId = String(openId || '').trim();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
   const bootstrapManager = isAllowedOpenId(normalizedOpenId);
 
   if (access?.invited_by === 'environment' && !bootstrapManager) return null;
   if (!bootstrapManager && (!access || !access.active)) return null;
   if (access?.open_id && String(access.open_id) !== normalizedOpenId) return null;
+  if (!bootstrapManager && normalizedEmail && String(access?.email || '').trim().toLowerCase() !== normalizedEmail) return null;
 
   return {
     role: bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor'),
@@ -189,7 +191,7 @@ export async function currentAdmin(req) {
   }
 
   const access = await findStaffAccessByOpenId(String(payload.sub));
-  const resolved = resolveAdminAccess({ openId: String(payload.sub), access });
+  const resolved = resolveAdminAccess({ openId: String(payload.sub), email, access });
   if (!resolved) {
     await revokeAdminSession(payload.jti);
     return null;
@@ -313,7 +315,8 @@ export async function callback(req, res) {
 
     const bootstrapManager = isAllowedOpenId(openId);
     const access = await findStaffAccessByOpenId(openId);
-    if (!bootstrapManager && (!access || !access.active)) {
+    const resolvedAccess = resolveAdminAccess({ openId, email, access });
+    if (!resolvedAccess) {
       return res.status(403)
         .type('text/plain; charset=utf-8')
         .send(
@@ -323,7 +326,7 @@ export async function callback(req, res) {
         );
     }
 
-    const role = bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor');
+    const role = resolvedAccess.role;
     if (bootstrapManager) {
       await saveStaffAccess({ email, openId, name, role: 'manager', active: true, invitedBy: 'environment' });
     }
