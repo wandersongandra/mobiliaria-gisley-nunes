@@ -169,12 +169,27 @@ export async function storageGetSignedUrl(filePath) {
   return body.url;
 }
 
-export async function storageObjectExists(filePath) {
+export async function storageObjectMetadata(filePath) {
   const key = assertStorageKey(filePath);
-  if (!hasR2Storage()) return true;
+  if (!hasR2Storage()) return { exists: true, size: null, contentType: null };
+
   const url = r2PresignedUrl(key, { method: 'HEAD', expiresSeconds: 120 });
   const response = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
-  return response.ok;
+  if (!response.ok) return { exists: false, size: null, contentType: null };
+
+  const rawLength = response.headers.get('content-length');
+  const parsedLength = rawLength === null ? null : Number(rawLength);
+  const rawType = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+
+  return {
+    exists: true,
+    size: Number.isFinite(parsedLength) && parsedLength >= 0 ? parsedLength : null,
+    contentType: rawType || null
+  };
+}
+
+export async function storageObjectExists(filePath) {
+  return (await storageObjectMetadata(filePath)).exists;
 }
 
 export async function storageDelete(filePath) {
