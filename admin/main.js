@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, properties: [], leads: [], team: [], editing: null, pendingFiles: [], pendingPreviewUrls: [], search: '' };
+const state = { user: null, properties: [], leads: [], team: [], audit: [], editing: null, pendingFiles: [], pendingPreviewUrls: [], search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -289,6 +289,7 @@ const testimonialForm = $('#testimonial-form');
 const teamForm = $('#team-form');
 let siteLoaded = false;
 let teamLoaded = false;
+let auditLoaded = false;
 
 function siteNotify(message, tone = 'success') { const status = $('#site-status'); status.textContent = message; status.dataset.tone = tone; }
 
@@ -297,6 +298,7 @@ function switchView(name) {
   document.querySelectorAll('.side-nav a[data-view]').forEach((link) => { link.classList.toggle('active', link.dataset.view === name); });
   if (name === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
   if (name === 'team-view' && state.user?.role === 'manager' && !teamLoaded) { teamLoaded = true; loadTeam(); }
+  if (name === 'audit-view' && state.user?.role === 'manager' && !auditLoaded) { auditLoaded = true; loadAudit(); }
 }
 
 function renderTestimonials(items = []) {
@@ -342,6 +344,48 @@ async function removeTestimonial(id) {
     renderTestimonials(data.testimonials);
     siteNotify('Depoimento removido.');
   } catch { siteNotify('Não foi possível remover o depoimento.', 'error'); }
+}
+
+const auditLabels = {
+  'property.create': 'Imóvel criado',
+  'property.update': 'Imóvel atualizado',
+  'property.archive': 'Imóvel arquivado',
+  'photo.add': 'Foto adicionada',
+  'photo.remove': 'Foto removida',
+  'photo.reorder': 'Galeria reordenada',
+  'photo.cover': 'Capa alterada',
+  'site.update': 'Dados do site atualizados',
+  'testimonial.create': 'Depoimento adicionado',
+  'testimonial.remove': 'Depoimento removido',
+  'lead.status': 'Status do contato alterado',
+  'lead.delete': 'Dados de contato apagados',
+  'team.upsert': 'Acesso de equipe criado',
+  'team.update': 'Acesso de equipe atualizado',
+  'team.remove': 'Acesso de equipe removido'
+};
+
+function renderAudit() {
+  const list = $('#audit-list');
+  if (!list) return;
+  list.innerHTML = state.audit.length ? state.audit.map((entry) => {
+    const label = auditLabels[entry.action] || entry.action;
+    const when = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(entry.created_at));
+    return `<article class="audit-row"><div><strong>${escapeHTML(label)}</strong><span>${escapeHTML(entry.entity_type)}${entry.entity_id ? ' · ' + escapeHTML(entry.entity_id) : ''}</span></div><div><span>${escapeHTML(entry.actor_email)}</span><time datetime="${escapeHTML(entry.created_at)}">${escapeHTML(when)}</time></div></article>`;
+  }).join('') : '<div class="empty-properties compact"><span>◷</span><h4>Nenhuma atividade registrada.</h4><p>As ações críticas do CRM aparecerão aqui.</p></div>';
+}
+
+async function loadAudit() {
+  const status = $('#audit-status');
+  try {
+    state.audit = (await request('/api/admin/audit?limit=100')).audit || [];
+    renderAudit();
+    if (status) status.textContent = '';
+  } catch {
+    if (status) {
+      status.textContent = 'Não foi possível carregar o histórico agora.';
+      status.dataset.tone = 'error';
+    }
+  }
 }
 
 function teamNotify(message, tone = 'success') {
@@ -530,5 +574,6 @@ document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEv
 siteForm?.addEventListener('submit', saveSite);
 testimonialForm?.addEventListener('submit', addTestimonial);
 teamForm?.addEventListener('submit', addTeamMember);
+$('#refresh-audit')?.addEventListener('click', loadAudit);
 $('#property-search')?.addEventListener('input', (event) => { state.search = event.target.value; renderProperties(); });
 init();
