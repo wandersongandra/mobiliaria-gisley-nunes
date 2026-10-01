@@ -1,188 +1,130 @@
 # Camada 1 — Fase 2: Autenticação e sessão
 
 Data da revisão: 2026-10-01  
-Branch auditada: `audit/security-design-2026-09-30`
+Branch: `audit/security-design-2026-09-30`
 
-## Objetivo
+## Escopo
 
-Garantir que o painel administrativo use autenticação revogável e que uma sessão só permaneça válida quando:
+Revisão do fluxo OAuth, state/nonce, identidade, cookies, JWT, sessões server-side, expiração, inatividade, revogação, troca de papel, remoção de usuário e vínculo de novos membros.
 
-- o JWT for íntegro;
-- issuer/audience/typ forem corretos;
-- a janela temporal estiver válida;
-- o JTI existir como sessão ativa no banco;
-- a identidade OAuth continuar vinculada a um usuário autorizado;
-- o e-mail atual continuar coerente com a identidade cadastrada;
-- a sessão não estiver expirada por tempo absoluto ou inatividade.
+## Controles existentes validados
 
-## Arquitetura atual
+- OAuth state aleatório com 32 bytes e armazenamento apenas do hash no banco.
+- State também mantido em cookie HttpOnly.
+- Challenge OAuth consumível uma única vez.
+- Redirect URI persistida no challenge e revalidada no callback.
+- Sessão JWT com HS256, issuer, audience, subject, JTI, iat e exp.
+- Validade absoluta máxima de 8 horas.
+- Sessão também precisa existir e estar ativa no banco.
+- Idle timeout server-side configurável.
+- Limite de sessões concorrentes por OpenID.
+- Cookie administrativo host-only em produção com prefixo `__Host-`.
+- Cookie HttpOnly, Secure em produção, SameSite Strict para sessão.
+- Cookie de state OAuth SameSite Lax apenas para permitir retorno top-level.
+- Papel não é confiado ao JWT: é recalculado no banco.
+- Alteração/remoção de membro revoga sessões existentes.
+- Logout individual revoga JTI server-side.
+- Logout-all revoga todas as sessões do OpenID.
+- Bootstrap de gestor é feito por OpenID e não por e-mail.
 
-A autenticação administrativa usa duas camadas simultâneas:
+## Achados
 
-1. **JWT assinado HS256**
-   - issuer: `gisley-nunes-imoveis`;
-   - audience: `gisley-admin`;
-   - subject: OpenID;
-   - JTI UUID;
-   - validade absoluta máxima de 8 horas.
-
-2. **Sessão server-side no MySQL**
-   - JTI;
-   - OpenID;
-   - e-mail;
-   - expiração absoluta;
-   - último uso;
-   - revogação explícita.
-
-O JWT sozinho não concede acesso: a sessão precisa continuar ativa no banco.
-
-## OAuth
-
-O login cria um `state` aleatório de 32 bytes, armazena apenas seu hash no banco e mantém o valor original em cookie `HttpOnly`.
-
-O callback exige simultaneamente:
-
-- `code` válido;
-- state de tamanho esperado;
-- state do callback igual ao cookie com comparação timing-safe;
-- challenge existente e não expirado no banco;
-- challenge de uso único;
-- redirect URI exatamente igual à origem administrativa configurada.
-
-## Cookies
-
-### Sessão
-- `HttpOnly`;
-- `Secure` em produção;
-- `SameSite=Strict`;
-- `Path=/`;
-- prioridade alta;
-- prefixo `__Host-` em produção.
-
-### OAuth state
-- `HttpOnly`;
-- `Secure` em produção;
-- `SameSite=Lax` para permitir retorno top-level do provedor OAuth;
-- `Path=/`;
-- prefixo `__Host-` em produção.
-
-## Identidade e pairing
-
-Usuários não autorizados que concluam OAuth não recebem sessão.
-
-Eles recebem apenas um código de vinculação temporário:
-
-- 96 bits aleatórios;
-- armazenado somente como hash;
-- validade de 15 minutos;
-- uso único;
-- vinculado simultaneamente a OpenID e e-mail.
-
-O gestor precisa fornecer o mesmo e-mail e o código correto para concluir o vínculo.
-
-## Sessões simultâneas
-
-`GISELY_MAX_ADMIN_SESSIONS` controla sessões ativas por identidade:
-
-- mínimo: 1;
-- padrão: 5;
-- máximo: 10.
-
-Ao criar uma nova sessão, as sessões excedentes mais antigas são revogadas.
-
-## Timeout por inatividade
-
-`GISELY_ADMIN_IDLE_TIMEOUT_MINUTES`:
-
-- mínimo: 15 min;
-- padrão: 60 min;
-- máximo: 240 min.
-
-Sessões que excedem o timeout de inatividade agora são marcadas explicitamente como revogadas no banco.
-
-## Revogação
-
-A sessão é invalidada quando:
-
-- o usuário faz logout;
-- usa `logout-all`;
-- a sessão expira;
-- excede o tempo ocioso;
-- o e-mail da identidade muda de forma incompatível;
-- o vínculo de equipe deixa de existir;
-- o usuário é desativado;
-- o papel/permissão é alterado;
-- o usuário é removido da equipe.
-
-Alterações de equipe revogam todas as sessões daquela identidade.
-
-## Achados da Fase 2
-
-### F2-01 — Sessão ociosa era rejeitada, mas permanecia marcada como ativa no banco
-**Severidade:** Baixa  
-**Status:** Corrigido
-
-O sistema já recusava sessão fora do cutoff de inatividade, porém o registro não era atualizado como revogado.
-
-**Correção:** sessão expirada por tempo absoluto ou inatividade passa a receber `revoked_at`.
-
-### F2-02 — Criação de sessão não falhava explicitamente quando a identidade não estava vinculada
+### F2-01 — Pairing code era consumido antes de confirmar vínculo
 **Severidade:** Média-baixa  
 **Status:** Corrigido
 
-`createAdminSession()` tentava bloquear a linha de `staff_access`, mas não verificava se ela realmente existia e estava ativa.
+Em conflito de e-mail/OpenID, o código de pairing podia ser consumido antes de a criação do membro falhar.
 
-**Correção:** criação de sessão agora falha com `SESSION_IDENTITY_NOT_BOUND` se não houver identidade ativa vinculada.
+**Correção:** criação do acesso + validação de conflitos + consumo do código agora ocorrem na mesma transação.
 
-### F2-03 — Cobertura criptográfica incompleta
+### F2-02 — Validação OAuth de OpenID inconsistente
 **Severidade:** Baixa  
 **Status:** Corrigido
 
-Já existiam testes de assinatura e expiração, mas faltava cobertura explícita para issuer, audience, typ e janelas temporais inválidas.
+O callback limitava tamanho, mas podia aceitar OpenID com espaço ou caractere de controle; o JWT rejeitaria depois, criando estado impossível de usar.
 
-**Correção:** novos testes adversariais de JWT foram adicionados.
+**Correção:** normalização única de identidade OAuth. OpenID inválido é recusado antes de persistência/sessão.
 
-### F2-04 — Controles operacionais de sessão pouco documentados
-**Severidade:** Informativa  
+### F2-03 — E-mail explicitamente não verificado pelo provedor
+**Severidade:** Média-baixa  
 **Status:** Corrigido
 
-Timeout ocioso e limite de sessões já existiam, mas agora estão explicitamente documentados e cobertos por testes de limites.
+Quando o provedor expõe `emailVerified/email_verified=false`, o acesso agora é recusado.
 
-## Controles que passaram sem alteração
+### F2-04 — Regras de vínculo sessão ↔ JWT ↔ usuário espalhadas
+**Severidade:** Baixa  
+**Status:** Corrigido
 
-- assinatura adulterada é rejeitada;
-- token expirado é rejeitado;
-- token grande/malformado é rejeitado antes da verificação criptográfica;
-- segredo fraco não emite sessão;
-- JWT não confia em papel/e-mail vindos do token;
-- acesso é revalidado pelo banco em cada request administrativo;
-- mudança de papel revoga sessões;
-- remoção de usuário revoga sessões;
-- bootstrap manager é identificado por OpenID, não por e-mail;
-- callback em domínio público é bloqueado;
-- state OAuth é de uso único;
-- pairing é de uso único;
-- logout limpa o cookie local mesmo quando não existe sessão;
-- logout-all exige sessão autenticada e mesma origem.
+A validação foi centralizada em `resolveSessionIdentity()`, cobrindo:
+- JTI da sessão igual ao JTI do token;
+- OpenID da sessão igual ao subject do token;
+- OpenID do usuário igual ao subject;
+- e-mail atual igual ao e-mail da sessão;
+- acesso ativo e vinculado ao mesmo OpenID;
+- papel recalculado no banco.
 
-## Gate da Fase 2
+### F2-05 — Estado de expiração server-side sem contrato puro testável
+**Severidade:** Baixa  
+**Status:** Corrigido
 
-A fase é **PASS** somente se:
+Criada `adminSessionState()` para classificar:
+- missing;
+- revoked;
+- absolute_expired;
+- idle_expired;
+- active.
 
-- JWT adulterado, expirado, com issuer/audience/typ incorretos for rejeitado;
-- segredo fraco não gerar token;
-- state OAuth for aleatório, timing-safe e de uso único;
-- callback aceitar somente redirect URI administrativa;
-- sessão exigir JTI ativo no banco;
-- identidade precisar estar vinculada e ativa;
-- role/e-mail forem revalidados server-side;
-- timeout ocioso e expiração absoluta revogarem sessão;
-- mudanças de equipe revogarem sessões existentes;
-- cookies mantiverem flags e prefixos esperados;
-- CI e CodeQL estiverem verdes.
+### F2-06 — Default de sessões simultâneas excessivo para o porte atual
+**Severidade:** Baixa  
+**Status:** Corrigido
+
+Default reduzido de 5 para 3 sessões concorrentes por identidade, mantendo faixa configurável de 1 a 10.
+
+### F2-07 — Secret scan sem localização dos achados
+**Severidade:** Operacional  
+**Status:** Corrigido
+
+O scanner agora reporta arquivo/linha no HEAD e commit/arquivo no histórico, sem revelar o valor.
+
+## Testes adversariais adicionados
+
+- JWT íntegro vs adulterado.
+- JWT expirado.
+- issuer incorreto.
+- audience incorreta.
+- typ incorreto.
+- iat futuro.
+- janela de expiração excessiva.
+- segredo fraco.
+- OpenID vazio, com espaço ou controle.
+- e-mail OAuth inválido.
+- e-mail explicitamente não verificado.
+- JTI diferente entre JWT e sessão.
+- sessão de outro OpenID.
+- e-mail da sessão divergente do usuário atual.
+- acesso desativado.
+- acesso vinculado a outro OpenID.
+- sessão revogada.
+- sessão expirada.
+- sessão ociosa.
+- cookies `__Host-` em produção.
+- flags Secure/HttpOnly/SameSite.
+- state OAuth comparado em tempo constante.
+
+## Critério de PASS
+
+- JWT válido isoladamente não autentica sem sessão server-side ativa.
+- sessão revogada/expirada/ociosa é recusada.
+- mudança de papel é refletida pelo banco, não pelo token.
+- remoção/rebaixamento revoga sessões.
+- OAuth state não pode ser reutilizado.
+- pairing não pode ser reutilizado nem vinculado a outro e-mail.
+- cookie de sessão permanece host-only e inacessível ao JavaScript.
+- segredo fraco impede emissão de sessão.
+- CI, secret scan e CodeQL verdes.
 
 ## Próxima fase
 
 **Fase 3 — Autorização e privilégio mínimo**
 
-A próxima revisão vai testar capability por capability, IDOR, elevação de Editor para Gestor, ações em recursos de terceiros, mutação de payload e proteção contra autoelevação/remoção de gestores protegidos.
+Foco: capabilities Editor/Gestor, IDOR, manipulação de IDs, publicação/arquivamento, mídia, equipe, leads, dados do site e tentativas de elevação de privilégio.
