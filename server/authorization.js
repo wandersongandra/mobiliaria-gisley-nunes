@@ -44,16 +44,11 @@ export function requireCapability(capability) {
 
 export function staffView(member, actor) {
   const openId = String(member?.open_id || '');
-  const identityHint = openId
-    ? (openId.length <= 12 ? openId : `${openId.slice(0, 8)}…${openId.slice(-4)}`)
-    : '';
-
   return {
     email: String(member?.email || ''),
     name: String(member?.name || ''),
     role: member?.role === 'manager' ? 'manager' : 'editor',
     active: Boolean(member?.active),
-    identity_hint: identityHint,
     is_self: Boolean(openId && actor?.openId && openId === String(actor.openId)),
     is_bootstrap: Boolean(member?.is_bootstrap)
   };
@@ -61,15 +56,9 @@ export function staffView(member, actor) {
 
 
 export function auditView(entry = {}) {
-  const openId = String(entry.actor_open_id || '');
-  const identityHint = openId
-    ? (openId.length <= 12 ? openId : `${openId.slice(0, 8)}…${openId.slice(-4)}`)
-    : '';
-
   return {
     id: entry.id,
     actor_email: entry.actor_email,
-    actor_identity_hint: identityHint,
     action: entry.action,
     entity_type: entry.entity_type,
     entity_id: entry.entity_id,
