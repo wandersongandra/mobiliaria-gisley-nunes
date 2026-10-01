@@ -614,15 +614,16 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
       ]
     );
 
-    const [active] = await connection.execute(
+    const [previousActive] = await connection.execute(
       `SELECT jti
        FROM morada_admin_sessions
-       WHERE email=? AND revoked_at IS NULL AND expires_at_ms>?
-       ORDER BY created_at DESC, jti DESC`,
-      [normalizedEmail, now]
+       WHERE email=? AND jti<>? AND revoked_at IS NULL AND expires_at_ms>?
+       ORDER BY expires_at_ms DESC, created_at DESC, jti DESC`,
+      [normalizedEmail, String(jti).slice(0, 36), now]
     );
 
-    const stale = active.slice(maxAdminSessions()).map((row) => String(row.jti));
+    const keepPrevious = Math.max(0, maxAdminSessions() - 1);
+    const stale = previousActive.slice(keepPrevious).map((row) => String(row.jti));
     for (const staleJti of stale) {
       await connection.execute(
         'UPDATE morada_admin_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE jti=?',
