@@ -2,7 +2,6 @@ import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
   configuredAdminOrigin,
-  configuredMediaOrigin,
   configuredPublicOrigin,
   hasLegacyStorage,
   hasR2Storage,
@@ -135,7 +134,6 @@ export function securityHeaders(req, res, next) {
   const nonce = randomBytes(18).toString('base64url');
   res.locals.cspNonce = nonce;
 
-  const mediaOrigin = configuredMediaOrigin();
   const imageSources = ["'self'", 'data:', 'blob:'];
   const connectSources = ["'self'"];
   const mediaSources = ["'self'"];
@@ -146,10 +144,6 @@ export function securityHeaders(req, res, next) {
     mediaSources.push('https:');
   } else {
     imageSources.push('https://images.unsplash.com');
-    if (mediaOrigin) {
-      imageSources.push(mediaOrigin);
-      mediaSources.push(mediaOrigin);
-    }
     if (hasR2Storage()) {
       const r2Origin = `https://${r2Storage.accountId}.r2.cloudflarestorage.com`;
       imageSources.push(r2Origin);
