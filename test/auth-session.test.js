@@ -137,7 +137,7 @@ function authConfigResult(envOverrides) {
       DATABASE_URL: 'mysql://user:pass@db:3306/gisley',
       ADMIN_ORIGIN: 'https://painel.gisley.test',
       GISELY_SESSION_SECRET: strongSecret,
-      GISELY_ADMIN_EMAILS: 'owner@gisley.test',
+      GISELY_ADMIN_OPEN_IDS: 'owner-open-id',
       MANUS_OAUTH_PORTAL_URL: 'https://oauth.example.test',
       MANUS_OAUTH_API_URL: 'https://oauth-api.example.test',
       MANUS_PROJECT_ID: 'project-test',
@@ -151,8 +151,8 @@ test('produção exige configuração de autenticação fechada e HTTPS', () => 
   assert.equal(authConfigResult({}), 'OK');
   assert.equal(authConfigResult({ DATABASE_URL: '' }), 'AUTH_DATABASE_NOT_CONFIGURED');
   assert.equal(authConfigResult({ ADMIN_ORIGIN: 'http://painel.gisley.test' }), 'ADMIN_ORIGIN_NOT_CONFIGURED');
-  assert.equal(authConfigResult({ GISELY_ADMIN_EMAILS: '' }), 'BOOTSTRAP_MANAGER_NOT_CONFIGURED');
-  assert.equal(authConfigResult({ GISELY_ADMIN_EMAILS: 'nao-e-email' }), 'BOOTSTRAP_MANAGER_INVALID');
+  assert.equal(authConfigResult({ GISELY_ADMIN_OPEN_IDS: '' }), 'BOOTSTRAP_IDENTITY_NOT_CONFIGURED');
+  assert.equal(authConfigResult({ GISELY_ADMIN_OPEN_IDS: 'id com espaco' }), 'BOOTSTRAP_IDENTITY_INVALID');
   assert.equal(authConfigResult({ MANUS_OAUTH_API_URL: 'http://oauth-api.example.test' }), 'OAUTH_URL_INVALID');
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'troque-por-um-segredo' }), 'SESSION_SECRET_NOT_CONFIGURED');
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'a'.repeat(64) }), 'SESSION_SECRET_NOT_CONFIGURED');
@@ -233,55 +233,55 @@ test('limite de sessões administrativas é sempre restringido entre 1 e 10', as
 
 
 test('acesso bootstrap removido do ambiente é revogado imediatamente', () => {
-  const previous = process.env.GISELY_ADMIN_EMAILS;
-  process.env.GISELY_ADMIN_EMAILS = 'owner@gisley.test';
+  const previous = process.env.GISELY_ADMIN_OPEN_IDS;
+  process.env.GISELY_ADMIN_OPEN_IDS = 'owner-open-id';
 
   try {
     assert.deepEqual(
       resolveAdminAccess({
-        email: 'owner@gisley.test',
-        access: { role: 'manager', active: 1, invited_by: 'environment' }
+        openId: 'owner-open-id',
+        access: { open_id: 'owner-open-id', role: 'manager', active: 1, invited_by: 'environment' }
       }),
       { role: 'manager', bootstrapManager: true }
     );
 
-    process.env.GISELY_ADMIN_EMAILS = '';
+    process.env.GISELY_ADMIN_OPEN_IDS = '';
     assert.equal(
       resolveAdminAccess({
-        email: 'owner@gisley.test',
-        access: { role: 'manager', active: 1, invited_by: 'environment' }
+        openId: 'owner-open-id',
+        access: { open_id: 'owner-open-id', role: 'manager', active: 1, invited_by: 'environment' }
       }),
       null
     );
   } finally {
-    if (previous === undefined) delete process.env.GISELY_ADMIN_EMAILS;
-    else process.env.GISELY_ADMIN_EMAILS = previous;
+    if (previous === undefined) delete process.env.GISELY_ADMIN_OPEN_IDS;
+    else process.env.GISELY_ADMIN_OPEN_IDS = previous;
   }
 });
 
 test('editor ativo permanece editor e acesso inativo é negado', () => {
-  const previous = process.env.GISELY_ADMIN_EMAILS;
-  process.env.GISELY_ADMIN_EMAILS = 'owner@gisley.test';
+  const previous = process.env.GISELY_ADMIN_OPEN_IDS;
+  process.env.GISELY_ADMIN_OPEN_IDS = 'owner-open-id';
 
   try {
     assert.deepEqual(
       resolveAdminAccess({
-        email: 'editor@gisley.test',
-        access: { role: 'editor', active: 1, invited_by: 'owner@gisley.test' }
+        openId: 'editor-open-id',
+        access: { open_id: 'editor-open-id', role: 'editor', active: 1, invited_by: 'owner@gisley.test' }
       }),
       { role: 'editor', bootstrapManager: false }
     );
 
     assert.equal(
       resolveAdminAccess({
-        email: 'editor@gisley.test',
-        access: { role: 'editor', active: 0, invited_by: 'owner@gisley.test' }
+        openId: 'editor-open-id',
+        access: { open_id: 'editor-open-id', role: 'editor', active: 0, invited_by: 'owner@gisley.test' }
       }),
       null
     );
   } finally {
-    if (previous === undefined) delete process.env.GISELY_ADMIN_EMAILS;
-    else process.env.GISELY_ADMIN_EMAILS = previous;
+    if (previous === undefined) delete process.env.GISELY_ADMIN_OPEN_IDS;
+    else process.env.GISELY_ADMIN_OPEN_IDS = previous;
   }
 });
 
