@@ -7,17 +7,6 @@ export function hasDatabase() {
   return Boolean(env.DATABASE_URL);
 }
 
-export function adminEmails() {
-  return String(env.GISELY_ADMIN_EMAILS || env.MORADA_ADMIN_EMAILS || '')
-    .split(',')
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function isAllowedEmail(email) {
-  return adminEmails().includes(String(email || '').trim().toLowerCase());
-}
-
 export function adminOpenIds() {
   return String(env.GISELY_ADMIN_OPEN_IDS || '')
     .split(',')
