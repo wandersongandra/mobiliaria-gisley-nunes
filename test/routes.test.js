@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { registerRoutes } from '../server/routes.js';
 
 process.env.DATABASE_URL = '';
+process.env.ENABLE_LEGACY_STORAGE_ROUTE = 'false';
 
 async function withServer(run) {
   const app = express();
