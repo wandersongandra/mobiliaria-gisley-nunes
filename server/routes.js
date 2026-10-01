@@ -74,6 +74,8 @@ import { adminProperties, adminProperty, publicProperties, publicProperty } from
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth' });
 const contactLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 8, namespace: 'contact' });
 const adminLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 300, namespace: 'admin' });
+const uploadLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 120, namespace: 'upload' });
+const destructiveLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 60, namespace: 'destructive' });
 
 const mimeExtensions = {
   'image/jpeg': new Set(['jpg', 'jpeg']),
@@ -283,7 +285,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/properties/:id', requireCapability('property.archive'), async (req, res, next) => {
+  app.delete('/api/admin/properties/:id', destructiveLimiter, requireCapability('property.archive'), async (req, res, next) => {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
       const removed = await softDeleteProperty(id, {
@@ -297,7 +299,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.post('/api/admin/uploads/presign', requireCapability('media.manage'), async (req, res, next) => {
+  app.post('/api/admin/uploads/presign', uploadLimiter, requireCapability('media.manage'), async (req, res, next) => {
     try {
       const { propertyId, fileName, contentType, size } = normalizeUploadRequest(req.body || {});
       const extensions = mimeExtensions[contentType];
@@ -325,7 +327,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.post('/api/admin/properties/:id/photos', requireCapability('media.manage'), async (req, res, next) => {
+  app.post('/api/admin/properties/:id/photos', uploadLimiter, requireCapability('media.manage'), async (req, res, next) => {
     try {
       const {
         storagePath,
@@ -409,7 +411,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/photos/:id', requireCapability('media.manage'), async (req, res, next) => {
+  app.delete('/api/admin/photos/:id', destructiveLimiter, requireCapability('media.manage'), async (req, res, next) => {
     try {
       const photoId = normalizeResourceId(req.params.id, { max: 36 });
       const photo = await getPhoto(photoId);
@@ -494,7 +496,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/testimonials/:id', requireCapability('testimonial.manage'), async (req, res, next) => {
+  app.delete('/api/admin/testimonials/:id', destructiveLimiter, requireCapability('testimonial.manage'), async (req, res, next) => {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
       const removed = await removeTestimonial(id);
@@ -523,7 +525,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/leads/:id', requireCapability('lead.erase'), async (req, res, next) => {
+  app.delete('/api/admin/leads/:id', destructiveLimiter, requireCapability('lead.erase'), async (req, res, next) => {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
       const removed = await deleteContactLead(id);
@@ -633,7 +635,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     }
   });
 
-  app.delete('/api/admin/team/:email', requireCapability('team.manage'), async (req, res, next) => {
+  app.delete('/api/admin/team/:email', destructiveLimiter, requireCapability('team.manage'), async (req, res, next) => {
     try {
       const email = normalizeEmailAddress(req.params.email, { error: 'INVALID_EMAIL' });
       const current = await findStaffAccess(email);
