@@ -18,9 +18,23 @@ test('normalizePropertyInput exige localização e cria preço exibido', () => {
   assert.equal(rental.priceLabel, 'R$ 18.500 / mês');
 });
 
-test('normalizeSiteSettings bloqueia URL fora do Instagram', () => {
-  assert.throws(() => normalizeSiteSettings({ instagramUrl: 'javascript:alert(1)' }), /INVALID_INSTAGRAM_URL/);
-  assert.throws(() => normalizeSiteSettings({ instagramUrl: 'https://example.com/a' }), /INVALID_INSTAGRAM_URL/);
+test('normalizeSiteSettings exige contato essencial e valida Instagram', () => {
+  const base = {
+    email: 'gisley@example.com',
+    whatsapp: '553191554677',
+    area: 'Belo Horizonte e região'
+  };
+
+  assert.throws(() => normalizeSiteSettings({ ...base, email: '' }), /INVALID_EMAIL/);
+  assert.throws(() => normalizeSiteSettings({ ...base, whatsapp: '' }), /INVALID_WHATSAPP/);
+  assert.throws(() => normalizeSiteSettings({ ...base, area: '' }), /INVALID_SITE_SETTINGS/);
+  assert.throws(() => normalizeSiteSettings({ ...base, instagramUrl: 'javascript:alert(1)' }), /INVALID_INSTAGRAM_URL/);
+  assert.throws(() => normalizeSiteSettings({ ...base, instagramUrl: 'https://example.com/a' }), /INVALID_INSTAGRAM_URL/);
+
+  const data = normalizeSiteSettings({ ...base, crci: '', instagramUrl: '' });
+  assert.equal(data.email, 'gisley@example.com');
+  assert.equal(data.whatsapp, '553191554677');
+  assert.equal(data.crci, '');
 });
 
 test('normalizeContactLead exige e-mail válido e mensagem', () => {
