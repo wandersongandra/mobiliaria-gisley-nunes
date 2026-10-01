@@ -366,7 +366,7 @@ export async function addPhoto({
     await connection.beginTransaction();
     await connection.execute('SELECT id FROM morada_properties WHERE id=? FOR UPDATE', [propertyId]);
     const [[{ photo_count: photoCount }]] = await connection.execute(
-      'SELECT COUNT(*) AS photo_count FROM morada_property_photos WHERE property_id=? FOR UPDATE',
+      'SELECT COUNT(*) AS photo_count FROM morada_property_photos WHERE property_id=?',
       [propertyId]
     );
     if (Number(photoCount) >= 40) throw new Error('PHOTO_LIMIT_REACHED');
