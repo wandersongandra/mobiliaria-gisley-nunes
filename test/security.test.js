@@ -402,3 +402,56 @@ test('admin request context falha fechado no host público', () => {
   if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
   if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
 });
+
+
+test('porta HTTPS padrão explícita é aceita, mas portas divergentes são rejeitadas', () => {
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+
+  assert.equal(hostIsKnown(originRequest({ host: 'www.gisley.test:443' })), true);
+  assert.equal(hostIsKnown(originRequest({ host: 'painel.gisley.test:443' })), true);
+  assert.equal(hostIsKnown(originRequest({ host: 'www.gisley.test:444' })), false);
+  assert.equal(hostIsKnown(originRequest({ host: 'painel.gisley.test:8443' })), false);
+
+  assert.equal(
+    requestHostOrigin(originRequest({ host: 'painel.gisley.test:443', secure: true })),
+    'https://painel.gisley.test'
+  );
+
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+});
+
+test('origem com porta não padrão exige exatamente a mesma porta no Host', () => {
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test:8443';
+
+  assert.equal(hostIsKnown(originRequest({ host: 'painel.gisley.test:8443' })), true);
+  assert.equal(hostIsKnown(originRequest({ host: 'painel.gisley.test' })), false);
+  assert.equal(hostIsKnown(originRequest({ host: 'painel.gisley.test:443' })), false);
+
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+});
+
+test('Host com lista, espaços ou sufixo malicioso não é aceito', () => {
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+
+  for (const host of [
+    'painel.gisley.test,evil.example',
+    'painel.gisley.test evil.example',
+    'painel.gisley.test.evil.example',
+    '.painel.gisley.test',
+    'painel.gisley.test.'
+  ]) {
+    assert.equal(hostIsKnown(originRequest({ host })), false, host);
+  }
+
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+});
