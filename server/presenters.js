@@ -8,7 +8,6 @@ export function publicProperty(row = {}) {
     type: String(row.type || ''),
     price: Number(row.price || 0),
     price_label: String(row.price_label || ''),
-    price_band: Number(row.price_band || 0),
     bedrooms: Number(row.bedrooms || 0),
     bathrooms: Number(row.bathrooms || 0),
     area_m2: Number(row.area_m2 || 0),
