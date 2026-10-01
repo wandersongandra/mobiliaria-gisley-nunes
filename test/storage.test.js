@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { safeFileName } from '../server/storage.js';
+import { matchesImageSignature, safeFileName } from '../server/storage.js';
 
 test('safeFileName remove caracteres inseguros e preserva extensão', () => {
   assert.equal(safeFileName(' Sala / Principal 01.JPG '), 'Sala-Principal-01.JPG');
@@ -46,4 +46,20 @@ test('R2 gera URL S3 assinada e usa domínio de mídia somente para leitura', as
   assert.equal(result.assetUrl, 'https://media.gisley.test/gisley/properties/property-id/sala-principal.webp');
   assert.equal(result.provider, 'r2');
   assert.equal(result.uploadUrl.includes('secret-test'), false);
+});
+
+
+test('matchesImageSignature reconhece formatos permitidos e rejeita disfarces', () => {
+  const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+  const png = Uint8Array.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0x00]);
+  const webp = Uint8Array.from(Buffer.from('RIFF1234WEBP', 'ascii'));
+  const avif = Uint8Array.from(Buffer.from('\x00\x00\x00\x18ftypavif00000000', 'binary'));
+  const fake = Uint8Array.from(Buffer.from('<script>alert(1)</script>', 'utf8'));
+
+  assert.equal(matchesImageSignature(jpeg, 'image/jpeg'), true);
+  assert.equal(matchesImageSignature(png, 'image/png'), true);
+  assert.equal(matchesImageSignature(webp, 'image/webp'), true);
+  assert.equal(matchesImageSignature(avif, 'image/avif'), true);
+  assert.equal(matchesImageSignature(fake, 'image/jpeg'), false);
+  assert.equal(matchesImageSignature(jpeg, 'image/png'), false);
 });
