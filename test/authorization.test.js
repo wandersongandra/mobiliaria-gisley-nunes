@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { registerRoutes } from '../server/routes.js';
+import { enforcePropertyWriteScope } from '../server/db.js';
 import {
   auditView,
   canCreateProperty,
@@ -313,4 +314,26 @@ test('editor não cria imóvel publicado ou destacado por payload adulterado', a
       assert.deepEqual(await response.json(), { error: 'CAPABILITY_REQUIRED' });
     }
   });
+});
+
+
+test('persistência também impede Editor de publicar ou destacar', () => {
+  assert.doesNotThrow(() => enforcePropertyWriteScope(
+    { status: 'draft', featured: false },
+    { requireDraft: true }
+  ));
+
+  assert.throws(
+    () => enforcePropertyWriteScope({ status: 'published', featured: false }, { requireDraft: true }),
+    /CAPABILITY_REQUIRED/
+  );
+  assert.throws(
+    () => enforcePropertyWriteScope({ status: 'draft', featured: true }, { requireDraft: true }),
+    /CAPABILITY_REQUIRED/
+  );
+
+  assert.doesNotThrow(() => enforcePropertyWriteScope(
+    { status: 'published', featured: true },
+    { requireDraft: false }
+  ));
 });
