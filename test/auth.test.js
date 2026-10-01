@@ -5,6 +5,7 @@ import {
   cookieOptions,
   createSessionToken,
   hashOAuthState,
+  hashPairingCode,
   requireManager,
   resolveAdminAccess,
   safeStateEqual,
@@ -53,6 +54,11 @@ test('state OAuth usa hash estável e comparação em tempo constante', () => {
   assert.equal(safeStateEqual(a, b), false);
   assert.equal(safeStateEqual(a, ''), false);
   assert.equal(safeStateEqual(a, a + 'x'), false);
+
+  const pairing = 'AbCdEfGhIjKlMnOp';
+  assert.equal(hashPairingCode(pairing).length, 64);
+  assert.equal(hashPairingCode(pairing), hashPairingCode(pairing));
+  assert.notEqual(hashPairingCode(pairing), hashPairingCode(pairing + 'x'));
 });
 
 test('JWT administrativo aceita token íntegro e rejeita adulteração/expiração', async () => {
@@ -139,7 +145,7 @@ test('cookies administrativos mantêm flags seguras esperadas', () => {
     const options = cookieOptions(req);
     assert.equal(options.httpOnly, true);
     assert.equal(options.secure, true);
-    assert.equal(options.sameSite, 'lax');
+    assert.equal(options.sameSite, 'strict');
     assert.equal(options.path, '/');
     assert.equal(options.priority, 'high');
 
@@ -152,4 +158,21 @@ test('cookies administrativos mantêm flags seguras esperadas', () => {
     if (previousProxy === undefined) delete process.env.TRUST_PROXY_MODE;
     else process.env.TRUST_PROXY_MODE = previousProxy;
   }
+});
+
+
+test('produção usa prefixo __Host nos cookies administrativos', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const script = [
+    "process.env.NODE_ENV='production';",
+    "const m=await import('./server/auth.js');",
+    "process.stdout.write(JSON.stringify(m.authCookieNames()));"
+  ].join('');
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    encoding: 'utf8'
+  });
+  const names = JSON.parse(output);
+  assert.equal(names.sessionCookie, '__Host-gisley_admin_session');
+  assert.equal(names.stateCookie, '__Host-gisley_oauth_state');
 });
