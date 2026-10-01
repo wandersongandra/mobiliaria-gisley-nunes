@@ -54,7 +54,7 @@ function canonicalQuery(params) {
     .join('&');
 }
 
-function r2PresignedUrl(filePath, { method = 'GET', expiresSeconds = 600 } = {}) {
+function r2PresignedUrl(filePath, { method = 'GET', expiresSeconds = 600, contentType = '' } = {}) {
   if (!hasR2Storage()) throw new Error('R2_NOT_CONFIGURED');
   const key = assertStorageKey(filePath);
   const verb = String(method || 'GET').toUpperCase();
@@ -66,20 +66,25 @@ function r2PresignedUrl(filePath, { method = 'GET', expiresSeconds = 600 } = {})
   const date = timestamp.slice(0, 8);
   const scope = `${date}/auto/s3/aws4_request`;
   const expires = Math.min(Math.max(Number(expiresSeconds || 600), 1), 604800);
+  const normalizedContentType = String(contentType || '').trim().toLowerCase();
+  const signedHeaders = normalizedContentType ? 'content-type;host' : 'host';
+  const canonicalHeaders = normalizedContentType
+    ? `content-type:${normalizedContentType}\nhost:${host}\n`
+    : `host:${host}\n`;
   const params = {
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
     'X-Amz-Credential': `${r2Storage.accessKeyId}/${scope}`,
     'X-Amz-Date': timestamp,
     'X-Amz-Expires': String(expires),
-    'X-Amz-SignedHeaders': 'host'
+    'X-Amz-SignedHeaders': signedHeaders
   };
   const query = canonicalQuery(params);
   const canonicalRequest = [
     verb,
     canonicalUri,
     query,
-    `host:${host}\n`,
-    'host',
+    canonicalHeaders,
+    signedHeaders,
     'UNSIGNED-PAYLOAD'
   ].join('\n');
   const stringToSign = [
@@ -113,14 +118,15 @@ export function storageAssetUrl(filePath) {
   throw new Error('STORAGE_NOT_CONFIGURED');
 }
 
-export async function storagePresign(filePath) {
+export async function storagePresign(filePath, { contentType = '' } = {}) {
   if (!hasStorage()) throw new Error('STORAGE_NOT_CONFIGURED');
   const key = assertStorageKey(filePath);
 
   if (hasR2Storage()) {
     return r2PresignedUrl(key, {
       method: 'PUT',
-      expiresSeconds: r2Storage.uploadExpiresSeconds
+      expiresSeconds: r2Storage.uploadExpiresSeconds,
+      contentType
     });
   }
 
@@ -167,4 +173,39 @@ export async function storageDelete(filePath) {
   const response = await fetch(url, { method: 'DELETE', signal: AbortSignal.timeout(10000) });
   if (!response.ok && response.status !== 404) throw new Error(`STORAGE_DELETE_${response.status}`);
   return true;
+}
+
+
+function matchesImageSignature(bytes, contentType) {
+  const type = String(contentType || '').toLowerCase();
+  if (type === 'image/jpeg') {
+    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (type === 'image/png') {
+    const signature = [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a];
+    return signature.every((value, index) => bytes[index] === value);
+  }
+  if (type === 'image/webp') {
+    return bytes.length >= 12
+      && Buffer.from(bytes.subarray(0, 4)).toString('ascii') === 'RIFF'
+      && Buffer.from(bytes.subarray(8, 12)).toString('ascii') === 'WEBP';
+  }
+  if (type === 'image/avif') {
+    if (bytes.length < 16 || Buffer.from(bytes.subarray(4, 8)).toString('ascii') !== 'ftyp') return false;
+    const brands = Buffer.from(bytes.subarray(8, Math.min(bytes.length, 32))).toString('ascii');
+    return brands.includes('avif') || brands.includes('avis');
+  }
+  return false;
+}
+
+export async function storageObjectLooksLikeImage(filePath, contentType) {
+  const key = assertStorageKey(filePath);
+  const url = await storageGetSignedUrl(key);
+  const response = await fetch(url, {
+    headers: { Range: 'bytes=0-31' },
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok && response.status !== 206) return false;
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return matchesImageSignature(bytes, contentType);
 }
