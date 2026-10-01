@@ -245,6 +245,7 @@ export async function migrate() {
   await db.query(`CREATE TABLE IF NOT EXISTS morada_audit_log (
     id CHAR(36) PRIMARY KEY,
     actor_email VARCHAR(255) NOT NULL,
+    actor_open_id VARCHAR(191),
     action VARCHAR(80) NOT NULL,
     entity_type VARCHAR(60) NOT NULL,
     entity_id VARCHAR(191),
@@ -254,6 +255,12 @@ export async function migrate() {
     INDEX idx_morada_audit_actor_created (actor_email, created_at),
     INDEX idx_morada_audit_entity_created (entity_type, entity_id, created_at)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  try {
+    await db.query('ALTER TABLE morada_audit_log ADD COLUMN actor_open_id VARCHAR(191) NULL AFTER actor_email');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_contact_leads (
     id CHAR(36) PRIMARY KEY,
@@ -893,7 +900,7 @@ export async function updateContactLeadStatus(id, status) {
 }
 
 
-export async function recordAudit({ actorEmail, action, entityType, entityId = null, details = null }) {
+export async function recordAudit({ actorEmail, actorOpenId = null, action, entityType, entityId = null, details = null }) {
   const db = getPool();
   const { randomUUID } = await import('node:crypto');
   let safeDetails = null;
@@ -904,10 +911,11 @@ export async function recordAudit({ actorEmail, action, entityType, entityId = n
       : JSON.stringify({ truncated: true, originalLength: serialized.length });
   }
   await db.execute(
-    'INSERT INTO morada_audit_log (id,actor_email,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)',
+    'INSERT INTO morada_audit_log (id,actor_email,actor_open_id,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?,?)',
     [
       randomUUID(),
       String(actorEmail || 'unknown').slice(0, 255),
+      actorOpenId ? String(actorOpenId).slice(0, 191) : null,
       String(action || 'unknown').slice(0, 80),
       String(entityType || 'unknown').slice(0, 60),
       entityId ? String(entityId).slice(0, 191) : null,
@@ -920,7 +928,7 @@ export async function listAuditLog({ limit = 100 } = {}) {
   const db = getPool();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 250));
   const [rows] = await db.query(
-    `SELECT id,actor_email,action,entity_type,entity_id,details,created_at
+    `SELECT id,actor_email,actor_open_id,action,entity_type,entity_id,details,created_at
      FROM morada_audit_log
      ORDER BY created_at DESC
      LIMIT ${safeLimit}`
