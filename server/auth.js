@@ -168,6 +168,10 @@ export function authCookieNames() {
   return { sessionCookie, stateCookie };
 }
 
+export function clearSessionCookie(req, res) {
+  res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
+}
+
 export async function currentAdmin(req) {
   const token = req.cookies?.[sessionCookie];
   if (!token || !hasDatabase()) return null;
@@ -204,7 +208,11 @@ export function requireAdmin() {
   return async (req, res, next) => {
     try {
       const user = await currentAdmin(req);
-      if (!user) return res.status(401).json({ error: 'AUTH_REQUIRED', login: true });
+      if (!user) {
+        clearSessionCookie(req, res);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(401).json({ error: 'AUTH_REQUIRED', login: true });
+      }
       req.admin = user;
       return next();
     } catch (error) {
@@ -358,38 +366,61 @@ export async function callback(req, res) {
 
 export async function logout(req, res) {
   const token = req.cookies?.[sessionCookie];
-  let revoked = true;
+  let revocationError = null;
 
-  if (token && hasDatabase()) {
-    try {
+  try {
+    if (token && hasDatabase()) {
       const payload = await verifySessionToken(token);
       if (payload?.jti) await revokeAdminSession(payload.jti);
-    } catch {
-      revoked = false;
     }
+  } catch (error) {
+    revocationError = error;
   }
 
   res.setHeader('Cache-Control', 'no-store');
+  clearSessionCookie(req, res);
 
-  if (!revoked) {
-    return res.status(503).json({ ok: false, error: 'SESSION_REVOCATION_FAILED' });
+  if (revocationError) {
+    return res.status(503).json({
+      ok: false,
+      localLoggedOut: true,
+      error: 'SESSION_REVOCATION_FAILED'
+    });
   }
 
-  res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
   return res.json({ ok: true });
 }
 
 
-export async function logoutAll(req, res, next) {
-  try {
-    const user = req.admin || await currentAdmin(req);
-    if (!user?.openId) return res.status(401).json({ error: 'AUTH_REQUIRED', login: true });
+export async function logoutAll(req, res) {
+  let user = null;
+  let revocationError = null;
 
-    await revokeAdminSessionsByOpenId(user.openId);
-    res.setHeader('Cache-Control', 'no-store');
-    res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
-    return res.json({ ok: true });
+  try {
+    user = req.admin || await currentAdmin(req);
+    if (user?.openId) await revokeAdminSessionsByOpenId(user.openId);
   } catch (error) {
-    return next(error);
+    revocationError = error;
   }
+
+  res.setHeader('Cache-Control', 'no-store');
+  clearSessionCookie(req, res);
+
+  if (revocationError) {
+    return res.status(503).json({
+      ok: false,
+      localLoggedOut: true,
+      error: 'SESSION_REVOCATION_FAILED'
+    });
+  }
+
+  if (!user?.openId) {
+    return res.status(401).json({
+      error: 'AUTH_REQUIRED',
+      login: true,
+      localLoggedOut: true
+    });
+  }
+
+  return res.json({ ok: true });
 }
