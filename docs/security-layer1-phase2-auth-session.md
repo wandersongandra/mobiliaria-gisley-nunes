@@ -1,8 +1,9 @@
 # Camada 1 — Fase 2: Autenticação e sessão
 
 Data da revisão: 2026-10-01  
-Branch de trabalho: `security/layer1-phase2-auth`
-Escopo: OAuth, cookies, JWT, sessão server-side, revogação, vínculo de identidade e erros de autenticação. Fase 3 não foi executada.
+Branch revisada no GitHub: `audit/security-design-2026-09-30`  
+SHA independente de validação: `cdf1a86cb6ac8909656cd01862c06faf10ac9933`  
+Escopo: OAuth, cookies, JWT, sessão server-side, revogação, vínculo de identidade, CSRF, rate limiting e erros de autenticação. Este relatório avalia somente a Fase 2, mesmo que a branch contenha commits posteriores de outras frentes.
 
 ## Superfície Analisada
 
@@ -31,42 +32,59 @@ Escopo: OAuth, cookies, JWT, sessão server-side, revogação, vínculo de ident
 | F2-11 | Logout sem rate limit | Não atribuída pela anotação CodeQL | `server/routes.js` expunha `/api/auth/logout` sem limiter dedicado; logout-all também não tinha limiter próprio. | Adicionado limiter compartilhado de 60 chamadas por 5 minutos após validação de origem. | `test/routes.test.js` confirma 429 após o limite; `test/access-policy.test.js` confirma ordem dos guards |
 | F2-12 | Deadlock na criação concorrente de sessão | Medium | MySQL 8.4.9 reproduziu `ER_LOCK_DEADLOCK`: a limpeza global mantinha gap lock enquanto a transação aguardava a linha da identidade, formando ciclo com outra inserção de sessão. | Limpezas de retenção passaram para antes da transação; lock da identidade e aplicação do limite seguem atômicos. | `pnpm test:mysql` — PASS com 8 criações concorrentes |
 
+| F2-13 | CSRF administrativo | High | O controle original de mesma origem bloqueava ataques cross-origin, porém não havia um token anti-CSRF independente ligado ao navegador. O Advanced Security também não conseguia modelar o guard customizado. | Adicionado double-submit token de 256 bits: cookie `__Host-gisley_csrf` em produção, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, comparação em tempo constante e header `X-CSRF-Token`. O controle de `Origin`/`Sec-Fetch-Site` foi mantido como defesa adicional. Token é rotacionado no login e removido no logout/logout-all. | Testes HTTP cobrem ausência, divergência e token válido; testes de autorização atravessam CSRF válido antes de verificar capabilities. |
+| F2-14 | Rate limiting reconhecível e defesa em profundidade | High | O projeto já possuía limites customizados por IP/rota, porém a query `js/missing-rate-limiting` do CodeQL não conseguia modelá-los e o guard global não tinha uma implementação padrão independente. | Mantidos todos os limites específicos existentes e adicionada barreira global com `express-rate-limit@8.7.0` para `/api`, limite alto de segurança, headers padrão e chave normalizada com `ipKeyGenerator`. | CI e Advanced Security reexecutados; alertas High do PR caíram a zero. |
+| F2-15 | Dependência transitiva do limiter | High | A primeira resolução de `express-rate-limit@8.7.0` fixou `ip-address@10.2.0`, atingida pelo advisory `GHSA-mwp4-54f8-5fhr`. O gate `pnpm audit --prod --audit-level=high` falhou. | Lockfile atualizado para `ip-address@10.5.0`, compatível com o range do pacote e acima da versão corrigida mínima. | Frozen install PASS e production dependency audit PASS no CI. |
+
 ## Resultado dos Testes
 
-- `pnpm test`: **PASS — 163 aprovados, 1 integração MySQL ignorada por falta de banco**.
-- `pnpm build`: **PASS — Vite production build**.
-- `git diff --check`: **PASS**.
-- `pnpm security:secrets`: **PASS**; fixtures históricas sintéticas são reconhecidas por fingerprint e caminho permitido, sem revelar valores.
-- `pnpm test:mysql`: **PASS — 1/1** em MySQL 8.4.9 temporário, bind exclusivo em loopback e schema novo `gisley_phase2_test`. Validou consumo concorrente de OAuth state, rollback de pairing em conflito, vínculo concorrente, oito criações concorrentes de sessão, limite de três sessões e revogação.
-- A primeira execução MySQL reproduziu o deadlock F2-12; após mover a retenção para fora da transação, a nova execução no schema isolado passou.
-- CI remoto: **PASS** no commit-base consultado `20631be213f45b57f72ebb482e627e7e7dbbf144` (run `36914254751`); esse resultado antecede as alterações locais desta retomada. Neste checkout, `pnpm test` passou com 163 testes e 1 integração MySQL ignorada por falta de servidor.
-- Foi adicionado job dedicado com MySQL 8.4 efêmero e teste de integração protegido para schema vazio `gisley_phase2_test`; execução do novo job remoto: **NÃO VERIFICADA**, pois as alterações ainda estão apenas locais.
-- CodeQL workflow: **PASS** no commit-base (run `36914254733`), mas o gate do PR associado reportou **FAIL: 13 alertas novos (11 HIGH, 2 MEDIUM)**. As anotações recuperadas apontam duas ocorrências de HTML dinâmico em `admin/main.js` que escapam o nome do arquivo com `escapeHTML`; alertas de CSRF cobertos pelos guards `requireSameOrigin`/`requireAdminOrigin`; alertas de cookie em `server/auth.js` atendidos por `cookieOptions` (`httpOnly` e `secure`); e alertas de rate limit em login, callback, logout e sonda, dos quais logout estava sem limiter. Adicionei um limiter compartilhado de 60 chamadas/5 minutos para logout e logout-all, com teste HTTP para 429. A avaliação CodeQL posterior a essas alterações segue **NÃO VERIFICADA**.
-- Check externo Cloudflare Workers: **FAIL** no commit consultado; logs de build não estavam acessíveis pela integração atual. Não é evidência suficiente para atribuir a falha à Fase 2.
-- Provedor OAuth real: **NÃO VERIFICADO/BLOCKED**; não há configuração OAuth de teste neste checkout.
+Validação independente no SHA `cdf1a86cb6ac8909656cd01862c06faf10ac9933`:
+
+- `pnpm test` no CI: **169 aprovados, 0 falhas, 1 teste MySQL ignorado no job geral**.
+- Job `auth-mysql-integration`: **PASS** com MySQL efêmero autorizado no GitHub Actions.
+- `pnpm build`: **PASS**.
+- `pnpm security:secrets`: **PASS**.
+- Syntax check: **PASS**.
+- Build do preview: **PASS**.
+- Docker build: **PASS**.
+- `pnpm audit --prod --audit-level=high`: **PASS**; permanecem **4 advisories Moderate** a serem inventariados/avaliados separadamente.
+- Workflow CodeQL `analyze`: **PASS**.
+- GitHub Advanced Security / CodeQL PR gate: **PASS**, sem novos alertas High bloqueando o PR.
+- Os alertas de CSRF e rate limiting foram resolvidos com controles efetivos; nenhuma suppression/ignore foi adicionada para forçar verde.
+- O scan identificou inicialmente um advisory High transitivo em `ip-address@10.2.0`; a resolução foi corrigida para `10.5.0` e o gate High voltou a passar.
+- Cloudflare Workers/Preview: o pipeline externo continua **intermitente**. Houve deployment bem-sucedido do SHA `7a704826`, enquanto um build posterior do SHA final reportou falha sem log disponível por esta integração. Isso é tratado como pendência de infraestrutura, não como evidência de falha da autenticação.
+- Provedor OAuth real end-to-end: **NÃO VERIFICADO / BLOCKED** por ausência de uma identidade/configuração OAuth de teste autorizada.
 
 ## Checklist de Aprovação
 
-- [x] OAuth PASS — validação de state, cookie, redirect URI e consumo único comprovados estaticamente/unitariamente.
-- [x] JWT PASS — assinatura, algoritmo, issuer, audience, `sub`, `jti`, `iat`, `exp`, adulteração e futuro cobertos.
-- [x] Cookies PASS — `__Host-`, HttpOnly, Secure, SameSite, Path e maxAge cobertos.
-- [x] Server-side Session PASS — runtime MySQL 8.4.9 de teste validou criação, estado e revogação.
-- [x] Revocation PASS — JTI, logout, logout-all, alteração/remoção de acesso e expiração cobertos em código/testes.
-- [x] Identity Binding PASS — OpenID/e-mail/acesso ativo e pairing atômico cobertos.
-- [x] Session Fixation PASS — novo JTI após login e revogação do token anterior.
-- [x] Concurrent Sessions PASS — oito sessões simultâneas respeitaram limite de três no MySQL de teste.
-- [x] Idle Timeout PASS — configuração limitada e estados active/revoked/absolute/idle cobertos.
-- [x] Auth Error Leakage PASS — respostas opacas para erros internos e logs sem token/secret observado.
-- [x] Tests PASS — 163 testes locais e integração MySQL 1/1 passaram; o job CI remoto ainda não rodou sobre estas alterações. Secret scan local PASS.
+- [x] OAuth — validação de state, challenge, redirect URI e replay coberta unitária/integração de banco.
+- [x] JWT — algoritmo, assinatura, issuer, audience, claims temporais, JTI e adulteração cobertos.
+- [x] Cookies — `__Host-`, HttpOnly, Secure, SameSite, Path e ciclo de vida cobertos.
+- [x] Server-side Session — runtime MySQL efêmero validado no CI.
+- [x] Revocation — JTI, logout, logout-all e alteração/remoção de acesso cobertos.
+- [x] Identity Binding / Pairing — vínculo atômico e replay cobertos.
+- [x] Session Fixation — novo JTI e revogação do anterior.
+- [x] Concurrent Sessions — limite validado em MySQL concorrente.
+- [x] Idle Timeout — estados de expiração e inatividade cobertos.
+- [x] CSRF — same-origin + double-submit token independente.
+- [x] Rate Limit — barreira padrão + limites específicos por rota.
+- [x] Error Leakage — respostas opacas e logs sem credenciais observadas.
+- [x] Secret Scan — PASS.
+- [x] Production Audit High/Critical — PASS.
+- [x] Tests / Build / Docker — PASS.
+- [x] CI — PASS.
+- [x] CodeQL workflow — PASS.
+- [x] GitHub Advanced Security gate — PASS.
+- [ ] OAuth real end-to-end com provider e identidade de teste autorizados — **BLOCKED / NÃO VERIFICADO**.
+- [ ] Advisories Moderate de dependências — **4 pendentes de inventário/triagem**, sem High/Critical no gate atual.
+- [ ] Pipeline Cloudflare Preview/Workers intermitente — **pendência operacional externa à autenticação**.
 
 ## Conclusão
 
-**CAMADA 1 — FASE 2: FAIL**
+**CAMADA 1 — FASE 2: NO-GO OPERACIONAL**
 
-O gate remoto ainda precisa rodar sobre estas alterações. A Fase 2 permanece `FAIL` até fechar estes blockers:
+A implementação e os gates automatizados da Fase 2 estão tecnicamente aprovados no SHA `cdf1a86cb6ac8909656cd01862c06faf10ac9933`: testes, MySQL, secret scan, build, Docker, CodeQL e GitHub Advanced Security passaram, e não há blocker Critical/High conhecido no código desta fase.
 
-1. O job CI/CodeQL precisa rodar sobre o branch atualizado; a execução MySQL local passou, mas o resultado remoto ainda não está disponível.
-2. O gate CodeQL reportou 13 alertas no PR anterior. A anotação de logout foi corrigida localmente; os alertas de wrappers precisam ser reavaliados no novo resultado.
-3. A integração OAuth real ainda precisa ser validada com configuração e identidade de teste do provedor.
+O resultado global permanece **NO-GO** porque o critério acordado exige validação OAuth real ponta a ponta antes de declarar `PASS`. Também permanecem como riscos residuais quatro advisories Moderate de dependências e a instabilidade do pipeline externo do Cloudflare, que devem ser tratados/documentados antes do go-live.
 
-Nenhuma alteração da Fase 3 foi realizada.
+Não houve merge na `main`.
