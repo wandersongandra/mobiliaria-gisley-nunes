@@ -18,11 +18,24 @@ function mockRequest({ host = 'localhost:3000', proto = '' } = {}) {
   };
 }
 
-test('configuredPublicOrigin normaliza uma origem HTTPS', () => {
+test('configuredPublicOrigin aceita apenas origem canônica sem path/query/credenciais', () => {
   const previous = process.env.PUBLIC_ORIGIN;
-  process.env.PUBLIC_ORIGIN = 'https://example.com/path?q=1';
+
+  process.env.PUBLIC_ORIGIN = 'https://example.com/';
   assert.equal(configuredPublicOrigin(), 'https://example.com');
-  process.env.PUBLIC_ORIGIN = previous;
+
+  for (const invalid of [
+    'https://example.com/admin',
+    'https://example.com/?x=1',
+    'https://example.com/#fragment',
+    'https://user:pass@example.com/'
+  ]) {
+    process.env.PUBLIC_ORIGIN = invalid;
+    assert.equal(configuredPublicOrigin(), '', invalid);
+  }
+
+  if (previous === undefined) delete process.env.PUBLIC_ORIGIN;
+  else process.env.PUBLIC_ORIGIN = previous;
 });
 
 test('requestOrigin rejeita Host inválido', () => {
@@ -55,11 +68,16 @@ test('requestHostOrigin mantém a origem real mesmo com domínio público canôn
   if (previousProxy === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = previousProxy;
 });
 
-test('configuredAdminOrigin normaliza o subdomínio do painel', () => {
+test('configuredAdminOrigin exige origem administrativa canônica', () => {
   const previous = process.env.ADMIN_ORIGIN;
-  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test/admin?x=1';
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test/';
   assert.equal(configuredAdminOrigin(), 'https://painel.gisley.test');
-  process.env.ADMIN_ORIGIN = previous;
+
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test/admin';
+  assert.equal(configuredAdminOrigin(), '');
+
+  if (previous === undefined) delete process.env.ADMIN_ORIGIN;
+  else process.env.ADMIN_ORIGIN = previous;
 });
 
 
