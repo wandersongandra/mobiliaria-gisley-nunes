@@ -32,6 +32,7 @@ import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './confi
 import { authCookieNames, callback, clearSessionCookie, currentAdmin, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
+  canArchiveProperty,
   canCreateProperty,
   canManagePropertyMedia,
   canMutateProperty,
@@ -269,7 +270,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
       const removed = await softDeleteProperty(id, {
-        allowArchive: hasCapability(req.admin, 'property.archive')
+        allowArchive: canArchiveProperty(req.admin)
       });
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
       await writeAudit(req, 'property.archive', 'property', id);
