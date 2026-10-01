@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const routesSource = readFileSync(new URL('../server/routes.js', import.meta.url), 'utf8');
+const authorizationSource = readFileSync(new URL('../server/authorization.js', import.meta.url), 'utf8');
 
 const managerOnlyDeclarations = [
   "app.put('/api/admin/site', requireCapability('site.manage')",
@@ -54,9 +55,14 @@ test('sonda de sessão continua fora da cadeia autenticada, mas minimizada', () 
   assert.equal(sessionBlock.includes('openId:'), false);
 });
 
-test('proteções contra auto-rebaixamento e remoção de gestor bootstrap permanecem no backend', () => {
-  assert.ok(routesSource.includes('CANNOT_CHANGE_SELF_ACCESS'));
-  assert.ok(routesSource.includes('CANNOT_REMOVE_SELF'));
-  assert.ok(routesSource.includes('BOOTSTRAP_MANAGER_PROTECTED'));
+test('proteções contra auto-rebaixamento e remoção de gestor bootstrap permanecem centralizadas no backend', () => {
+  assert.ok(authorizationSource.includes('export function staffMutationError'));
+  assert.ok(authorizationSource.includes('export function staffRemovalError'));
+  assert.ok(authorizationSource.includes('CANNOT_CHANGE_SELF_ACCESS'));
+  assert.ok(authorizationSource.includes('CANNOT_REMOVE_SELF'));
+  assert.ok(authorizationSource.includes('BOOTSTRAP_MANAGER_PROTECTED'));
+
+  assert.ok(routesSource.includes('staffMutationError(req.admin, protectedTarget, patch)'));
+  assert.ok(routesSource.includes('staffRemovalError(req.admin, protectedTarget)'));
   assert.ok(routesSource.includes('revokeAdminSessionsByOpenId(current.open_id)'));
 });
