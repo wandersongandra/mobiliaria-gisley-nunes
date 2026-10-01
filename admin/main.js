@@ -494,9 +494,8 @@ function renderTeam() {
     const isSelf = Boolean(member.is_self);
     const isBootstrap = Boolean(member.is_bootstrap);
     const roleLabel = member.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
-    const identityLabel = member.identity_hint ? `OAuth · ${escapeHTML(member.identity_hint)}` : 'Identidade não disponível';
     return `<article class="team-row">
-      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a><code class="team-identity">${identityLabel}</code></div></div>
+      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a></div></div>
       <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${isSelf ? '<small>você</small>' : ''}${isBootstrap ? '<small>principal</small>' : ''}</div>
       <div class="team-actions">
         ${!isSelf && !isBootstrap ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
