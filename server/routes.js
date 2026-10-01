@@ -298,21 +298,29 @@ export function registerRoutes(app) {
       }
 
       const photoId = crypto.randomUUID();
-      const photos = await addPhoto({
-        id: photoId,
-        propertyId: req.params.id,
-        storagePath,
-        url: storageAssetUrl(storagePath),
-        altText: altText || `Foto de ${property.title}`,
-        sortOrder: Number(sortOrder || 0),
-        isCover: Boolean(isCover),
-        storageProvider: storageProviderName(),
-        mimeType: contentType,
-        fileSize: parsedSize,
-        width: parsedWidth,
-        height: parsedHeight,
-        uploadedBy: req.admin.email
-      });
+      let photos;
+      try {
+        photos = await addPhoto({
+          id: photoId,
+          propertyId: req.params.id,
+          storagePath,
+          url: storageAssetUrl(storagePath),
+          altText: altText || `Foto de ${property.title}`,
+          sortOrder: Number(sortOrder || 0),
+          isCover: Boolean(isCover),
+          storageProvider: storageProviderName(),
+          mimeType: contentType,
+          fileSize: parsedSize,
+          width: parsedWidth,
+          height: parsedHeight,
+          uploadedBy: req.admin.email
+        });
+      } catch (error) {
+        if (error?.message === 'PHOTO_LIMIT_REACHED') {
+          try { await storageDelete(storagePath); } catch {}
+        }
+        throw error;
+      }
       await writeAudit(req, 'photo.add', 'photo', photoId, { propertyId: req.params.id, storagePath });
       return res.status(201).json({ photos });
     } catch (error) {
