@@ -1,0 +1,58 @@
+<%- include('partials/head') %>
+  <body data-page="termos">
+    <%- include('partials/header') %>
+    <main id="conteudo">
+      <section class="page-hero shell">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> termos de uso</p>
+        <h1>Regras para usar<br /><em>este site.</em></h1>
+        <p class="page-lead">Informações sobre o uso do site, anúncios imobiliários, contatos e responsabilidades.</p>
+      </section>
+
+      <section class="shell legal-section">
+        <p><strong>Última atualização:</strong> outubro de 2026.</p>
+        <p>Estes Termos de Uso disciplinam o acesso e a utilização do site <%= site.name %>. Ao navegar pelo site ou utilizar seus canais de contato, você concorda em utilizá-los de forma lícita, responsável e compatível com estes termos.</p>
+
+        <h2>1. Finalidade do site</h2>
+        <p>O site apresenta informações institucionais, imóveis disponíveis para compra ou locação e canais de contato. O conteúdo tem caráter informativo e comercial e não substitui proposta, contrato, escritura, laudo, matrícula, certidão ou outro documento formal necessário a uma negociação imobiliária.</p>
+
+        <h2>2. Informações dos imóveis</h2>
+        <p>Valores, disponibilidade, características, metragem, taxas, tributos, imagens e demais informações dos imóveis podem ser atualizados, corrigidos ou retirados sem aviso prévio. Sempre que necessário, as informações relevantes à negociação devem ser confirmadas diretamente com a imobiliária antes de qualquer decisão ou contratação.</p>
+
+        <h2>3. Imagens e materiais</h2>
+        <p>Fotografias, textos, marcas, identidade visual, layouts e demais materiais publicados no site são protegidos pela legislação aplicável ou utilizados mediante autorização de seus titulares. O conteúdo não pode ser copiado, republicado, explorado comercialmente ou redistribuído sem autorização, salvo quando a lei permitir.</p>
+
+        <h2>4. Uso permitido</h2>
+        <p>Você se compromete a não utilizar o site para praticar fraude, tentar obter acesso indevido a áreas restritas, interferir no funcionamento da aplicação, explorar vulnerabilidades, automatizar abuso de formulários, introduzir código malicioso ou usar informações do site de maneira ilícita.</p>
+
+        <h2>5. Área administrativa</h2>
+        <p>O painel administrativo é restrito a usuários autorizados. Credenciais e sessões são pessoais e não devem ser compartilhadas. Ações realizadas no CRM podem ser registradas em trilha de auditoria para fins de segurança, rastreabilidade e operação.</p>
+
+        <h2>6. Formulários e atendimento</h2>
+        <p>Ao enviar um formulário, você declara que as informações fornecidas são verdadeiras e suficientes para permitir o retorno do atendimento. O envio do formulário não cria obrigação de contratação nem garante disponibilidade do imóvel consultado.</p>
+
+        <h2>7. Serviços de terceiros</h2>
+        <p>Algumas funcionalidades podem depender de serviços de infraestrutura, autenticação, hospedagem, armazenamento, e-mail, mensageria ou links externos. Esses serviços podem possuir termos e políticas próprios. A <%= site.name %> procura utilizar fornecedores adequados à operação, mas não controla indisponibilidades externas inevitáveis.</p>
+
+        <h2>8. Disponibilidade do site</h2>
+        <p>O site pode ficar temporariamente indisponível por manutenção, atualização, falha técnica, incidente de segurança ou evento fora do controle razoável da operação. Não há garantia de disponibilidade ininterrupta.</p>
+
+        <h2>9. Limitação e confirmação de informações</h2>
+        <p>O site é mantido com o objetivo de fornecer informações atualizadas, mas erros materiais podem ocorrer. Nenhuma informação exibida deve ser interpretada como promessa definitiva quando depender de confirmação documental, do proprietário, de terceiros ou de condições específicas da negociação.</p>
+
+        <h2>10. Privacidade</h2>
+        <p>O tratamento de dados pessoais relacionado ao site e ao CRM é descrito na <a href="/privacidade">Política de Privacidade</a>, que integra estes Termos de Uso.</p>
+
+        <h2>11. Alterações destes termos</h2>
+        <p>Estes termos podem ser atualizados para refletir mudanças no site, na operação ou em requisitos legais. A versão vigente será a publicada nesta página, acompanhada da data da última atualização.</p>
+
+        <h2>12. Legislação aplicável</h2>
+        <p>Estes termos são interpretados de acordo com a legislação brasileira. Eventuais controvérsias serão tratadas pelos meios e perante o foro competente definidos pela legislação aplicável, preservados os direitos que não possam ser afastados por acordo.</p>
+
+        <h2>13. Contato</h2>
+        <p>Para dúvidas sobre estes termos, entre em contato pelo e-mail <a href="mailto:<%= site.email %>"><%= site.email %></a>.</p>
+      </section>
+    </main>
+    <%- include('partials/footer') %>
+    <script type="module" src="<%= assets.js %>"></script>
+  </body>
+</html>
