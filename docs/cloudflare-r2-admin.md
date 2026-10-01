@@ -56,7 +56,8 @@ O navegador do CRM envia os arquivos diretamente para a URL temporária do R2. R
       "PUT"
     ],
     "AllowedHeaders": [
-      "Content-Type"
+      "Content-Type",
+      "If-None-Match"
     ],
     "ExposeHeaders": [
       "ETag"
