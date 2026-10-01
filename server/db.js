@@ -61,9 +61,38 @@ export async function migrate() {
     INDEX idx_morada_staff_role_active (role, active)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_auth_challenges (
+    state_hash CHAR(64) PRIMARY KEY,
+    redirect_uri VARCHAR(500) NOT NULL,
+    expires_at_ms BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_morada_auth_challenges_expiry (expires_at_ms)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_admin_sessions (
+    jti CHAR(36) PRIMARY KEY,
+    open_id VARCHAR(191) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    expires_at_ms BIGINT UNSIGNED NOT NULL,
+    revoked_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_morada_admin_sessions_openid (open_id, expires_at_ms),
+    INDEX idx_morada_admin_sessions_email (email, expires_at_ms),
+    INDEX idx_morada_admin_sessions_active (revoked_at, expires_at_ms)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
   const bootstrapManagers = adminEmails();
   if (bootstrapManagers.length) {
     const placeholders = bootstrapManagers.map(() => '?').join(',');
+    await db.execute(
+      `UPDATE morada_admin_sessions s
+       JOIN morada_staff_access a ON a.email=s.email
+       SET s.revoked_at=COALESCE(s.revoked_at, CURRENT_TIMESTAMP)
+       WHERE a.invited_by='environment'
+         AND a.email NOT IN (${placeholders})
+         AND s.revoked_at IS NULL`,
+      bootstrapManagers
+    );
     await db.execute(
       `UPDATE morada_staff_access
        SET active=0, updated_at=CURRENT_TIMESTAMP
@@ -71,6 +100,12 @@ export async function migrate() {
       bootstrapManagers
     );
   } else {
+    await db.execute(
+      `UPDATE morada_admin_sessions s
+       JOIN morada_staff_access a ON a.email=s.email
+       SET s.revoked_at=COALESCE(s.revoked_at, CURRENT_TIMESTAMP)
+       WHERE a.invited_by='environment' AND s.revoked_at IS NULL`
+    );
     await db.execute(
       "UPDATE morada_staff_access SET active=0, updated_at=CURRENT_TIMESTAMP WHERE invited_by='environment'"
     );
@@ -494,6 +529,94 @@ export async function reorderPhotos(propertyId, photoIds) {
   }
 
   return listPhotos(propertyId);
+}
+
+export async function createAuthChallenge({ stateHash, redirectUri, expiresAtMs }) {
+  const db = getPool();
+  const now = Date.now();
+  await db.execute('DELETE FROM morada_auth_challenges WHERE expires_at_ms<=?', [now]);
+  await db.execute(
+    'INSERT INTO morada_auth_challenges (state_hash,redirect_uri,expires_at_ms) VALUES (?,?,?)',
+    [String(stateHash).slice(0, 64), String(redirectUri).slice(0, 500), Number(expiresAtMs)]
+  );
+}
+
+export async function consumeAuthChallenge(stateHash) {
+  const db = getPool();
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[challenge]] = await connection.execute(
+      'SELECT state_hash,redirect_uri,expires_at_ms FROM morada_auth_challenges WHERE state_hash=? LIMIT 1 FOR UPDATE',
+      [String(stateHash).slice(0, 64)]
+    );
+    if (!challenge) {
+      await connection.rollback();
+      return null;
+    }
+
+    await connection.execute('DELETE FROM morada_auth_challenges WHERE state_hash=?', [challenge.state_hash]);
+    await connection.commit();
+
+    if (Number(challenge.expires_at_ms) <= Date.now()) return null;
+    return {
+      redirectUri: String(challenge.redirect_uri),
+      expiresAtMs: Number(challenge.expires_at_ms)
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
+  const db = getPool();
+  const now = Date.now();
+  await db.execute('DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?', [now]);
+  await db.execute(
+    'INSERT INTO morada_admin_sessions (jti,open_id,email,expires_at_ms) VALUES (?,?,?,?)',
+    [
+      String(jti).slice(0, 36),
+      String(openId).slice(0, 191),
+      String(email).trim().toLowerCase().slice(0, 255),
+      Number(expiresAtMs)
+    ]
+  );
+}
+
+export async function findActiveAdminSession(jti) {
+  const db = getPool();
+  const [rows] = await db.execute(
+    `SELECT jti,open_id,email,expires_at_ms
+     FROM morada_admin_sessions
+     WHERE jti=? AND revoked_at IS NULL AND expires_at_ms>?
+     LIMIT 1`,
+    [String(jti).slice(0, 36), Date.now()]
+  );
+  return rows[0] || null;
+}
+
+export async function revokeAdminSession(jti) {
+  if (!jti) return false;
+  const db = getPool();
+  const [result] = await db.execute(
+    'UPDATE morada_admin_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE jti=?',
+    [String(jti).slice(0, 36)]
+  );
+  return result.affectedRows > 0;
+}
+
+export async function revokeAdminSessionsByEmail(email) {
+  const db = getPool();
+  const normalized = String(email || '').trim().toLowerCase().slice(0, 255);
+  if (!normalized) return 0;
+  const [result] = await db.execute(
+    'UPDATE morada_admin_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE email=? AND revoked_at IS NULL',
+    [normalized]
+  );
+  return result.affectedRows;
 }
 
 export async function upsertAdmin({ openId, email, name }) {
