@@ -18,6 +18,7 @@ import {
   securityHeaders
 } from './security.js';
 import { publicProperty } from './presenters.js';
+import { apiErrorHandler } from './errors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -200,21 +201,7 @@ app.get('/llms.txt', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-app.use((error, req, res, next) => {
-  console.error('[api]', isProduction ? error.message : (error.stack || error.message));
-  if (res.headersSent) return next(error);
-
-  if (error?.type === 'entity.too.large' || error?.status === 413) {
-    return res.status(413).json({ error: 'PAYLOAD_TOO_LARGE' });
-  }
-
-  if (error instanceof SyntaxError && error?.type === 'entity.parse.failed') {
-    return res.status(400).json({ error: 'INVALID_JSON' });
-  }
-
-  const known = { CAPABILITY_REQUIRED: ['CAPABILITY_REQUIRED', 403], NOT_FOUND: ['NOT_FOUND', 404], TITLE_REQUIRED: ['TITLE_REQUIRED', 400], LOCATION_REQUIRED: ['LOCATION_REQUIRED', 400], INVALID_ASSET: ['INVALID_ASSET', 400], INVALID_CONTACT: ['INVALID_CONTACT', 400], INVALID_EMAIL: ['INVALID_EMAIL', 400], INVALID_WHATSAPP: ['INVALID_WHATSAPP', 400], INVALID_SITE_SETTINGS: ['INVALID_SITE_SETTINGS', 400], INVALID_INSTAGRAM_URL: ['INVALID_INSTAGRAM_URL', 400], INVALID_TESTIMONIAL: ['INVALID_TESTIMONIAL', 400], INVALID_LEAD_STATUS: ['INVALID_LEAD_STATUS', 400], INVALID_ORDER: ['INVALID_ORDER', 400], PHOTO_LIMIT_REACHED: ['PHOTO_LIMIT_REACHED', 409], ASSET_ALREADY_REGISTERED: ['ASSET_ALREADY_REGISTERED', 409], SLUG_CONFLICT: ['SLUG_CONFLICT', 409], DATABASE_NOT_CONFIGURED: ['DATABASE_NOT_CONFIGURED', 503], STORAGE_NOT_CONFIGURED: ['STORAGE_NOT_CONFIGURED', 503], OAUTH_NOT_CONFIGURED: ['OAUTH_NOT_CONFIGURED', 503], SESSION_SECRET_NOT_CONFIGURED: ['SESSION_SECRET_NOT_CONFIGURED', 503] }[error.message];
-  res.status(known?.[1] || 500).json({ error: known?.[0] || 'INTERNAL_ERROR' });
-});
+app.use(apiErrorHandler);
 
 async function start() {
   if (isProduction) {
