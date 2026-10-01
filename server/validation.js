@@ -217,11 +217,13 @@ export function normalizeAuditLimit(value) {
 export function normalizeTeamCreate(input = {}) {
   input = ensureObject(input, 'INVALID_TEAM_MEMBER');
   const email = text(input.email, 255, { required: true, error: 'INVALID_TEAM_MEMBER' }).toLowerCase();
-  const openId = text(input.openId, 191, { required: true, error: 'INVALID_TEAM_MEMBER' });
+  const pairingCode = text(input.pairingCode, 64, { required: true, error: 'INVALID_TEAM_MEMBER' });
   const name = text(input.name, 255, { required: true, error: 'INVALID_TEAM_MEMBER' });
   const role = enumField(input.role, TEAM_ROLES, { defaultValue: 'editor', error: 'INVALID_TEAM_MEMBER' });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\S+$/.test(openId)) throw new Error('INVALID_TEAM_MEMBER');
-  return { email, openId, name, role };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^[A-Za-z0-9_-]{12,64}$/.test(pairingCode)) {
+    throw new Error('INVALID_TEAM_MEMBER');
+  }
+  return { email, pairingCode, name, role };
 }
 
 export function normalizeTeamPatch(input = {}) {
