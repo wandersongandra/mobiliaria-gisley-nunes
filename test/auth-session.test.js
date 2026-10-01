@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { decodeJwt, SignJWT } from 'jose';
 import {
+  authCookieNames,
   createSessionToken,
   hashOAuthState,
+  resolveAdminAccess,
   safeStateEqual,
   verifySessionToken
 } from '../server/auth.js';
@@ -226,5 +228,70 @@ test('limite de sessões administrativas é sempre restringido entre 1 e 10', as
   } finally {
     if (previous === undefined) delete process.env.GISELY_MAX_ADMIN_SESSIONS;
     else process.env.GISELY_MAX_ADMIN_SESSIONS = previous;
+  }
+});
+
+
+test('acesso bootstrap removido do ambiente é revogado imediatamente', () => {
+  const previous = process.env.GISELY_ADMIN_EMAILS;
+  process.env.GISELY_ADMIN_EMAILS = 'owner@gisley.test';
+
+  try {
+    assert.deepEqual(
+      resolveAdminAccess({
+        email: 'owner@gisley.test',
+        access: { role: 'manager', active: 1, invited_by: 'environment' }
+      }),
+      { role: 'manager', bootstrapManager: true }
+    );
+
+    process.env.GISELY_ADMIN_EMAILS = '';
+    assert.equal(
+      resolveAdminAccess({
+        email: 'owner@gisley.test',
+        access: { role: 'manager', active: 1, invited_by: 'environment' }
+      }),
+      null
+    );
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_ADMIN_EMAILS;
+    else process.env.GISELY_ADMIN_EMAILS = previous;
+  }
+});
+
+test('editor ativo permanece editor e acesso inativo é negado', () => {
+  const previous = process.env.GISELY_ADMIN_EMAILS;
+  process.env.GISELY_ADMIN_EMAILS = 'owner@gisley.test';
+
+  try {
+    assert.deepEqual(
+      resolveAdminAccess({
+        email: 'editor@gisley.test',
+        access: { role: 'editor', active: 1, invited_by: 'owner@gisley.test' }
+      }),
+      { role: 'editor', bootstrapManager: false }
+    );
+
+    assert.equal(
+      resolveAdminAccess({
+        email: 'editor@gisley.test',
+        access: { role: 'editor', active: 0, invited_by: 'owner@gisley.test' }
+      }),
+      null
+    );
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_ADMIN_EMAILS;
+    else process.env.GISELY_ADMIN_EMAILS = previous;
+  }
+});
+
+test('produção usa cookies host-only com prefixo __Host', () => {
+  const names = authCookieNames();
+  if (process.env.NODE_ENV === 'production') {
+    assert.match(names.sessionCookie, /^__Host-/);
+    assert.match(names.stateCookie, /^__Host-/);
+  } else {
+    assert.equal(names.sessionCookie, 'gisley_admin_session');
+    assert.equal(names.stateCookie, 'gisley_oauth_state');
   }
 });
