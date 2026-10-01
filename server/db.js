@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { adminEmails, hasDatabase, isProduction, maxAdminSessions } from './config.js';
+import { adminEmails, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
 import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
@@ -74,12 +74,23 @@ export async function migrate() {
     open_id VARCHAR(191) NOT NULL,
     email VARCHAR(255) NOT NULL,
     expires_at_ms BIGINT UNSIGNED NOT NULL,
+    last_seen_at_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
     revoked_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_morada_admin_sessions_openid (open_id, expires_at_ms),
     INDEX idx_morada_admin_sessions_email (email, expires_at_ms),
     INDEX idx_morada_admin_sessions_active (revoked_at, expires_at_ms)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  try {
+    await db.query('ALTER TABLE morada_admin_sessions ADD COLUMN last_seen_at_ms BIGINT UNSIGNED NOT NULL DEFAULT 0');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
+  await db.execute(
+    'UPDATE morada_admin_sessions SET last_seen_at_ms=? WHERE last_seen_at_ms=0 AND revoked_at IS NULL',
+    [Date.now()]
+  );
 
   const bootstrapManagers = adminEmails();
   if (bootstrapManagers.length) {
@@ -605,12 +616,13 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
     );
 
     await connection.execute(
-      'INSERT INTO morada_admin_sessions (jti,open_id,email,expires_at_ms) VALUES (?,?,?,?)',
+      'INSERT INTO morada_admin_sessions (jti,open_id,email,expires_at_ms,last_seen_at_ms) VALUES (?,?,?,?,?)',
       [
         String(jti).slice(0, 36),
         String(openId).slice(0, 191),
         normalizedEmail,
-        Number(expiresAtMs)
+        Number(expiresAtMs),
+        now
       ]
     );
 
@@ -642,14 +654,30 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
 
 export async function findActiveAdminSession(jti) {
   const db = getPool();
+  const now = Date.now();
+  const idleCutoff = now - sessionIdleTimeoutMs();
   const [rows] = await db.execute(
-    `SELECT jti,open_id,email,expires_at_ms
+    `SELECT jti,open_id,email,expires_at_ms,last_seen_at_ms
      FROM morada_admin_sessions
-     WHERE jti=? AND revoked_at IS NULL AND expires_at_ms>?
+     WHERE jti=?
+       AND revoked_at IS NULL
+       AND expires_at_ms>?
+       AND last_seen_at_ms>?
      LIMIT 1`,
-    [String(jti).slice(0, 36), Date.now()]
+    [String(jti).slice(0, 36), now, idleCutoff]
   );
-  return rows[0] || null;
+  const session = rows[0] || null;
+  if (!session) return null;
+
+  if (now - Number(session.last_seen_at_ms) >= 5 * 60 * 1000) {
+    await db.execute(
+      'UPDATE morada_admin_sessions SET last_seen_at_ms=? WHERE jti=? AND revoked_at IS NULL',
+      [now, session.jti]
+    );
+    session.last_seen_at_ms = now;
+  }
+
+  return session;
 }
 
 export async function revokeAdminSession(jti) {
