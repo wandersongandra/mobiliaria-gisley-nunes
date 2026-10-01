@@ -59,9 +59,6 @@ export function configuredAdminOrigin() {
   return configuredOrigin(env.ADMIN_ORIGIN);
 }
 
-export function configuredMediaOrigin() {
-  return configuredOrigin(env.MEDIA_PUBLIC_ORIGIN);
-}
 
 export function hasR2Storage() {
   return Boolean(
