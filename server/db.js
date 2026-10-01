@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { adminEmails, hasDatabase, isProduction } from './config.js';
+import { adminEmails, hasDatabase, isProduction, maxAdminSessions } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
 import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
@@ -587,17 +587,56 @@ export async function consumeAuthChallenge(stateHash) {
 
 export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
   const db = getPool();
+  const connection = await db.getConnection();
   const now = Date.now();
-  await db.execute('DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?', [now]);
-  await db.execute(
-    'INSERT INTO morada_admin_sessions (jti,open_id,email,expires_at_ms) VALUES (?,?,?,?)',
-    [
-      String(jti).slice(0, 36),
-      String(openId).slice(0, 191),
-      String(email).trim().toLowerCase().slice(0, 255),
-      Number(expiresAtMs)
-    ]
-  );
+  const normalizedEmail = String(email).trim().toLowerCase().slice(0, 255);
+
+  try {
+    await connection.beginTransaction();
+
+    await connection.execute(
+      'DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?',
+      [now]
+    );
+
+    await connection.execute(
+      'SELECT email FROM morada_staff_access WHERE email=? LIMIT 1 FOR UPDATE',
+      [normalizedEmail]
+    );
+
+    await connection.execute(
+      'INSERT INTO morada_admin_sessions (jti,open_id,email,expires_at_ms) VALUES (?,?,?,?)',
+      [
+        String(jti).slice(0, 36),
+        String(openId).slice(0, 191),
+        normalizedEmail,
+        Number(expiresAtMs)
+      ]
+    );
+
+    const [active] = await connection.execute(
+      `SELECT jti
+       FROM morada_admin_sessions
+       WHERE email=? AND revoked_at IS NULL AND expires_at_ms>?
+       ORDER BY created_at DESC, jti DESC`,
+      [normalizedEmail, now]
+    );
+
+    const stale = active.slice(maxAdminSessions()).map((row) => String(row.jti));
+    for (const staleJti of stale) {
+      await connection.execute(
+        'UPDATE morada_admin_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE jti=?',
+        [staleJti]
+      );
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function findActiveAdminSession(jti) {
