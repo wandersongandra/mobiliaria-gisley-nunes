@@ -25,21 +25,27 @@ test('requestOrigin rejeita Host inválido', () => {
   process.env.PUBLIC_ORIGIN = previous;
 });
 
-test('requestOrigin usa protocolo encaminhado HTTPS', () => {
-  const previous = process.env.PUBLIC_ORIGIN;
+test('requestOrigin usa protocolo encaminhado HTTPS somente em proxy confiável', () => {
+  const previousPublic = process.env.PUBLIC_ORIGIN;
+  const previousProxy = process.env.TRUST_PROXY_MODE;
   process.env.PUBLIC_ORIGIN = '';
+  process.env.TRUST_PROXY_MODE = 'cloudflare';
   assert.equal(requestOrigin(mockRequest({ host: 'site.com', proto: 'https' })), 'https://site.com');
-  process.env.PUBLIC_ORIGIN = previous;
+  if (previousPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = previousPublic;
+  if (previousProxy === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = previousProxy;
 });
 
 
 test('requestHostOrigin mantém a origem real mesmo com domínio público canônico', () => {
   const previousPublic = process.env.PUBLIC_ORIGIN;
+  const previousProxy = process.env.TRUST_PROXY_MODE;
   process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  process.env.TRUST_PROXY_MODE = 'cloudflare';
   const req = mockRequest({ host: 'painel.gisley.test', proto: 'https' });
   assert.equal(requestOrigin(req), 'https://www.gisley.test');
   assert.equal(requestHostOrigin(req), 'https://painel.gisley.test');
-  process.env.PUBLIC_ORIGIN = previousPublic;
+  if (previousPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = previousPublic;
+  if (previousProxy === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = previousProxy;
 });
 
 test('configuredAdminOrigin normaliza o subdomínio do painel', () => {
