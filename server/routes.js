@@ -268,7 +268,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.delete('/api/admin/properties/:id', requireCapability('property.archive'), async (req, res, next) => {
     try {
       const id = normalizeResourceId(req.params.id, { max: 36 });
-      const removed = await softDeleteProperty(id);
+      const removed = await softDeleteProperty(id, {
+        allowArchive: hasCapability(req.admin, 'property.archive')
+      });
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
       await writeAudit(req, 'property.archive', 'property', id);
       return res.status(204).end();
