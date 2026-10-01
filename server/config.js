@@ -8,7 +8,7 @@ export function hasDatabase() {
 }
 
 export function adminEmails() {
-  return String(env.MORADA_ADMIN_EMAILS || '')
+  return String(env.GISELY_ADMIN_EMAILS || env.MORADA_ADMIN_EMAILS || '')
     .split(',')
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
@@ -19,7 +19,7 @@ export function isAllowedEmail(email) {
 }
 
 export function sessionSecret() {
-  return String(env.MORADA_SESSION_SECRET || '');
+  return String(env.GISELY_SESSION_SECRET || env.MORADA_SESSION_SECRET || '');
 }
 
 function configuredOrigin(value) {
