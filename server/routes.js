@@ -192,7 +192,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       const publishedPhoto = await findPublishedPhotoByStoragePath(key);
       if (!publishedPhoto) return res.status(404).json({ error: 'NOT_FOUND' });
       const signedUrl = await storageGetSignedUrl(key);
-      res.setHeader('Cache-Control', 'private, max-age=300');
+      res.setHeader('Cache-Control', 'no-store');
       return res.redirect(307, signedUrl);
     } catch (error) {
       return next(error);
