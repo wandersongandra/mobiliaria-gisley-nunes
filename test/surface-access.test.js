@@ -85,7 +85,7 @@ test('logout global exige sessão autenticada', async () => {
       body: '{}'
     });
     assert.equal(response.status, 401);
-    assert.deepEqual(await response.json(), { error: 'AUTH_REQUIRED', login: true, localLoggedOut: true });
+    assert.deepEqual(await response.json(), { error: 'AUTH_REQUIRED', login: true });
   });
 });
 
