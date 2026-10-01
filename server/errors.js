@@ -1,0 +1,72 @@
+import { isProduction } from './config.js';
+
+const HTTP_ERRORS = Object.freeze({
+  CAPABILITY_REQUIRED: [403, 'CAPABILITY_REQUIRED'],
+  NOT_FOUND: [404, 'NOT_FOUND'],
+
+  TITLE_REQUIRED: [400, 'TITLE_REQUIRED'],
+  LOCATION_REQUIRED: [400, 'LOCATION_REQUIRED'],
+  INVALID_INPUT: [400, 'INVALID_INPUT'],
+  INVALID_ID: [400, 'INVALID_ID'],
+  INVALID_SLUG: [400, 'INVALID_SLUG'],
+  INVALID_NUMBER: [400, 'INVALID_NUMBER'],
+  INVALID_BOOLEAN: [400, 'INVALID_BOOLEAN'],
+  INVALID_ENUM: [400, 'INVALID_ENUM'],
+  INVALID_PROPERTY: [400, 'INVALID_PROPERTY'],
+  INVALID_PROPERTY_NUMBER: [400, 'INVALID_PROPERTY_NUMBER'],
+  INVALID_ASSET: [400, 'INVALID_ASSET'],
+  INVALID_FILE: [400, 'INVALID_FILE'],
+  INVALID_CONTACT: [400, 'INVALID_CONTACT'],
+  INVALID_EMAIL: [400, 'INVALID_EMAIL'],
+  INVALID_WHATSAPP: [400, 'INVALID_WHATSAPP'],
+  INVALID_SITE_SETTINGS: [400, 'INVALID_SITE_SETTINGS'],
+  INVALID_INSTAGRAM_URL: [400, 'INVALID_INSTAGRAM_URL'],
+  INVALID_TESTIMONIAL: [400, 'INVALID_TESTIMONIAL'],
+  INVALID_LEAD_STATUS: [400, 'INVALID_LEAD_STATUS'],
+  INVALID_ORDER: [400, 'INVALID_ORDER'],
+  INVALID_LIMIT: [400, 'INVALID_LIMIT'],
+  INVALID_TEAM_MEMBER: [400, 'INVALID_TEAM_MEMBER'],
+  INVALID_PAIRING: [400, 'INVALID_PAIRING'],
+
+  PHOTO_LIMIT_REACHED: [409, 'PHOTO_LIMIT_REACHED'],
+  ASSET_ALREADY_REGISTERED: [409, 'ASSET_ALREADY_REGISTERED'],
+  SLUG_CONFLICT: [409, 'SLUG_CONFLICT'],
+  TEAM_MEMBER_EXISTS: [409, 'TEAM_MEMBER_EXISTS'],
+
+  DATABASE_NOT_CONFIGURED: [503, 'DATABASE_NOT_CONFIGURED'],
+  AUTH_DATABASE_NOT_CONFIGURED: [503, 'AUTH_DATABASE_NOT_CONFIGURED'],
+  STORAGE_NOT_CONFIGURED: [503, 'STORAGE_NOT_CONFIGURED'],
+  R2_NOT_CONFIGURED: [503, 'R2_NOT_CONFIGURED'],
+  OAUTH_NOT_CONFIGURED: [503, 'OAUTH_NOT_CONFIGURED'],
+  OAUTH_URL_INVALID: [503, 'OAUTH_URL_INVALID'],
+  SESSION_SECRET_NOT_CONFIGURED: [503, 'SESSION_SECRET_NOT_CONFIGURED'],
+  ADMIN_ORIGIN_NOT_CONFIGURED: [503, 'ADMIN_ORIGIN_NOT_CONFIGURED'],
+  BOOTSTRAP_IDENTITY_NOT_CONFIGURED: [503, 'BOOTSTRAP_IDENTITY_NOT_CONFIGURED'],
+  BOOTSTRAP_IDENTITY_INVALID: [503, 'BOOTSTRAP_IDENTITY_INVALID']
+});
+
+export function knownHttpErrorCodes() {
+  return new Set(Object.keys(HTTP_ERRORS));
+}
+
+export function classifyHttpError(error) {
+  if (error?.type === 'entity.too.large' || error?.status === 413) {
+    return { status: 413, code: 'PAYLOAD_TOO_LARGE' };
+  }
+
+  if (error instanceof SyntaxError && error?.type === 'entity.parse.failed') {
+    return { status: 400, code: 'INVALID_JSON' };
+  }
+
+  const known = HTTP_ERRORS[String(error?.message || '')];
+  if (known) return { status: known[0], code: known[1] };
+  return { status: 500, code: 'INTERNAL_ERROR' };
+}
+
+export function apiErrorHandler(error, req, res, next) {
+  console.error('[api]', isProduction ? error?.message : (error?.stack || error?.message));
+  if (res.headersSent) return next(error);
+
+  const contract = classifyHttpError(error);
+  return res.status(contract.status).json({ error: contract.code });
+}
