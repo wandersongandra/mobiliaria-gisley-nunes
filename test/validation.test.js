@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  normalizeAuditLimit,
   normalizeContactLead,
   normalizeEmailAddress,
   normalizePhotoInput,
@@ -221,4 +222,24 @@ test('ordem de fotos rejeita duplicados e IDs fora do contrato', () => {
     () => normalizePhotoOrder({ photoIds: Array.from({ length: 41 }, (_, i) => `photo-${i}`) }),
     /INVALID_ORDER/
   );
+});
+
+
+test('audit limit aceita somente faixa explícita de 1 a 250', () => {
+  assert.equal(normalizeAuditLimit(undefined), 100);
+  assert.equal(normalizeAuditLimit('1'), 1);
+  assert.equal(normalizeAuditLimit('250'), 250);
+  assert.throws(() => normalizeAuditLimit('0'), /INVALID_LIMIT/);
+  assert.throws(() => normalizeAuditLimit('251'), /INVALID_LIMIT/);
+  assert.throws(() => normalizeAuditLimit('1e2'), /INVALID_LIMIT/);
+});
+
+test('e-mail rejeita pontos consecutivos ou nas extremidades do local-part', () => {
+  for (const email of [
+    '.ana@example.com',
+    'ana.@example.com',
+    'ana..silva@example.com'
+  ]) {
+    assert.throws(() => normalizeEmailAddress(email), /INVALID_EMAIL/, email);
+  }
 });
