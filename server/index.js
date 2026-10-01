@@ -50,6 +50,13 @@ function originFrom(req) {
   return requestOrigin(req) || `http://localhost:${port}`;
 }
 
+export function sitemapDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
 app.use(async (req, res, next) => {
   const skipPageLocals = req.path.startsWith('/api/')
     || req.path.startsWith('/_app/')
@@ -161,7 +168,7 @@ app.get('/sitemap.xml', async (req, res, next) => {
       { path: '/sobre', priority: '0.5', changefreq: 'monthly' },
       { path: '/contato', priority: '0.5', changefreq: 'monthly' },
       { path: '/privacidade', priority: '0.1', changefreq: 'yearly' },
-      ...properties.map((property) => ({ path: `/imoveis/${property.slug}`, priority: '0.8', changefreq: 'weekly', lastmod: property.updated_at ? String(property.updated_at).slice(0, 10) : null }))
+      ...properties.map((property) => ({ path: `/imoveis/${property.slug}`, priority: '0.8', changefreq: 'weekly', lastmod: sitemapDate(property.updated_at) }))
     ];
     const urls = entries.map((entry) => `  <url><loc>${origin}${entry.path}</loc>${entry.lastmod ? `<lastmod>${entry.lastmod}</lastmod>` : ''}<changefreq>${entry.changefreq}</changefreq><priority>${entry.priority}</priority></url>`).join('\n');
     res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
