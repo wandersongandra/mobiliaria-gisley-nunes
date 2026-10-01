@@ -30,7 +30,7 @@
             <div class="stat"><strong>BH</strong><span>atuação em<br />Belo Horizonte</span></div>
             <div class="stat"><strong>01</strong><span>atendimento<br />próximo</span></div>
             <div class="stat"><strong>◆</strong><span>curadoria<br />com intenção</span></div>
-            <div class="stat stat-last"><span>Registro</span><strong>CRECI</strong><span><%= site.crci %></span></div>
+            <% if (site.crci) { %><div class="stat stat-last"><span>Registro</span><strong>CRECI</strong><span><%= site.crci %></span></div><% } %>
           </div>
         </div>
       </section>
