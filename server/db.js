@@ -628,6 +628,18 @@ export async function upsertAdmin({ openId, email, name }) {
 
   try {
     await connection.beginTransaction();
+
+    await connection.execute(
+      `UPDATE morada_admin_sessions
+       SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP)
+       WHERE revoked_at IS NULL
+         AND (
+           (email=? AND open_id<>?)
+           OR (open_id=? AND email<>?)
+         )`,
+      [normalizedEmail, normalizedOpenId, normalizedOpenId, normalizedEmail]
+    );
+
     await connection.execute(
       'DELETE FROM morada_admin_users WHERE email=? AND open_id<>?',
       [normalizedEmail, normalizedOpenId]
