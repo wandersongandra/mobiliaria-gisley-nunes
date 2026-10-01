@@ -87,9 +87,9 @@ Quando `ADMIN_ORIGIN` estiver configurado:
 
 1. Gestor/corretor seleciona a foto no CRM.
 2. O navegador mede largura/altura.
-3. O backend valida tipo e tamanho e gera uma URL PUT temporária.
+3. O backend valida tipo e tamanho e gera uma URL PUT temporária com o `Content-Type` incluído na assinatura.
 4. O navegador envia a foto diretamente ao R2.
-5. O backend confirma que o objeto existe via HEAD.
+5. O backend confirma que o objeto existe via HEAD e lê os bytes iniciais para validar se o arquivo é realmente JPEG, PNG, WebP ou AVIF.
 6. O banco registra apenas metadados e a URL de leitura.
 7. A foto é exibida pelo domínio `media`.
 
