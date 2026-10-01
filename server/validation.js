@@ -1,5 +1,6 @@
 const PURPOSES = new Set(['Comprar', 'Alugar']);
 const PROPERTY_TYPES = new Set(['Casa', 'Apartamento', 'Cobertura', 'Terreno', 'Comercial', 'Lote']);
+const PROPERTY_STATUSES = new Set(['draft', 'published']);
 const LEAD_INTERESTS = new Set([
   'Quero comprar um imóvel',
   'Quero alugar um imóvel',
@@ -15,11 +16,32 @@ function ensureObject(value, error = 'INVALID_INPUT') {
   return value;
 }
 
-function text(value, max, { required = false, defaultValue = '', error = 'INVALID_INPUT' } = {}) {
+function ensureKeys(value, allowed, error = 'INVALID_INPUT') {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) throw new Error(error);
+  }
+  return value;
+}
+
+function contract(value, allowedKeys, error) {
+  return ensureKeys(ensureObject(value, error), new Set(allowedKeys), error);
+}
+
+function text(
+  value,
+  max,
+  { required = false, defaultValue = '', error = 'INVALID_INPUT', multiline = false } = {}
+) {
   if (value === undefined || value === null) value = defaultValue;
   if (typeof value !== 'string') throw new Error(error);
+
   const normalized = value.normalize('NFC').trim();
-  if (normalized.includes('\u0000') || normalized.length > max) throw new Error(error);
+  if (
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(normalized)
+    || (!multiline && /[\r\n\t]/.test(normalized))
+    || normalized.length > max
+  ) throw new Error(error);
+
   if (required && !normalized) throw new Error(error);
   return normalized;
 }
@@ -54,8 +76,18 @@ export function normalizeResourceId(value, { max = 191 } = {}) {
   return id;
 }
 
+export function normalizePropertySlug(value) {
+  const slug = text(value, 170, { required: true, error: 'INVALID_SLUG' });
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error('INVALID_SLUG');
+  return slug;
+}
+
 export function normalizePropertyInput(input = {}) {
-  input = ensureObject(input, 'INVALID_PROPERTY');
+  input = contract(input, [
+    'title', 'slug', 'location', 'city', 'purpose', 'type', 'price', 'priceLabel',
+    'bedrooms', 'bathrooms', 'areaM2', 'suites', 'parkingSpots', 'condoFee', 'iptu',
+    'description', 'status', 'featured'
+  ], 'INVALID_PROPERTY');
 
   const title = text(input.title, 160, { required: true, error: 'TITLE_REQUIRED' });
   const location = text(input.location, 180, { required: true, error: 'LOCATION_REQUIRED' });
@@ -63,7 +95,7 @@ export function normalizePropertyInput(input = {}) {
   const purpose = enumField(input.purpose, PURPOSES, { defaultValue: 'Comprar', error: 'INVALID_PROPERTY' });
   const type = enumField(input.type, PROPERTY_TYPES, { defaultValue: 'Apartamento', error: 'INVALID_PROPERTY' });
   const price = numberField(input.price, 999999999999.99, { error: 'INVALID_PROPERTY_NUMBER' });
-  const status = enumField(input.status, new Set(['draft', 'published']), { defaultValue: 'draft', error: 'INVALID_PROPERTY' });
+  const status = enumField(input.status, PROPERTY_STATUSES, { defaultValue: 'draft', error: 'INVALID_PROPERTY' });
   const featured = booleanField(input.featured, { error: 'INVALID_PROPERTY' });
 
   let slug = text(input.slug, 170, { error: 'INVALID_PROPERTY' });
@@ -89,14 +121,17 @@ export function normalizePropertyInput(input = {}) {
     parkingSpots: numberField(input.parkingSpots, 50, { integer: true, error: 'INVALID_PROPERTY_NUMBER' }),
     condoFee: numberField(input.condoFee, 99999999.99, { error: 'INVALID_PROPERTY_NUMBER' }),
     iptu: numberField(input.iptu, 9999999999.99, { error: 'INVALID_PROPERTY_NUMBER' }),
-    description: text(input.description, 6000, { error: 'INVALID_PROPERTY' }),
+    description: text(input.description, 6000, { error: 'INVALID_PROPERTY', multiline: true }),
     status,
     featured
   };
 }
 
 export function normalizeSiteSettings(input = {}) {
-  input = ensureObject(input, 'INVALID_SITE_SETTINGS');
+  input = contract(input, [
+    'phoneDisplay', 'whatsapp', 'email', 'address', 'crci', 'area',
+    'instagramUrl', 'instagramDisplay'
+  ], 'INVALID_SITE_SETTINGS');
 
   const email = text(input.email, 120, { required: true, error: 'INVALID_EMAIL' }).toLowerCase();
   const rawWhatsapp = text(input.whatsapp, 40, { required: true, error: 'INVALID_WHATSAPP' });
@@ -133,9 +168,9 @@ export function normalizeSiteSettings(input = {}) {
 }
 
 export function normalizeTestimonial(input = {}) {
-  input = ensureObject(input, 'INVALID_TESTIMONIAL');
+  input = contract(input, ['author', 'quote', 'location', 'year', 'sortOrder'], 'INVALID_TESTIMONIAL');
   const author = text(input.author, 120, { required: true, error: 'INVALID_TESTIMONIAL' });
-  const quote = text(input.quote, 1200, { required: true, error: 'INVALID_TESTIMONIAL' });
+  const quote = text(input.quote, 1200, { required: true, error: 'INVALID_TESTIMONIAL', multiline: true });
   const year = text(input.year, 10, { error: 'INVALID_TESTIMONIAL' });
   if (year && !/^(19|20|21)\d{2}$/.test(year)) throw new Error('INVALID_TESTIMONIAL');
 
@@ -149,11 +184,11 @@ export function normalizeTestimonial(input = {}) {
 }
 
 export function normalizeContactLead(input = {}) {
-  input = ensureObject(input, 'INVALID_CONTACT');
+  input = contract(input, ['name', 'email', 'message', 'interest', 'propertyPath', 'website'], 'INVALID_CONTACT');
 
   const name = text(input.name, 120, { required: true, error: 'INVALID_CONTACT' });
   const email = text(input.email, 255, { required: true, error: 'INVALID_CONTACT' }).toLowerCase();
-  const message = text(input.message, 3000, { required: true, error: 'INVALID_CONTACT' });
+  const message = text(input.message, 3000, { required: true, error: 'INVALID_CONTACT', multiline: true });
   const interest = enumField(input.interest, LEAD_INTERESTS, { defaultValue: 'Tenho outra dúvida', error: 'INVALID_CONTACT' });
   const propertyPath = text(input.propertyPath, 240, { error: 'INVALID_CONTACT' });
 
@@ -173,7 +208,7 @@ export function normalizeContactLead(input = {}) {
 }
 
 export function normalizeUploadRequest(input = {}) {
-  input = ensureObject(input, 'INVALID_FILE');
+  input = contract(input, ['propertyId', 'fileName', 'contentType', 'size'], 'INVALID_FILE');
   const propertyId = normalizeResourceId(input.propertyId);
   const fileName = text(input.fileName, 180, { required: true, error: 'INVALID_FILE' });
   const contentType = enumField(input.contentType, IMAGE_MIME_TYPES, { error: 'INVALID_FILE' });
@@ -183,7 +218,9 @@ export function normalizeUploadRequest(input = {}) {
 }
 
 export function normalizePhotoInput(input = {}) {
-  input = ensureObject(input, 'INVALID_ASSET');
+  input = contract(input, [
+    'storagePath', 'altText', 'contentType', 'size', 'width', 'height', 'sortOrder', 'isCover'
+  ], 'INVALID_ASSET');
   const storagePath = text(input.storagePath, 500, { required: true, error: 'INVALID_ASSET' });
   const altText = text(input.altText, 255, { error: 'INVALID_ASSET' });
   const contentType = enumField(input.contentType, IMAGE_MIME_TYPES, { error: 'INVALID_ASSET' });
@@ -197,7 +234,7 @@ export function normalizePhotoInput(input = {}) {
 }
 
 export function normalizePhotoOrder(input = {}) {
-  input = ensureObject(input, 'INVALID_ORDER');
+  input = contract(input, ['photoIds'], 'INVALID_ORDER');
   if (!Array.isArray(input.photoIds) || input.photoIds.length > 40) throw new Error('INVALID_ORDER');
   const photoIds = input.photoIds.map((id) => normalizeResourceId(id, { max: 36 }));
   if (new Set(photoIds).size !== photoIds.length) throw new Error('INVALID_ORDER');
@@ -209,13 +246,18 @@ export function normalizeLeadStatus(value) {
   return value;
 }
 
+export function normalizeLeadStatusRequest(input = {}) {
+  input = contract(input, ['status'], 'INVALID_LEAD_STATUS');
+  return normalizeLeadStatus(input.status);
+}
+
 export function normalizeAuditLimit(value) {
   if (value === undefined || value === null || value === '') return 100;
   return numberField(value, 250, { integer: true, error: 'INVALID_LIMIT' }) || 100;
 }
 
 export function normalizeTeamCreate(input = {}) {
-  input = ensureObject(input, 'INVALID_TEAM_MEMBER');
+  input = contract(input, ['email', 'pairingCode', 'name', 'role'], 'INVALID_TEAM_MEMBER');
   const email = text(input.email, 255, { required: true, error: 'INVALID_TEAM_MEMBER' }).toLowerCase();
   const pairingCode = text(input.pairingCode, 64, { required: true, error: 'INVALID_TEAM_MEMBER' });
   const name = text(input.name, 255, { required: true, error: 'INVALID_TEAM_MEMBER' });
@@ -227,7 +269,7 @@ export function normalizeTeamCreate(input = {}) {
 }
 
 export function normalizeTeamPatch(input = {}) {
-  input = ensureObject(input, 'INVALID_TEAM_MEMBER');
+  input = contract(input, ['name', 'role', 'active'], 'INVALID_TEAM_MEMBER');
   const result = {};
   if (Object.hasOwn(input, 'name')) result.name = text(input.name, 255, { required: true, error: 'INVALID_TEAM_MEMBER' });
   if (Object.hasOwn(input, 'role')) result.role = enumField(input.role, TEAM_ROLES, { error: 'INVALID_TEAM_MEMBER' });
