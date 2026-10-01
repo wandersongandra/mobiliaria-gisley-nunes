@@ -86,3 +86,8 @@ export const storage = {
   apiUrl: env.MANUS_API_URL || '',
   apiKey: env.MANUS_API_KEY || ''
 };
+
+
+export function legacyStorageRouteEnabled() {
+  return String(env.ENABLE_LEGACY_STORAGE_ROUTE || '').trim().toLowerCase() === 'true';
+}
