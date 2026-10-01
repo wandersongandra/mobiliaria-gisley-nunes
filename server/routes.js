@@ -28,7 +28,7 @@ import {
   updateContactLeadStatus
 } from './db.js';
 import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
-import { callback, currentAdmin, login, logout, requireAdmin } from './auth.js';
+import { callback, currentAdmin, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
   canCreateProperty,
@@ -106,6 +106,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.get('/api/auth/login', loginLimiter, login);
   app.get('/api/auth/callback', loginLimiter, callback);
   app.post('/api/auth/logout', requireSameOrigin, logout);
+  app.post('/api/auth/logout-all', requireSameOrigin, requireAdmin(), logoutAll);
   app.get('/api/admin/session', async (req, res, next) => {
     try {
       res.setHeader('Cache-Control', 'no-store');
