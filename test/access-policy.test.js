@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const routesSource = readFileSync(new URL('../server/routes.js', import.meta.url), 'utf8');
 const authorizationSource = readFileSync(new URL('../server/authorization.js', import.meta.url), 'utf8');
+const dbSource = readFileSync(new URL('../server/db.js', import.meta.url), 'utf8');
 
 const managerOnlyRoutes = [
   ['put', '/api/admin/site', 'site.manage'],
@@ -116,4 +117,43 @@ test('mídia de rascunho do CRM exige autenticação e property.read', () => {
   assert.ok(start >= 0, 'rota autenticada de mídia ausente');
   const line = routesSource.slice(start, routesSource.indexOf('\n', start));
   assert.ok(line.includes("requireCapability('property.read')"));
+});
+
+
+test('persistência mantém barreira de rascunho para mutações de Editor', () => {
+  const persistenceGuards = [
+    'export function enforcePropertyWriteScope',
+    'export async function saveProperty',
+    'export async function addPhoto',
+    'export async function removePhoto',
+    'export async function setPhotoCover',
+    'export async function reorderPhotos'
+  ];
+
+  for (const symbol of persistenceGuards) {
+    assert.ok(dbSource.includes(symbol), `barreira de persistência ausente: ${symbol}`);
+  }
+
+  const draftChecks = dbSource.match(/requireDraft && String\(property\.status\) !== 'draft'/g) || [];
+  assert.ok(
+    draftChecks.length >= 4,
+    'mutações de mídia devem revalidar status draft dentro da transação'
+  );
+
+  assert.ok(
+    dbSource.includes("if (requireDraft && String(existing.status) !== 'draft')"),
+    'update de imóvel deve revalidar status draft sob lock'
+  );
+  assert.ok(
+    dbSource.includes("if (requireDraft && (data.status !== 'draft' || data.featured))"),
+    'payload persistido de Editor não pode publicar ou destacar'
+  );
+});
+
+test('rotas operacionais propagam requireDraft até a persistência', () => {
+  const occurrences = routesSource.match(/requireDraft:\s*!hasCapability\(req\.admin, 'property\.publish'\)/g) || [];
+  assert.ok(
+    occurrences.length >= 5,
+    'property/media mutations devem propagar requireDraft para o banco'
+  );
 });
