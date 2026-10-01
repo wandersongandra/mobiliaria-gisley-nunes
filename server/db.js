@@ -890,6 +890,9 @@ export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
       'DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?',
       [now]
     );
+    await connection.execute(
+      'DELETE FROM morada_admin_sessions WHERE revoked_at IS NOT NULL AND revoked_at < (CURRENT_TIMESTAMP - INTERVAL 7 DAY)'
+    );
 
     const [[boundIdentity]] = await connection.execute(
       'SELECT open_id,active FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',
