@@ -521,7 +521,12 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         active: Boolean(member.active),
         openIdBound: true
       });
-      return res.status(201).json({ member });
+      return res.status(201).json({
+        member: staffView({
+          ...member,
+          is_bootstrap: Boolean(member.open_id && isAllowedOpenId(member.open_id))
+        }, req.admin)
+      });
     } catch (error) {
       return next(error);
     }
@@ -559,7 +564,12 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       });
       if (current.open_id) await revokeAdminSessionsByOpenId(current.open_id);
       await writeAudit(req, 'team.update', 'staff', email, { role: member.role, active: Boolean(member.active), sessionsRevoked: true });
-      return res.json({ member });
+      return res.json({
+        member: staffView({
+          ...member,
+          is_bootstrap: Boolean(member.open_id && isAllowedOpenId(member.open_id))
+        }, req.admin)
+      });
     } catch (error) {
       return next(error);
     }
