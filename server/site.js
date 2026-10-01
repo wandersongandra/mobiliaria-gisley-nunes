@@ -23,7 +23,7 @@ function mapSettings(row) {
   if (!row) return {};
   const result = {};
   for (const [dbKey, key] of Object.entries(mapping)) {
-    if (row[dbKey]) result[key] = row[dbKey];
+    if (row[dbKey] !== null && row[dbKey] !== undefined) result[key] = row[dbKey];
   }
   return result;
 }
