@@ -3,7 +3,7 @@ import {
   addPhoto,
   addTestimonial,
   createContactLead,
-  consumeIdentityPairing,
+  bindStaffAccessFromPairing,
   databaseReady,
   deleteContactLead,
   findStaffAccess,
@@ -565,25 +565,14 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     try {
       const { email, pairingCode, name, role } = normalizeTeamCreate(req.body || {});
 
-      if (await findStaffAccess(email)) {
-        return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
-      }
-
-      const pairing = await consumeIdentityPairing(hashPairingCode(pairingCode), email);
-      if (!pairing) return res.status(400).json({ error: 'INVALID_PAIRING_CODE' });
-
-      if (await findStaffAccessByOpenId(pairing.openId)) {
-        return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
-      }
-
-      const member = await saveStaffAccess({
+      const member = await bindStaffAccessFromPairing({
+        codeHash: hashPairingCode(pairingCode),
         email,
-        openId: pairing.openId,
         name,
         role,
-        active: true,
         invitedBy: req.admin.email
       });
+      if (!member) return res.status(400).json({ error: 'INVALID_PAIRING_CODE' });
       await writeAudit(req, 'team.create', 'staff', email, {
         role: member.role,
         active: Boolean(member.active),
