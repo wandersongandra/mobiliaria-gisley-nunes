@@ -403,7 +403,7 @@ function renderTeam() {
     const isSelf = String(member.email).toLowerCase() === selfEmail;
     const roleLabel = member.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
     return `<article class="team-row">
-      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a></div></div>
+      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a><code class="team-identity" title="${escapeHTML(member.open_id || '')}">${member.open_id ? 'OAuth · ' + escapeHTML(String(member.open_id).slice(0, 18)) + (String(member.open_id).length > 18 ? '…' : '') : 'Identidade ainda não vinculada'}</code></div></div>
       <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${isSelf ? '<small>você</small>' : ''}</div>
       <div class="team-actions">
         ${!isSelf ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
@@ -450,9 +450,16 @@ async function addTeamMember(event) {
     await request('/api/admin/team', { method: 'POST', body: JSON.stringify(data) });
     teamForm.reset();
     await loadTeam();
-    teamNotify('Acesso adicionado. A pessoa já pode entrar com esse e-mail.');
+    teamNotify('Acesso vinculado ao código OAuth. A pessoa já pode entrar no CRM.');
   } catch (error) {
-    teamNotify(error.message === 'INVALID_TEAM_MEMBER' ? 'Confira nome e e-mail.' : 'Não foi possível adicionar este acesso.', 'error');
+    teamNotify(
+      error.message === 'INVALID_TEAM_MEMBER'
+        ? 'Confira nome, e-mail e Código de identidade OAuth.'
+        : error.message === 'TEAM_MEMBER_EXISTS'
+          ? 'Esse e-mail ou Código OAuth já está vinculado a outro acesso.'
+          : 'Não foi possível adicionar este acesso.',
+      'error'
+    );
   }
 }
 
