@@ -20,7 +20,51 @@ function firstHeader(value) {
 
 function safeHost(value) {
   const host = firstHeader(value).toLowerCase();
-  return /^[a-z0-9.-]+(?::\d{1,5})?$/.test(host) ? host : '';
+  if (!/^[a-z0-9.-]+(?::\d{1,5})?$/.test(host)) return '';
+
+  try {
+    const parsed = new URL(`http://${host}`);
+    const port = parsed.port ? Number(parsed.port) : 0;
+    if (port && (port < 1 || port > 65535)) return '';
+    if (!parsed.hostname || parsed.hostname.includes('..') || parsed.hostname.startsWith('.') || parsed.hostname.endsWith('.')) return '';
+    return parsed.host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function configuredHost(origin) {
+  if (!origin) return '';
+  try { return new URL(origin).host.toLowerCase(); } catch { return ''; }
+}
+
+function isLoopbackAddress(value) {
+  const address = String(value || '').replace(/^::ffff:/, '');
+  return address === '127.0.0.1' || address === '::1';
+}
+
+export function hostIsKnown(req) {
+  const host = safeHost(req.get('host'));
+  if (!host) return false;
+
+  const allowed = new Set([
+    configuredHost(configuredPublicOrigin()),
+    configuredHost(configuredAdminOrigin())
+  ].filter(Boolean));
+
+  if (!allowed.size) return true;
+  return allowed.has(host);
+}
+
+export function requireKnownHost(req, res, next) {
+  if (!isProduction) return next();
+
+  if (req.path.startsWith('/_app/') && isLoopbackAddress(req.socket?.remoteAddress)) {
+    return next();
+  }
+
+  if (hostIsKnown(req)) return next();
+  return res.status(421).json({ error: 'MISDIRECTED_REQUEST' });
 }
 
 export function requestHostOrigin(req) {
@@ -35,6 +79,23 @@ export function requestHostOrigin(req) {
 
 export function requestOrigin(req) {
   return configuredPublicOrigin() || requestHostOrigin(req);
+}
+
+export function assertSecurityConfiguration() {
+  if (!isProduction) return true;
+
+  const publicOrigin = configuredPublicOrigin();
+  const adminOrigin = configuredAdminOrigin();
+  if (!publicOrigin || !publicOrigin.startsWith('https://')) throw new Error('PUBLIC_ORIGIN_NOT_CONFIGURED');
+  if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
+
+  const publicHost = configuredHost(publicOrigin);
+  const adminHost = configuredHost(adminOrigin);
+  if (!publicHost || !adminHost || publicHost === adminHost) throw new Error('ORIGIN_SEPARATION_REQUIRED');
+
+  const proxyMode = String(process.env.TRUST_PROXY_MODE || '').trim();
+  if (proxyMode && proxyMode !== 'cloudflare') throw new Error('INVALID_TRUST_PROXY_MODE');
+  return true;
 }
 
 export function securityHeaders(req, res, next) {
@@ -98,15 +159,34 @@ export function securityHeaders(req, res, next) {
   next();
 }
 
+function expectedMutationOrigin(req) {
+  const path = String(req.originalUrl || req.url || '').split('?')[0];
+  const administrative = path.startsWith('/api/admin') || path.startsWith('/api/auth');
+  if (administrative) return configuredAdminOrigin() || requestHostOrigin(req);
+  return configuredPublicOrigin() || requestHostOrigin(req);
+}
+
 export function requireSameOrigin(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
 
-  const expected = requestHostOrigin(req);
+  const expected = expectedMutationOrigin(req);
   const origin = String(req.get('origin') || '').trim();
   const fetchSite = String(req.get('sec-fetch-site') || '').trim().toLowerCase();
+  const canonicalConfigured = Boolean(
+    String(req.originalUrl || '').startsWith('/api/admin')
+      || String(req.originalUrl || '').startsWith('/api/auth')
+      ? configuredAdminOrigin()
+      : configuredPublicOrigin()
+  );
 
-  if (origin && expected && origin === expected) return next();
-  if (!origin && fetchSite === 'same-origin') return next();
+  if (origin && expected && origin === expected) {
+    if (fetchSite && !['same-origin', 'none'].includes(fetchSite)) {
+      return res.status(403).json({ error: 'CROSS_SITE_REQUEST_BLOCKED' });
+    }
+    return next();
+  }
+
+  if (!canonicalConfigured && !origin && fetchSite === 'same-origin' && expected) return next();
 
   return res.status(403).json({ error: 'CROSS_SITE_REQUEST_BLOCKED' });
 }
