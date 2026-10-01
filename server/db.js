@@ -365,6 +365,11 @@ export async function addPhoto({
   try {
     await connection.beginTransaction();
     await connection.execute('SELECT id FROM morada_properties WHERE id=? FOR UPDATE', [propertyId]);
+    const [[{ photo_count: photoCount }]] = await connection.execute(
+      'SELECT COUNT(*) AS photo_count FROM morada_property_photos WHERE property_id=? FOR UPDATE',
+      [propertyId]
+    );
+    if (Number(photoCount) >= 40) throw new Error('PHOTO_LIMIT_REACHED');
     if (isCover) await connection.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
     await connection.execute(
       'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover,storage_provider,mime_type,file_size,width,height,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
