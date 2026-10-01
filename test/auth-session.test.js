@@ -84,14 +84,15 @@ test('resolveAdminAccess exige vínculo ativo ao OpenID', () => {
   process.env.GISELY_ADMIN_OPEN_IDS = 'bootstrap-open-id';
 
   assert.deepEqual(
-    resolveAdminAccess({ openId: 'bootstrap-open-id', access: null }),
+    resolveAdminAccess({ openId: 'bootstrap-open-id', email: 'owner@example.com', access: null }),
     { role: 'manager', bootstrapManager: true }
   );
 
   assert.equal(
     resolveAdminAccess({
       openId: 'editor-open-id',
-      access: { open_id: 'editor-open-id', role: 'editor', active: 0, invited_by: 'manager@example.com' }
+      email: 'editor@example.com',
+      access: { email: 'editor@example.com', open_id: 'editor-open-id', role: 'editor', active: 0, invited_by: 'manager@example.com' }
     }),
     null
   );
@@ -99,7 +100,8 @@ test('resolveAdminAccess exige vínculo ativo ao OpenID', () => {
   assert.equal(
     resolveAdminAccess({
       openId: 'editor-open-id',
-      access: { open_id: 'different-open-id', role: 'manager', active: 1, invited_by: 'manager@example.com' }
+      email: 'editor@example.com',
+      access: { email: 'editor@example.com', open_id: 'different-open-id', role: 'manager', active: 1, invited_by: 'manager@example.com' }
     }),
     null
   );
@@ -107,9 +109,20 @@ test('resolveAdminAccess exige vínculo ativo ao OpenID', () => {
   assert.deepEqual(
     resolveAdminAccess({
       openId: 'editor-open-id',
-      access: { open_id: 'editor-open-id', role: 'editor', active: 1, invited_by: 'manager@example.com' }
+      email: 'editor@example.com',
+      access: { email: 'editor@example.com', open_id: 'editor-open-id', role: 'editor', active: 1, invited_by: 'manager@example.com' }
     }),
     { role: 'editor', bootstrapManager: false }
+  );
+
+  assert.equal(
+    resolveAdminAccess({
+      openId: 'editor-open-id',
+      email: 'attacker@example.com',
+      access: { email: 'editor@example.com', open_id: 'editor-open-id', role: 'editor', active: 1, invited_by: 'manager@example.com' }
+    }),
+    null,
+    'rejeita e-mail OAuth diferente do convite'
   );
 
   if (previous === undefined) delete process.env.GISELY_ADMIN_OPEN_IDS;
