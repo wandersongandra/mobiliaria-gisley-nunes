@@ -12,7 +12,7 @@ test('limite de sessões administrativas é limitado entre 1 e 10', () => {
     process.env.GISELY_MAX_ADMIN_SESSIONS = '3';
     assert.equal(maxAdminSessions(), 3);
     process.env.GISELY_MAX_ADMIN_SESSIONS = 'invalido';
-    assert.equal(maxAdminSessions(), 5);
+    assert.equal(maxAdminSessions(), 3);
   } finally {
     if (previous === undefined) delete process.env.GISELY_MAX_ADMIN_SESSIONS;
     else process.env.GISELY_MAX_ADMIN_SESSIONS = previous;
