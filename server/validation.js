@@ -49,7 +49,12 @@ function text(
 function numberField(value, max, { integer = false, error = 'INVALID_NUMBER' } = {}) {
   if (value === undefined || value === null || value === '') return 0;
   if (!['string', 'number'].includes(typeof value)) throw new Error(error);
-  if (typeof value === 'string' && !value.trim()) return 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (!normalized) return 0;
+    if (!/^\d+(?:\.\d+)?$/.test(normalized)) throw new Error(error);
+    value = normalized;
+  }
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0 || number > max) throw new Error(error);
   if (integer && !Number.isInteger(number)) throw new Error(error);
@@ -68,6 +73,13 @@ function enumField(value, allowed, { defaultValue, error = 'INVALID_ENUM' } = {}
   if (value === undefined || value === null || value === '') return defaultValue;
   if (typeof value !== 'string' || !allowed.has(value)) throw new Error(error);
   return value;
+}
+
+export function normalizeEmailAddress(value, { error = 'INVALID_EMAIL' } = {}) {
+  const email = text(value, 254, { required: true, error }).toLowerCase();
+  const pattern = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+  if (!pattern.test(email)) throw new Error(error);
+  return email;
 }
 
 export function normalizeResourceId(value, { max = 191 } = {}) {
@@ -133,13 +145,12 @@ export function normalizeSiteSettings(input = {}) {
     'instagramUrl', 'instagramDisplay'
   ], 'INVALID_SITE_SETTINGS');
 
-  const email = text(input.email, 120, { required: true, error: 'INVALID_EMAIL' }).toLowerCase();
+  const email = normalizeEmailAddress(input.email, { error: 'INVALID_EMAIL' });
   const rawWhatsapp = text(input.whatsapp, 40, { required: true, error: 'INVALID_WHATSAPP' });
   if (!/^[0-9\s()+.\-]+$/.test(rawWhatsapp)) throw new Error('INVALID_WHATSAPP');
   const whatsapp = rawWhatsapp.replace(/\D/g, '');
   const area = text(input.area, 120, { required: true, error: 'INVALID_SITE_SETTINGS' });
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('INVALID_EMAIL');
   if (whatsapp.length < 10 || whatsapp.length > 15) throw new Error('INVALID_WHATSAPP');
 
   const instagramUrl = text(input.instagramUrl, 200, { error: 'INVALID_INSTAGRAM_URL' });
@@ -187,12 +198,11 @@ export function normalizeContactLead(input = {}) {
   input = contract(input, ['name', 'email', 'message', 'interest', 'propertyPath', 'website'], 'INVALID_CONTACT');
 
   const name = text(input.name, 120, { required: true, error: 'INVALID_CONTACT' });
-  const email = text(input.email, 255, { required: true, error: 'INVALID_CONTACT' }).toLowerCase();
+  const email = normalizeEmailAddress(input.email, { error: 'INVALID_CONTACT' });
   const message = text(input.message, 3000, { required: true, error: 'INVALID_CONTACT', multiline: true });
   const interest = enumField(input.interest, LEAD_INTERESTS, { defaultValue: 'Tenho outra dúvida', error: 'INVALID_CONTACT' });
   const propertyPath = text(input.propertyPath, 240, { error: 'INVALID_CONTACT' });
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('INVALID_CONTACT');
   if (
     propertyPath
     && (
@@ -263,11 +273,11 @@ export function normalizeAuditQuery(input = {}) {
 
 export function normalizeTeamCreate(input = {}) {
   input = contract(input, ['email', 'pairingCode', 'name', 'role'], 'INVALID_TEAM_MEMBER');
-  const email = text(input.email, 255, { required: true, error: 'INVALID_TEAM_MEMBER' }).toLowerCase();
+  const email = normalizeEmailAddress(input.email, { error: 'INVALID_TEAM_MEMBER' });
   const pairingCode = text(input.pairingCode, 64, { required: true, error: 'INVALID_TEAM_MEMBER' });
   const name = text(input.name, 255, { required: true, error: 'INVALID_TEAM_MEMBER' });
   const role = enumField(input.role, TEAM_ROLES, { defaultValue: 'editor', error: 'INVALID_TEAM_MEMBER' });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^[A-Za-z0-9_-]{12,64}$/.test(pairingCode)) {
+  if (!/^[A-Za-z0-9_-]{12,64}$/.test(pairingCode)) {
     throw new Error('INVALID_TEAM_MEMBER');
   }
   return { email, pairingCode, name, role };
