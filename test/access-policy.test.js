@@ -31,8 +31,12 @@ test('API administrativa mantém autenticação global antes das rotas de negóc
     'middleware global /api/admin ausente'
   );
   assert.ok(
-    routesSource.includes('requireSameOrigin, adminApiGuard, requireAdmin()'),
-    'cadeia global de proteção administrativa foi alterada'
+    routesSource.includes('registerRoutes(app, { adminMiddleware = requireAdmin() } = {})'),
+    'middleware administrativo padrão deixou de ser requireAdmin()'
+  );
+  assert.ok(
+    routesSource.includes('requireSameOrigin, adminApiGuard, adminMiddleware'),
+    'ordem global same-origin → rate-limit → autenticação foi alterada'
   );
 });
 
