@@ -1,10 +1,12 @@
 # Cloudflare R2 + painel da Gisley Nunes
 
-Esta configuração separa o projeto em três origens:
+Esta configuração separa o site público e o CRM, mantendo o bucket R2 privado:
 
 - `www.gisleynunesimoveis.com.br` — site público;
 - `painel.gisleynunesimoveis.com.br` — CRM/admin;
-- `media.gisleynunesimoveis.com.br` — leitura/cache das fotos.
+- Cloudflare R2 — armazenamento privado das fotos.
+
+Um futuro `media.gisleynunesimoveis.com.br` só deve ser criado sobre um gateway/Worker que preserve as mesmas regras de autorização. Ele **não deve apontar diretamente para o bucket R2**.
 
 ## 1. Criar o bucket
 
@@ -28,19 +30,22 @@ R2_UPLOAD_EXPIRES_SECONDS=600
 
 Nunca coloque esses valores no frontend, no GitHub ou no Cloudflare preview público.
 
-## 3. Conectar o domínio de mídia
+## 3. Manter o bucket privado
 
-Em R2 > bucket > Settings > Public access > Custom Domains, conecte:
+Na primeira camada de segurança:
 
-`media.gisleynunesimoveis.com.br`
+- mantenha `r2.dev` desativado;
+- não conecte um Custom Domain diretamente ao bucket;
+- não habilite listagem pública;
+- as URLs persistidas pelo sistema usam `/media/...`, controlado pelo backend.
 
-Depois configure:
+A rota pública `/media/*` só libera uma URL GET temporária quando o banco confirma que o arquivo pertence a um imóvel com status `published`.
 
-```env
-MEDIA_PUBLIC_ORIGIN=https://media.gisleynunesimoveis.com.br
-```
+Fotos de rascunho são carregadas no CRM por uma rota autenticada `/api/admin/photos/:id/media`.
 
-O backend usa o endpoint S3 do R2 para gerar URLs temporárias de upload e o domínio `media` apenas para leitura pública.
+Isso impede que uma URL conhecida de uma foto ainda não publicada se torne um atalho para acessar o objeto no R2.
+
+Um domínio `media.gisleynunesimoveis.com.br` poderá ser adicionado futuramente, mas deverá apontar para uma camada de autorização/Worker e nunca diretamente para o bucket.
 
 ## 4. Configurar CORS do bucket
 
@@ -91,8 +96,8 @@ Quando `ADMIN_ORIGIN` estiver configurado:
 3. O backend valida tipo e tamanho e gera uma URL PUT temporária com o `Content-Type` incluído na assinatura.
 4. O navegador envia a foto diretamente ao R2.
 5. O backend confirma que o objeto existe via HEAD e lê os bytes iniciais para validar se o arquivo é realmente JPEG, PNG, WebP ou AVIF.
-6. O banco registra apenas metadados e a URL de leitura.
-7. A foto é exibida pelo domínio `media`.
+6. O banco registra apenas metadados e a rota controlada de leitura.
+7. Imóveis publicados usam `/media/*`; rascunhos são visualizados pela rota autenticada do CRM.
 
 O banco registra: provider, MIME, tamanho, dimensões, usuário que enviou, ordem e definição de capa.
 
@@ -104,11 +109,11 @@ Ao remover uma foto pelo CRM, o registro é removido do banco e o backend tenta 
 
 Antes de ativar:
 
-- confirmar DNS dos três domínios;
+- confirmar DNS do site e do painel;
 - configurar CORS do R2;
 - testar upload JPG, PNG, WebP e AVIF;
 - testar arquivo acima de 12 MB;
 - testar troca de capa e reordenação;
 - testar remoção e cache;
-- manter o bucket sem listagem pública;
+- manter o bucket totalmente privado, sem `r2.dev` e sem Custom Domain direto;
 - validar que nenhum segredo está no bundle do frontend.
