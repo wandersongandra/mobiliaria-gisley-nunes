@@ -4,6 +4,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { registerRoutes } from '../server/routes.js';
 import {
+  auditView,
   capabilitiesForRole,
   hasCapability,
   requireCapability,
@@ -166,7 +167,25 @@ test('staffView minimiza openId e marca self/bootstrap no servidor', () => {
   }, { openId: 'oauth-identity-abcdefghijklmnop' });
 
   assert.equal(Object.hasOwn(view, 'open_id'), false);
-  assert.equal(view.identity_hint, 'oauth-ide…mnop');
+  assert.equal(view.identity_hint, 'oauth-id…mnop');
   assert.equal(view.is_self, true);
   assert.equal(view.is_bootstrap, true);
+});
+
+
+test('auditView mantém openId bruto somente no banco e entrega hint ao CRM', () => {
+  const view = auditView({
+    id: 'event-id',
+    actor_email: 'owner@gisley.test',
+    actor_open_id: 'oauth-identity-abcdefghijklmnop',
+    action: 'property.update',
+    entity_type: 'property',
+    entity_id: 'property-id',
+    details: null,
+    created_at: '2026-10-01T12:00:00.000Z'
+  });
+
+  assert.equal(Object.hasOwn(view, 'actor_open_id'), false);
+  assert.equal(view.actor_identity_hint, 'oauth-id…mnop');
+  assert.equal(view.actor_email, 'owner@gisley.test');
 });
