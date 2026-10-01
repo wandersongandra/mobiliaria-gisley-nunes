@@ -5,185 +5,114 @@ Branch auditada: `audit/security-design-2026-09-30`
 
 ## Objetivo
 
-Garantir que a autenticação administrativa tenha identidade forte, sessão revogável, cookies seguros, proteção contra replay e revalidação contínua de autorização.
+Garantir que autenticação, sessão, revogação e vínculo de identidade administrativa sejam resistentes a replay, fixation, reutilização de token, alteração de papel e falhas parciais de backend.
 
 ## Arquitetura validada
 
-### OAuth
-- login iniciado somente pela origem administrativa quando `ADMIN_ORIGIN` está configurado;
-- `state` aleatório de 256 bits;
-- somente o hash SHA-256 do `state` é persistido no banco;
-- cookie de `state` é `HttpOnly`, `Secure` em produção, `SameSite=Lax` e host-only;
-- callback compara cookie e query usando `timingSafeEqual`;
-- desafio OAuth é consumido uma única vez dentro de transação com `FOR UPDATE`;
-- desafio expirado ou reutilizado é rejeitado;
-- redirect URI persistida no desafio precisa coincidir com a origem administrativa esperada.
-
-### Sessão
-- JWT assinado com HS256;
-- algoritmo fixado explicitamente na verificação;
-- `issuer` e `audience` obrigatórios;
-- `jti` único por sessão;
-- JWT não contém papel, e-mail ou capacidades;
-- sessão precisa existir e estar ativa no banco;
-- validade absoluta: 8 horas;
-- timeout de inatividade configurável, padrão de 60 minutos;
-- sessões simultâneas limitadas por OpenID;
-- papel e acesso são recalculados no banco em cada requisição;
-- sessão pode ser revogada individualmente ou globalmente por OpenID.
-
-### Cookies
-Em produção:
-- `__Host-gisley_admin_session`;
-- `__Host-gisley_oauth_state`;
-- `HttpOnly`;
-- `Secure`;
-- `SameSite=Lax`;
-- `Path=/`;
-- sem atributo `Domain`;
-- prioridade alta.
+- OAuth externo para autenticação inicial;
+- OpenID como identidade estável;
+- JWT assinado com HS256 contendo apenas `sub` e `jti`;
+- issuer e audience fixos;
+- sessão também registrada server-side por JTI;
+- expiração absoluta de 8 horas;
+- timeout de inatividade configurável;
+- limite de sessões concorrentes;
+- papel/permissão recalculados no backend a cada requisição;
+- revogação de sessão ao alterar/remover acesso;
+- estado OAuth randômico de 256 bits, salvo apenas como hash no banco e consumido uma única vez.
 
 ## Achados e correções
 
-### F2-01 — Primitiva de sessão aceitava segredo apenas pelo comprimento
+### F2-01 — Logout podia manter cookie local em falha de revogação
+**Severidade:** Média  
+**Status:** Corrigido
+
+Antes, se a revogação no banco falhasse, o cookie permanecia no navegador.
+
+**Correção:** logout local agora sempre limpa o cookie. Falha de revogação remota continua retornando erro explícito, mas o navegador não mantém a credencial.
+
+### F2-02 — Logout global podia falhar antes de limpar o navegador
+**Severidade:** Média  
+**Status:** Corrigido
+
+A rota usava middleware autenticado antes de chegar ao handler de logout global.
+
+**Correção:** o próprio handler resolve a identidade e sempre limpa a sessão local, mesmo quando o backend de sessão apresenta falha.
+
+### F2-03 — Sessão inválida permanecia no navegador
+**Severidade:** Baixa  
+**Status:** Corrigido
+
+Quando uma rota administrativa detecta sessão inválida/revogada, o cookie agora é removido junto com a resposta `401`.
+
+### F2-04 — OpenID permanente precisava circular manualmente
 **Severidade:** Média-baixa  
 **Status:** Corrigido
 
-O fluxo principal já recusava segredo fraco, porém `createSessionToken()` e `verifySessionToken()` verificavam apenas tamanho mínimo quando utilizadas diretamente.
+Usuários ainda não autorizados recebiam o OpenID estável para repassar ao gestor.
 
-**Correção:** ambas agora usam a mesma política de segredo forte do startup/login.
+**Correção:** foi criado um código temporário de vinculação:
+- aleatório;
+- 96 bits de entropia;
+- validade de 15 minutos;
+- armazenado apenas como SHA-256;
+- ligado a OpenID + e-mail;
+- uso único;
+- consumido somente pelo endpoint administrativo;
+- OpenID completo não precisa circular fora do backend.
 
-### F2-02 — Sessão antiga podia voltar após remoção e reativação rápida
-**Severidade:** Média  
+### F2-05 — Cookie de sessão estava em SameSite=Lax
+**Severidade:** Baixa  
 **Status:** Corrigido
 
-O acesso era recalculado em cada request, portanto uma conta removida deixava de funcionar imediatamente. Porém a sessão antiga permanecia não revogada no banco e poderia voltar a ser aceita se o mesmo acesso fosse recriado antes da expiração absoluta.
+A sessão administrativa passou para `SameSite=Strict`.
 
-**Correção:** alterações de papel, desativação, remoção e reassociação de equipe revogam todas as sessões ligadas ao OpenID afetado. Reativação exige novo login.
+O cookie transitório de OAuth permanece `Lax`, pois precisa retornar do provedor externo.
 
-### F2-03 — Convite administrativo dependia principalmente do OpenID
-**Severidade:** Média  
+### F2-06 — Parâmetros OAuth poderiam aparecer em Referer
+**Severidade:** Baixa  
 **Status:** Corrigido
 
-Para usuários comuns, o OpenID autorizado era suficiente mesmo se o e-mail retornado pelo OAuth fosse diferente do e-mail cadastrado pelo gestor.
+Login e callback OAuth agora respondem com `Referrer-Policy: no-referrer`, reduzindo risco de vazamento de `code`/`state`.
 
-**Correção:** contas não-bootstrap exigem dupla correspondência:
-1. OpenID OAuth;
-2. e-mail OAuth normalizado.
+## Proteções confirmadas
 
-O gestor bootstrap permanece ancorado no OpenID explicitamente configurado por ambiente.
+- token adulterado é rejeitado;
+- token expirado é rejeitado;
+- rotação do secret invalida tokens antigos;
+- role não é embutido no JWT;
+- e-mail não concede acesso sozinho;
+- OpenID precisa corresponder ao vínculo autorizado;
+- alteração/removal de membro revoga sessões existentes;
+- bootstrap manager é definido por OpenID e protegido;
+- `state` usa comparação resistente a timing;
+- challenge OAuth é de uso único;
+- redirect URI do challenge é validado;
+- cookies administrativos são HttpOnly, Secure em produção e host-only.
 
-### F2-04 — Limite de sessões era aplicado pelo e-mail
-**Severidade:** Baixa-média  
-**Status:** Corrigido
+## Risco residual conhecido
 
-E-mail é atributo mutável; a identidade canônica é o OpenID.
-
-**Correção:** o limite de sessões simultâneas e o lock de concorrência passaram a usar OpenID.
-
-### F2-05 — Relação OpenID/e-mail administrativo não possuía constraint completa
-**Severidade:** Média  
-**Status:** Corrigido
-
-`morada_admin_users` tinha OpenID como chave primária, mas e-mail não era UNIQUE. A lógica da aplicação tentava garantir relação 1:1, mas dois logins concorrentes ainda poderiam disputar a mesma identidade de e-mail.
-
-**Correção:** adicionada constraint `UNIQUE uq_morada_admin_email (email)`. Dados duplicados existentes fazem a migração falhar fechada em vez de serem mesclados por heurística.
-
-### F2-06 — Frontend simulava logout mesmo quando a revogação falhava
-**Severidade:** Média  
-**Status:** Corrigido
-
-O painel escondia o dashboard logo após o clique em “Sair”, sem verificar se o backend conseguiu revogar a sessão.
-
-**Correção:** a interface só volta ao login após resposta `ok: true`. Em erro de revogação, mantém o estado visível e informa que não foi possível confirmar o logout.
-
-### F2-07 — Dados administrativos permaneciam na memória da página após expiração/logout
-**Severidade:** Baixa-média  
-**Status:** Corrigido
-
-Imóveis, leads, equipe e auditoria continuavam no objeto de estado JavaScript após a interface voltar para o login.
-
-**Correção:** `clearSensitiveState()` apaga dados administrativos, fecha editor e limpa listas antes de exibir a tela de autenticação.
-
-### F2-08 — Ausência de revogação global pelo próprio usuário
-**Severidade:** Hardening  
-**Status:** Implementado
-
-Adicionado `POST /api/auth/logout-all`, protegido por:
-- origem administrativa;
-- same-origin;
-- sessão autenticada.
-
-O painel recebeu a ação “Encerrar em todos os dispositivos”.
-
-## Testes adicionados
-
-A suíte cobre agora:
-
-- JWT válido;
-- JWT adulterado;
-- JWT expirado;
-- rotação de segredo;
-- ausência de papel/e-mail no JWT;
-- hash e comparação do OAuth state;
-- vínculo OpenID incorreto;
-- e-mail OAuth divergente do convite;
-- acesso inativo;
-- bootstrap manager;
-- cookies `__Host-` e flags fortes em produção;
-- configuração de produção válida;
-- segredo fraco;
-- OAuth HTTP em produção;
-- ausência de `ADMIN_ORIGIN`;
-- ausência/invalidade de OpenID bootstrap;
-- logout global sem sessão;
-- capacidades mínimas de Editor.
-
-## Controles já existentes confirmados
-
-- `PUBLIC_ORIGIN` e `ADMIN_ORIGIN` precisam ser HTTPS em produção;
-- hosts público e administrativo precisam ser diferentes;
-- Host desconhecido recebe `421 MISDIRECTED_REQUEST`;
-- headers de proxy só são confiados quando explicitamente configurados;
-- token adulterado não é aceito;
-- sessão revogada no banco não é aceita mesmo com JWT criptograficamente válido;
-- mudança de e-mail/OpenID do provedor revoga sessões conflitantes;
-- callback não persiste access token OAuth.
-
-## Riscos residuais deliberadamente fora da Camada 1/Fase 2
-
-- MFA/2FA adicional ao OAuth;
-- device binding;
-- painel detalhado de sessões por dispositivo;
-- detecção comportamental de login;
-- alertas de novo dispositivo/localidade.
-
-Esses controles pertencem ao hardening avançado/Camada 2 e não são necessários para o gate inicial.
+PKCE não foi adicionado porque o provedor OAuth atual precisa suportar explicitamente `code_challenge`/`code_verifier`. Não será implementado sem confirmar o contrato do provedor.
 
 ## Gate da Fase 2
 
-Requisitos:
+A fase é considerada **PASS** quando:
 
-- JWT adulterado/expirado: bloqueado;
-- sessão ausente/revogada: bloqueada;
-- state OAuth reutilizado/expirado: bloqueado;
-- redirect URI divergente: bloqueada;
-- usuário inativo: bloqueado;
-- e-mail/OpenID divergentes: bloqueados;
-- alteração de privilégio: sessões anteriores revogadas;
-- cookies de produção: fortes;
-- configuração fraca: fail-closed;
-- CI: PASS;
-- CodeQL: PASS.
+- JWT válido/adulterado/expirado estiver coberto por testes;
+- state OAuth estiver coberto por testes;
+- cookies de produção estiverem cobertos;
+- logout local for fail-safe;
+- alteração de acesso invalidar sessão existente;
+- código temporário substituir exposição de OpenID;
+- CI e CodeQL estiverem verdes.
 
 ## Próxima fase
 
 **Fase 3 — Autorização e privilégio mínimo**
 
 Objetivos:
-- revisar capacidade por ação;
-- testar Editor tentando agir como Gestor;
-- testar IDOR em imóvel/foto/lead/equipe;
-- validar ownership e estado do imóvel;
-- impedir escalada via payload;
-- garantir que o frontend nunca seja a única barreira de autorização.
+- provar que Editor não consegue executar nenhuma ação de Gestor;
+- testar IDOR e manipulação de IDs;
+- validar capacidades por rota;
+- impedir autoelevação;
+- impedir edição de recursos fora do escopo permitido.
