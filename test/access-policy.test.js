@@ -73,3 +73,25 @@ test('proteções contra auto-rebaixamento e remoção de gestor bootstrap perma
   assert.ok(routesSource.includes('staffRemovalError(req.admin, protectedTarget)'));
   assert.ok(routesSource.includes('revokeAdminSessionsByOpenId(current.open_id)'));
 });
+
+
+test('capability precede rate limit on manager-only destructive routes', () => {
+  const routes = [
+    ["app.delete('/api/admin/properties/:id'", "requireCapability('property.archive')", 'destructiveLimiter'],
+    ["app.delete('/api/admin/testimonials/:id'", "requireCapability('testimonial.manage')", 'destructiveLimiter'],
+    ["app.delete('/api/admin/leads/:id'", "requireCapability('lead.erase')", 'destructiveLimiter'],
+    ["app.delete('/api/admin/team/:email'", "requireCapability('team.manage')", 'destructiveLimiter']
+  ];
+
+  for (const [routePrefix, capability, limiter] of routes) {
+    const start = routesSource.indexOf(routePrefix);
+    assert.ok(start >= 0, `rota ausente: ${routePrefix}`);
+    const line = routesSource.slice(start, routesSource.indexOf('\n', start));
+    assert.ok(line.indexOf(capability) >= 0, `capability ausente: ${routePrefix}`);
+    assert.ok(line.indexOf(limiter) >= 0, `limiter ausente: ${routePrefix}`);
+    assert.ok(
+      line.indexOf(capability) < line.indexOf(limiter),
+      `autorização deve ocorrer antes do rate limit destrutivo: ${routePrefix}`
+    );
+  }
+});
