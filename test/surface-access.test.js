@@ -111,3 +111,32 @@ test('métodos não suportados em API não executam comportamento alternativo', 
     assert.deepEqual(await adminWrongMethod.json(), { error: 'AUTH_REQUIRED', login: true });
   });
 });
+
+
+test('logout administrativo exige mesma origem e é idempotente', async () => {
+  await withServer(async (origin) => {
+    const blocked = await fetch(`${origin}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Origin: 'https://evil.example',
+        'Content-Type': 'application/json'
+      },
+      body: '{}'
+    });
+    assert.equal(blocked.status, 403);
+    assert.deepEqual(await blocked.json(), { error: 'CROSS_SITE_REQUEST_BLOCKED' });
+
+    const allowed = await fetch(`${origin}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        'Content-Type': 'application/json'
+      },
+      body: '{}'
+    });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await allowed.json(), { ok: true });
+    assert.match(allowed.headers.get('cache-control') || '', /no-store/i);
+    assert.match(allowed.headers.get('set-cookie') || '', /gisley_admin_session=/i);
+  });
+});
