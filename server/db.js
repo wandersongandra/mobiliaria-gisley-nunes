@@ -803,25 +803,30 @@ export async function saveStaffAccess({ email, openId = null, name, role = 'edit
   const normalizedOpenId = openId ? String(openId).trim().slice(0, 191) : null;
   const normalizedName = String(name || normalizedEmail).trim().slice(0, 255);
   const normalizedRole = role === 'manager' ? 'manager' : 'editor';
-  await db.execute(
-    `INSERT INTO morada_staff_access (email,open_id,name,role,active,invited_by)
-     VALUES (?,?,?,?,?,?)
-     ON DUPLICATE KEY UPDATE
-       open_id=COALESCE(VALUES(open_id),open_id),
-       name=VALUES(name),
-       role=VALUES(role),
-       active=VALUES(active),
-       invited_by=COALESCE(VALUES(invited_by),invited_by),
-       updated_at=CURRENT_TIMESTAMP`,
-    [
-      normalizedEmail,
-      normalizedOpenId,
-      normalizedName,
-      normalizedRole,
-      active ? 1 : 0,
-      invitedBy ? String(invitedBy).slice(0, 255) : null
-    ]
-  );
+  try {
+    await db.execute(
+      `INSERT INTO morada_staff_access (email,open_id,name,role,active,invited_by)
+       VALUES (?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE
+         open_id=COALESCE(VALUES(open_id),open_id),
+         name=VALUES(name),
+         role=VALUES(role),
+         active=VALUES(active),
+         invited_by=COALESCE(VALUES(invited_by),invited_by),
+         updated_at=CURRENT_TIMESTAMP`,
+      [
+        normalizedEmail,
+        normalizedOpenId,
+        normalizedName,
+        normalizedRole,
+        active ? 1 : 0,
+        invitedBy ? String(invitedBy).slice(0, 255) : null
+      ]
+    );
+  } catch (error) {
+    if (error?.code === 'ER_DUP_ENTRY') throw new Error('TEAM_MEMBER_EXISTS');
+    throw error;
+  }
   return normalizedOpenId
     ? (await findStaffAccessByOpenId(normalizedOpenId)) || findStaffAccess(normalizedEmail)
     : findStaffAccess(normalizedEmail);
