@@ -35,6 +35,7 @@ import {
   canManagePropertyMedia,
   canMutateProperty,
   canRequestPublication,
+  hasCapability,
   requireCapability,
   staffView
 } from './authorization.js';
@@ -229,7 +230,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       if (!canMutateProperty(req.admin, current) || !canRequestPublication(req.admin, req.body || {})) {
         return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       }
-      const property = await saveProperty(req.body, req.params.id);
+      const property = await saveProperty(req.body, req.params.id, {
+        requireDraft: !hasCapability(req.admin, 'property.publish')
+      });
       await writeAudit(req, 'property.update', 'property', property.id, { title: property.title, status: property.status });
       return res.json({ property });
     } catch (error) {
@@ -343,7 +346,8 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
           fileSize: parsedSize,
           width: parsedWidth,
           height: parsedHeight,
-          uploadedBy: req.admin.email
+          uploadedBy: req.admin.email,
+          requireDraft: !hasCapability(req.admin, 'property.publish')
         });
       } catch (error) {
         if (error?.message !== 'ASSET_ALREADY_REGISTERED') {
@@ -367,7 +371,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       const property = await getProperty(photo.property_id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
-      const removed = await removePhoto(req.params.id);
+      const removed = await removePhoto(req.params.id, {
+        requireDraft: !hasCapability(req.admin, 'property.publish')
+      });
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
       try {
         await storageDelete(removed.storage_path);
@@ -388,7 +394,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
-      const photos = await reorderPhotos(req.params.id, photoIds);
+      const photos = await reorderPhotos(req.params.id, photoIds, {
+        requireDraft: !hasCapability(req.admin, 'property.publish')
+      });
       await writeAudit(req, 'photo.reorder', 'property', req.params.id, { photoCount: photos.length });
       return res.json({ photos });
     } catch (error) {
@@ -403,7 +411,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       const property = await getProperty(photo.property_id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
-      const photos = await setPhotoCover(req.params.id);
+      const photos = await setPhotoCover(req.params.id, {
+        requireDraft: !hasCapability(req.admin, 'property.publish')
+      });
       if (!photos) return res.status(404).json({ error: 'NOT_FOUND' });
       await writeAudit(req, 'photo.cover', 'photo', req.params.id);
       return res.json({ photos });
