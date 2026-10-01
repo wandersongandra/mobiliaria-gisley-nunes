@@ -315,7 +315,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         uploadUrl,
         storagePath,
         assetUrl: storageAssetUrl(storagePath),
-        provider: storageProviderName()
+        provider: storageProviderName(),
+        uploadHeaders: storageProviderName() === 'r2'
+          ? { 'Content-Type': contentType, 'If-None-Match': '*' }
+          : { 'Content-Type': contentType }
       });
     } catch (error) {
       return next(error);
