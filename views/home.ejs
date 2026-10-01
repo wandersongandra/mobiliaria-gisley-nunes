@@ -14,7 +14,7 @@
           <div class="hero-meta" aria-label="Diferenciais">
             <span><strong>BH</strong> atuação local</span>
             <span><strong>1:1</strong> atendimento próximo</span>
-            <span><strong>CRECI</strong> <%= site.crci %></span>
+            <% if (site.crci) { %><span><strong>CRECI</strong> <%= site.crci %></span><% } %>
           </div>
         </div>
         <div class="hero-visual">
