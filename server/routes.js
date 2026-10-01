@@ -5,6 +5,7 @@ import {
   createContactLead,
   databaseReady,
   deleteContactLead,
+  findStaffAccess,
   getProperty,
   getPropertyBySlug,
   listAuditLog,
@@ -464,8 +465,10 @@ export function registerRoutes(app) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !name || name.length > 255) {
         return res.status(400).json({ error: 'INVALID_TEAM_MEMBER' });
       }
+      if (await findStaffAccess(email)) return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
+
       const member = await saveStaffAccess({ email, name, role, active: true, invitedBy: req.admin.email });
-      await writeAudit(req, 'team.upsert', 'staff', email, { role: member.role, active: Boolean(member.active) });
+      await writeAudit(req, 'team.create', 'staff', email, { role: member.role, active: Boolean(member.active) });
       return res.status(201).json({ member });
     } catch (error) {
       return next(error);
@@ -479,7 +482,10 @@ export function registerRoutes(app) {
       if (email === req.admin.email && ((req.body?.role && req.body.role !== req.admin.role) || req.body?.active === false)) {
         return res.status(400).json({ error: 'CANNOT_CHANGE_SELF_ACCESS' });
       }
-      if (isAllowedEmail(email) && req.body?.role && req.body.role !== 'manager') {
+      if (
+        isAllowedEmail(email)
+        && ((req.body?.role && req.body.role !== 'manager') || req.body?.active === false)
+      ) {
         return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
       }
       const current = (await listStaffAccess()).find((item) => item.email === email);
