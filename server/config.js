@@ -132,3 +132,41 @@ export function assertStorageConfiguration() {
   }
   return true;
 }
+
+
+export function databaseSslConfig() {
+  const mode = String(env.DATABASE_SSL_MODE || (isProduction ? 'verify' : 'disable')).trim().toLowerCase();
+  if (!['verify', 'disable'].includes(mode)) throw new Error('DATABASE_SSL_MODE_INVALID');
+  if (mode === 'disable') return undefined;
+
+  const caBase64 = String(env.DATABASE_SSL_CA_BASE64 || '').trim();
+  let ca;
+  if (caBase64) {
+    try {
+      ca = Buffer.from(caBase64, 'base64').toString('utf8');
+      if (!ca.includes('BEGIN CERTIFICATE')) throw new Error('INVALID_CA');
+    } catch {
+      throw new Error('DATABASE_SSL_CA_INVALID');
+    }
+  }
+  return { rejectUnauthorized: true, ...(ca ? { ca } : {}) };
+}
+
+export function assertDatabaseConfiguration() {
+  if (!isProduction) return true;
+  if (!hasDatabase()) throw new Error('DATABASE_NOT_CONFIGURED');
+
+  let url;
+  try {
+    url = new URL(String(env.DATABASE_URL || ''));
+  } catch {
+    throw new Error('DATABASE_URL_INVALID');
+  }
+  if (url.protocol !== 'mysql:') throw new Error('DATABASE_URL_INVALID');
+  if (!url.hostname || !url.username || !url.password) throw new Error('DATABASE_URL_INVALID');
+
+  const mode = String(env.DATABASE_SSL_MODE || 'verify').trim().toLowerCase();
+  if (mode !== 'verify') throw new Error('DATABASE_TLS_REQUIRED');
+  databaseSslConfig();
+  return true;
+}
