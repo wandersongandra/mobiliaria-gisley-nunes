@@ -256,3 +256,18 @@ export function requireAdminOrigin(req, res, next) {
 
   return res.status(404).json({ error: 'NOT_FOUND' });
 }
+
+
+export function requireAdminRequestContext(req, res, next) {
+  const adminOrigin = configuredAdminOrigin();
+  if (adminOrigin && requestHostOrigin(req) !== adminOrigin) {
+    return res.status(404).json({ error: 'NOT_FOUND' });
+  }
+
+  const fetchSite = String(req.get('sec-fetch-site') || '').trim().toLowerCase();
+  if (fetchSite && !['same-origin', 'none'].includes(fetchSite)) {
+    return res.status(403).json({ error: 'CROSS_SITE_REQUEST_BLOCKED' });
+  }
+
+  return next();
+}
