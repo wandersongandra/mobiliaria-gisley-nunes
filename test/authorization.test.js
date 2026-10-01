@@ -51,6 +51,22 @@ async function withEditorServer(run) {
   }
 }
 
+async function csrfHeaders(origin, extra = {}) {
+  const probe = await fetch(`${origin}/api/admin/session`, {
+    headers: { Accept: 'application/json' }
+  });
+  const body = await probe.json();
+  const cookie = (probe.headers.get('set-cookie') || '').split(';')[0];
+  assert.match(body.csrfToken || '', /^[A-Za-z0-9_-]{43}$/);
+  assert.match(cookie, /gisley_csrf=/i);
+  return {
+    Origin: origin,
+    Cookie: cookie,
+    'X-CSRF-Token': body.csrfToken,
+    ...extra
+  };
+}
+
 test('editor recebe apenas capacidades operacionais previstas', () => {
   const capabilities = capabilitiesForRole('editor');
   assert.deepEqual([...capabilities].sort(), [
@@ -130,12 +146,13 @@ test('editor recebe 403 em todas as rotas exclusivas de gestor', async () => {
   ];
 
   await withEditorServer(async (origin) => {
+    const csrf = await csrfHeaders(origin);
     for (const [method, path] of managerOnly) {
       const headers = { Accept: 'application/json' };
       const options = { method, headers };
 
       if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-        headers.Origin = origin;
+        Object.assign(headers, csrf);
         headers['Content-Type'] = 'application/json';
         options.body = JSON.stringify({});
       }
@@ -149,10 +166,11 @@ test('editor recebe 403 em todas as rotas exclusivas de gestor', async () => {
 
 test('método inesperado não contorna o guard administrativo do editor', async () => {
   await withEditorServer(async (origin) => {
+    const csrf = await csrfHeaders(origin);
     const response = await fetch(`${origin}/api/admin/team`, {
       method: 'PUT',
       headers: {
-        Origin: origin,
+        ...csrf,
         'Content-Type': 'application/json',
         Accept: 'application/json'
       },
@@ -242,6 +260,7 @@ test('editor só altera imóvel e mídia enquanto o recurso continua em rascunho
 
 test('editor autenticado não consegue mutar imóvel publicado por chamada direta à API', async () => {
   await withEditorServer(async (origin) => {
+    const csrf = await csrfHeaders(origin);
     const requests = [
       {
         method: 'PUT',
@@ -276,7 +295,7 @@ test('editor autenticado não consegue mutar imóvel publicado por chamada diret
       const response = await fetch(`${origin}${item.path}`, {
         method: item.method,
         headers: {
-          Origin: origin,
+          ...csrf,
           'Content-Type': 'application/json',
           Accept: 'application/json'
         },
@@ -290,6 +309,7 @@ test('editor autenticado não consegue mutar imóvel publicado por chamada diret
 
 test('editor não cria imóvel publicado ou destacado por payload adulterado', async () => {
   await withEditorServer(async (origin) => {
+    const csrf = await csrfHeaders(origin);
     for (const body of [
       {
         title: 'Publicação indevida',
@@ -313,7 +333,7 @@ test('editor não cria imóvel publicado ou destacado por payload adulterado', a
       const response = await fetch(`${origin}/api/admin/properties`, {
         method: 'POST',
         headers: {
-          Origin: origin,
+          ...csrf,
           'Content-Type': 'application/json',
           Accept: 'application/json'
         },
