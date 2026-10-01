@@ -387,10 +387,9 @@ export function registerRoutes(app) {
   app.post('/api/admin/testimonials', requireManager(), async (req, res, next) => {
     try {
       const data = normalizeTestimonial(req.body || {});
-      const testimonials = await addTestimonial(data);
-      const created = testimonials.find((item) => item.author === data.author && item.quote === data.quote);
-      await writeAudit(req, 'testimonial.create', 'testimonial', created?.id || null, { author: data.author });
-      res.status(201).json({ testimonials });
+      const created = await addTestimonial(data);
+      await writeAudit(req, 'testimonial.create', 'testimonial', created.id, { author: data.author });
+      res.status(201).json({ testimonials: created.testimonials });
     } catch (error) {
       next(error);
     }
