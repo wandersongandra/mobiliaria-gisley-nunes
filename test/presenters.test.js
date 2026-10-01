@@ -108,3 +108,24 @@ test('adminProperty mantém metadados internos de storage fora da resposta', () 
   assert.equal(photo.id, 'photo-id');
   assert.equal(photo.url, 'https://media.gisley.test/gisley/properties/property-id/private.webp');
 });
+
+
+test('presenters rejeitam esquemas de mídia inseguros', () => {
+  const malicious = publicProperty({
+    slug: 'teste',
+    title: 'Teste',
+    cover_url: 'javascript:alert(1)',
+    photos: [
+      { url: 'data:image/svg+xml,<svg onload=alert(1)>', alt_text: 'x' },
+      { url: 'http://inseguro.example/foto.jpg', alt_text: 'y' },
+      { url: 'https://media.gisley.test/foto.webp', alt_text: 'z' },
+      { url: '/media/gisley/properties/id/foto.webp', alt_text: 'w' }
+    ]
+  });
+
+  assert.equal(malicious.cover_url, '');
+  assert.equal(malicious.photos[0].url, '');
+  assert.equal(malicious.photos[1].url, '');
+  assert.equal(malicious.photos[2].url, 'https://media.gisley.test/foto.webp');
+  assert.equal(malicious.photos[3].url, '/media/gisley/properties/id/foto.webp');
+});
