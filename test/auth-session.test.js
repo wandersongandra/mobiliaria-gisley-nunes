@@ -155,7 +155,7 @@ test('cookies de produção usam prefixo __Host e flags fortes', () => {
   assert.match(result.names.stateCookie, /^__Host-/);
   assert.equal(result.options.httpOnly, true);
   assert.equal(result.options.secure, true);
-  assert.equal(result.options.sameSite, 'lax');
+  assert.equal(result.options.sameSite, 'strict');
   assert.equal(result.options.path, '/');
   assert.equal(result.options.priority, 'high');
 });
