@@ -158,7 +158,7 @@ export async function storageGetSignedUrl(filePath) {
   if (!hasStorage()) throw new Error('STORAGE_NOT_CONFIGURED');
   const key = assertStorageKey(filePath);
 
-  if (hasR2Storage()) return r2PresignedUrl(key, { method: 'GET', expiresSeconds: 300 });
+  if (hasR2Storage()) return r2PresignedUrl(key, { method: 'GET', expiresSeconds: 60 });
 
   const base = storage.apiUrl.replace(/\/$/, '');
   const url = `${base}/v1/storage/presign/get?path=${encodeURIComponent(key)}`;
