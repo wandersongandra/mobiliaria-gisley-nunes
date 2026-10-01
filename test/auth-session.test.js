@@ -152,3 +152,75 @@ test('produção exige configuração de autenticação fechada e HTTPS', () => 
   assert.equal(authConfigResult({ GISELY_SESSION_SECRET: 'troque-por-um-segredo' }), 'SESSION_SECRET_NOT_CONFIGURED');
   assert.equal(authConfigResult({ MANUS_OAUTH_PORTAL_URL: 'https://user:pass@oauth.example.test' }), 'OAUTH_URL_INVALID');
 });
+
+
+test('JWT assinado com secret antigo é invalidado após rotação', async () => {
+  const previous = process.env.GISELY_SESSION_SECRET;
+  process.env.GISELY_SESSION_SECRET = strongSecret;
+
+  try {
+    const issued = await createSessionToken({ openId: 'oauth-user-rotation' });
+    process.env.GISELY_SESSION_SECRET = 'B7!rotated-session-secret-'.padEnd(64, 'z');
+    assert.equal(await verifySessionToken(issued.token), null);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
+    else process.env.GISELY_SESSION_SECRET = previous;
+  }
+});
+
+test('JWT com issuer ou typ incorretos é rejeitado', async () => {
+  const previous = process.env.GISELY_SESSION_SECRET;
+  process.env.GISELY_SESSION_SECRET = strongSecret;
+
+  try {
+    const secret = new TextEncoder().encode(strongSecret);
+
+    const wrongIssuer = await new SignJWT({})
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuer('outro-sistema')
+      .setAudience('gisley-admin')
+      .setSubject('oauth-user-123')
+      .setJti('33333333-3333-4333-8333-333333333333')
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(secret);
+
+    const wrongType = await new SignJWT({})
+      .setProtectedHeader({ alg: 'HS256', typ: 'NOTJWT' })
+      .setIssuer('gisley-nunes-imoveis')
+      .setAudience('gisley-admin')
+      .setSubject('oauth-user-123')
+      .setJti('44444444-4444-4444-8444-444444444444')
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(secret);
+
+    assert.equal(await verifySessionToken(wrongIssuer), null);
+    assert.equal(await verifySessionToken(wrongType), null);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_SESSION_SECRET;
+    else process.env.GISELY_SESSION_SECRET = previous;
+  }
+});
+
+test('limite de sessões administrativas é sempre restringido entre 1 e 10', async () => {
+  const { maxAdminSessions } = await import('../server/config.js');
+  const previous = process.env.GISELY_MAX_ADMIN_SESSIONS;
+
+  try {
+    process.env.GISELY_MAX_ADMIN_SESSIONS = '0';
+    assert.equal(maxAdminSessions(), 1);
+
+    process.env.GISELY_MAX_ADMIN_SESSIONS = '5';
+    assert.equal(maxAdminSessions(), 5);
+
+    process.env.GISELY_MAX_ADMIN_SESSIONS = '99';
+    assert.equal(maxAdminSessions(), 10);
+
+    process.env.GISELY_MAX_ADMIN_SESSIONS = 'abc';
+    assert.equal(maxAdminSessions(), 5);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_MAX_ADMIN_SESSIONS;
+    else process.env.GISELY_MAX_ADMIN_SESSIONS = previous;
+  }
+});
