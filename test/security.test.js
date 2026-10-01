@@ -229,3 +229,42 @@ test('CF-Connecting-IP é ignorado por padrão mesmo em modo Cloudflare', () => 
   if (prevMode === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = prevMode;
   if (prevClient === undefined) delete process.env.TRUST_CLIENT_IP_HEADER; else process.env.TRUST_CLIENT_IP_HEADER = prevClient;
 });
+
+
+test('hosts canônicos ignoram protocolo encaminhado contraditório', () => {
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  const prevProxy = process.env.TRUST_PROXY_MODE;
+
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+  process.env.TRUST_PROXY_MODE = 'cloudflare';
+
+  const publicReq = mockRequest({ host: 'www.gisley.test', proto: 'http' });
+  const adminReq = mockRequest({ host: 'painel.gisley.test', proto: 'http' });
+
+  assert.equal(requestHostOrigin(publicReq), 'https://www.gisley.test');
+  assert.equal(requestHostOrigin(adminReq), 'https://painel.gisley.test');
+
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+  if (prevProxy === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = prevProxy;
+});
+
+test('Host público não pode virar origem administrativa por X-Forwarded-Proto', () => {
+  const prevPublic = process.env.PUBLIC_ORIGIN;
+  const prevAdmin = process.env.ADMIN_ORIGIN;
+  const prevProxy = process.env.TRUST_PROXY_MODE;
+
+  process.env.PUBLIC_ORIGIN = 'https://www.gisley.test';
+  process.env.ADMIN_ORIGIN = 'https://painel.gisley.test';
+  process.env.TRUST_PROXY_MODE = 'cloudflare';
+
+  const req = mockRequest({ host: 'www.gisley.test', proto: 'https' });
+  assert.equal(requestHostOrigin(req), 'https://www.gisley.test');
+  assert.notEqual(requestHostOrigin(req), 'https://painel.gisley.test');
+
+  if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
+  if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+  if (prevProxy === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = prevProxy;
+});
