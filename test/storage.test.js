@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchesImageSignature, safeFileName } from '../server/storage.js';
+import { matchesImageSignature, safeFileName, storagePathBelongsToProperty } from '../server/storage.js';
 
 test('safeFileName remove caracteres inseguros e preserva extensão', () => {
   assert.equal(safeFileName(' Sala / Principal 01.JPG '), 'Sala-Principal-01.JPG');
@@ -62,4 +62,47 @@ test('matchesImageSignature reconhece formatos permitidos e rejeita disfarces', 
   assert.equal(matchesImageSignature(avif, 'image/avif'), true);
   assert.equal(matchesImageSignature(fake, 'image/jpeg'), false);
   assert.equal(matchesImageSignature(jpeg, 'image/png'), false);
+});
+
+
+test('caminho de storage pertence somente ao imóvel esperado', () => {
+  const propertyId = '11111111-1111-4111-8111-111111111111';
+  const otherId = '22222222-2222-4222-8222-222222222222';
+
+  assert.equal(
+    storagePathBelongsToProperty(
+      `gisley/properties/${propertyId}/foto.webp`,
+      propertyId
+    ),
+    true
+  );
+
+  assert.equal(
+    storagePathBelongsToProperty(
+      `gisley/properties/${otherId}/foto.webp`,
+      propertyId
+    ),
+    false
+  );
+
+  assert.equal(
+    storagePathBelongsToProperty(
+      `gisley/properties/${propertyId}/../${otherId}/foto.webp`,
+      propertyId
+    ),
+    false
+  );
+
+  assert.equal(
+    storagePathBelongsToProperty(
+      `morada/properties/${propertyId}/foto.webp`,
+      propertyId
+    ),
+    false
+  );
+
+  assert.equal(
+    storagePathBelongsToProperty('gisley/properties/qualquer/foto.webp', '../qualquer'),
+    false
+  );
 });
