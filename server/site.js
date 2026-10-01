@@ -5,7 +5,7 @@ import { getSiteSettings, listTestimonials } from './db.js';
 // painel administrativo consegue editar (a marca "name" permanece fixa).
 export const defaultSiteInfo = {
   name: 'Gisley Nunes Imóveis',
-  crci: '0052305',
+  crci: '',
   area: 'Belo Horizonte e região',
   address: 'Belo Horizonte, MG',
   phoneDisplay: '(31) 9155-4677',
