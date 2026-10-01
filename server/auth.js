@@ -327,11 +327,14 @@ export async function login(req, res, next) {
 
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    res.cookie(stateCookie, state, cookieOptions(req, {
+    res.cookie(stateCookie, state, {
+      httpOnly: true,
+      secure: true,
       maxAge: OAUTH_STATE_TTL_MS,
       path: '/',
+      priority: 'high',
       sameSite: 'lax'
-    }));
+    });
 
     const url = new URL(`${oauth.portalUrl.replace(/\/$/, '')}/app-auth`);
     url.searchParams.set('appId', oauth.projectId);
