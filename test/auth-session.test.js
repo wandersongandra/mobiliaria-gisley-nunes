@@ -295,3 +295,44 @@ test('produção usa cookies host-only com prefixo __Host', () => {
     assert.equal(names.stateCookie, 'gisley_oauth_state');
   }
 });
+
+
+test('idle timeout administrativo é limitado entre 15 e 240 minutos', async () => {
+  const { sessionIdleTimeoutMs } = await import('../server/config.js');
+  const previous = process.env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES;
+
+  try {
+    process.env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES = '1';
+    assert.equal(sessionIdleTimeoutMs(), 15 * 60 * 1000);
+
+    process.env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES = '60';
+    assert.equal(sessionIdleTimeoutMs(), 60 * 60 * 1000);
+
+    process.env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES = '999';
+    assert.equal(sessionIdleTimeoutMs(), 240 * 60 * 1000);
+
+    process.env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES = 'abc';
+    assert.equal(sessionIdleTimeoutMs(), 60 * 60 * 1000);
+  } finally {
+    if (previous === undefined) delete process.env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES;
+    else process.env.GISELY_ADMIN_IDLE_TIMEOUT_MINUTES = previous;
+  }
+});
+
+test('produção nomeia cookies de sessão e OAuth com prefixo __Host', () => {
+  const script = `
+    const auth = await import('./server/auth.js');
+    process.stdout.write(JSON.stringify(auth.authCookieNames()));
+  `;
+
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    env: { ...process.env, NODE_ENV: 'production' },
+    encoding: 'utf8'
+  });
+
+  assert.deepEqual(JSON.parse(output), {
+    sessionCookie: '__Host-gisley_admin_session',
+    stateCookie: '__Host-gisley_oauth_state'
+  });
+});
