@@ -707,53 +707,6 @@ export async function createIdentityPairing({ codeHash, openId, email, expiresAt
   }
 }
 
-export async function consumeIdentityPairing(codeHash, expectedEmail) {
-  const db = getPool();
-  const connection = await db.getConnection();
-  const normalizedHash = String(codeHash || '').trim().slice(0, 64);
-  const normalizedEmail = String(expectedEmail || '').trim().toLowerCase().slice(0, 255);
-
-  if (normalizedHash.length !== 64 || !normalizedEmail) return null;
-
-  try {
-    await connection.beginTransaction();
-    const [[pairing]] = await connection.execute(
-      'SELECT code_hash,open_id,email,expires_at_ms FROM morada_identity_pairings WHERE code_hash=? LIMIT 1 FOR UPDATE',
-      [normalizedHash]
-    );
-
-    if (!pairing) {
-      await connection.rollback();
-      return null;
-    }
-
-    if (Number(pairing.expires_at_ms) <= Date.now()) {
-      await connection.execute('DELETE FROM morada_identity_pairings WHERE code_hash=?', [normalizedHash]);
-      await connection.commit();
-      return null;
-    }
-
-    if (String(pairing.email).trim().toLowerCase() !== normalizedEmail) {
-      await connection.rollback();
-      return null;
-    }
-
-    await connection.execute('DELETE FROM morada_identity_pairings WHERE code_hash=?', [normalizedHash]);
-    await connection.commit();
-
-    return {
-      openId: String(pairing.open_id),
-      email: String(pairing.email).trim().toLowerCase(),
-      expiresAtMs: Number(pairing.expires_at_ms)
-    };
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
 export async function bindStaffAccessFromPairing({
   codeHash,
   email,
