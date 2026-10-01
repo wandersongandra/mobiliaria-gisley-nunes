@@ -45,7 +45,22 @@ export function publicProperties(rows = []) {
 }
 
 
+function adminPhotoUrl(photo = {}) {
+  const id = String(photo.id || '');
+  return id ? `/api/admin/photos/${encodeURIComponent(id)}/media` : safeMediaUrl(photo.url);
+}
+
 export function adminProperty(row = {}) {
+  const photos = Array.isArray(row.photos) ? row.photos.map((photo) => ({
+    id: String(photo.id || ''),
+    url: adminPhotoUrl(photo),
+    alt_text: String(photo.alt_text || ''),
+    sort_order: Number(photo.sort_order || 0),
+    is_cover: Boolean(photo.is_cover),
+    created_at: photo.created_at || null
+  })) : [];
+  const cover = photos.find((photo) => photo.is_cover) || photos[0] || null;
+
   return {
     id: String(row.id || ''),
     slug: String(row.slug || ''),
@@ -66,17 +81,10 @@ export function adminProperty(row = {}) {
     description: String(row.description || ''),
     status: String(row.status || 'draft'),
     is_featured: Boolean(row.is_featured),
-    cover_url: String(row.cover_url || ''),
+    cover_url: cover?.url || '',
     created_at: row.created_at || null,
     updated_at: row.updated_at || null,
-    photos: Array.isArray(row.photos) ? row.photos.map((photo) => ({
-      id: String(photo.id || ''),
-      url: safeMediaUrl(photo.url),
-      alt_text: String(photo.alt_text || ''),
-      sort_order: Number(photo.sort_order || 0),
-      is_cover: Boolean(photo.is_cover),
-      created_at: photo.created_at || null
-    })) : []
+    photos
   };
 }
 
