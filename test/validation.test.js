@@ -43,3 +43,24 @@ test('normalizeContactLead exige e-mail válido e mensagem', () => {
   assert.equal(data.email, 'ana@example.com');
   assert.equal(data.interest, 'Quero comprar um imóvel');
 });
+
+
+test('normalizeTeamCreate exige código temporário de vinculação válido', () => {
+  const base = {
+    name: 'Corretor Teste',
+    email: 'corretor@example.com',
+    role: 'editor'
+  };
+
+  assert.throws(() => normalizeTeamCreate({ ...base, pairingCode: '' }), /INVALID_TEAM_MEMBER/);
+  assert.throws(() => normalizeTeamCreate({ ...base, pairingCode: 'curto' }), /INVALID_TEAM_MEMBER/);
+  assert.throws(() => normalizeTeamCreate({ ...base, pairingCode: 'codigo com espaco 123' }), /INVALID_TEAM_MEMBER/);
+
+  const data = normalizeTeamCreate({
+    ...base,
+    pairingCode: 'AbCdEfGhIjKlMnOp'
+  });
+  assert.equal(data.email, 'corretor@example.com');
+  assert.equal(data.pairingCode, 'AbCdEfGhIjKlMnOp');
+  assert.equal(data.role, 'editor');
+});
