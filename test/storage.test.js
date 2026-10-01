@@ -106,3 +106,33 @@ test('caminho de storage pertence somente ao imóvel esperado', () => {
     false
   );
 });
+
+
+test('R2 HEAD retorna tamanho e MIME reais do objeto', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const script = `
+    process.env.R2_ACCOUNT_ID='abc123';
+    process.env.R2_BUCKET='gisley-nunes-imoveis';
+    process.env.R2_ACCESS_KEY_ID='access-test';
+    process.env.R2_SECRET_ACCESS_KEY='secret-test';
+    globalThis.fetch = async () => new Response(null, {
+      status: 200,
+      headers: {
+        'content-length': '2097152',
+        'content-type': 'image/webp; charset=binary'
+      }
+    });
+    const storage = await import('./server/storage.js');
+    const meta = await storage.storageObjectMetadata('gisley/properties/property-id/foto.webp');
+    process.stdout.write(JSON.stringify(meta));
+  `;
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    encoding: 'utf8'
+  });
+  assert.deepEqual(JSON.parse(output), {
+    exists: true,
+    size: 2097152,
+    contentType: 'image/webp'
+  });
+});
