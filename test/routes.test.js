@@ -80,10 +80,10 @@ test('rotas administrativas e mutações bloqueiam acesso indevido', async () =>
   });
 });
 
-test('rota de storage rejeita caminhos fora do namespace da imobiliária', async () => {
+test('rota pública de storage legado fica desativada por padrão', async () => {
   await withServer(async (origin) => {
-    const response = await fetch(`${origin}/manus-storage/outro-projeto/arquivo.jpg`);
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), { error: 'INVALID_ASSET' });
+    const response = await fetch(`${origin}/manus-storage/morada/properties/antigo/arquivo.jpg`);
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: 'NOT_FOUND' });
   });
 });
