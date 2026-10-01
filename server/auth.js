@@ -4,6 +4,7 @@ import {
   consumeAuthChallenge,
   createAdminSession,
   createAuthChallenge,
+  createIdentityPairing,
   findActiveAdminSession,
   findAdmin,
   findStaffAccessByOpenId,
@@ -28,6 +29,7 @@ const sessionIssuer = 'gisley-nunes-imoveis';
 const sessionAudience = 'gisley-admin';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const IDENTITY_PAIRING_TTL_MS = 15 * 60 * 1000;
 
 function secureCookie(req) {
   const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
@@ -98,6 +100,10 @@ export function assertAuthConfiguration() {
 }
 
 export function hashOAuthState(value) {
+  return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+export function hashPairingCode(value) {
   return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
 }
 
@@ -325,12 +331,20 @@ export async function callback(req, res) {
     const access = await findStaffAccessByOpenId(openId);
     const resolvedAccess = resolveAdminAccess({ openId, email, access });
     if (!resolvedAccess) {
+      const pairingCode = randomBytes(12).toString('base64url');
+      await createIdentityPairing({
+        codeHash: hashPairingCode(pairingCode),
+        openId,
+        email,
+        expiresAtMs: Date.now() + IDENTITY_PAIRING_TTL_MS
+      });
+
       return res.status(403)
         .type('text/plain; charset=utf-8')
         .send(
           'Acesso administrativo ainda não liberado.\n\n'
-          + `Código de identidade OAuth: ${openId}\n\n`
-          + 'Envie este código ao gestor para vincular seu acesso.'
+          + `Código de vinculação temporário: ${pairingCode}\n\n`
+          + 'Validade: 15 minutos. Envie este código ao gestor para concluir o vínculo.'
         );
     }
 
