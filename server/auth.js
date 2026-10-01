@@ -8,6 +8,7 @@ import {
   findAdmin,
   findStaffAccessByOpenId,
   revokeAdminSession,
+  revokeAdminSessionsByOpenId,
   saveStaffAccess,
   upsertAdmin
 } from './db.js';
