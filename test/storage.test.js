@@ -41,7 +41,7 @@ test('R2 gera URL S3 assinada e usa domínio de mídia somente para leitura', as
   assert.equal(signed.hostname, 'abc123.r2.cloudflarestorage.com');
   assert.equal(signed.pathname, '/gisley-nunes-imoveis/gisley/properties/property-id/sala-principal.webp');
   assert.equal(signed.searchParams.get('X-Amz-Algorithm'), 'AWS4-HMAC-SHA256');
-  assert.equal(signed.searchParams.get('X-Amz-SignedHeaders'), 'content-type;host');
+  assert.equal(signed.searchParams.get('X-Amz-SignedHeaders'), 'content-type;host;if-none-match');
   assert.ok(signed.searchParams.get('X-Amz-Signature'));
   assert.equal(result.assetUrl, 'https://media.gisley.test/gisley/properties/property-id/sala-principal.webp');
   assert.equal(result.provider, 'r2');
@@ -135,4 +135,27 @@ test('R2 HEAD retorna tamanho e MIME reais do objeto', async () => {
     size: 2097152,
     contentType: 'image/webp'
   });
+});
+
+
+test('presigned PUT exige If-None-Match para impedir sobrescrita por replay', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const script = `
+    process.env.R2_ACCOUNT_ID='abc123';
+    process.env.R2_BUCKET='gisley-nunes-imoveis';
+    process.env.R2_ACCESS_KEY_ID='access-test';
+    process.env.R2_SECRET_ACCESS_KEY='secret-test';
+    const storage = await import('./server/storage.js');
+    const url = await storage.storagePresign('gisley/properties/property-id/foto.jpg', { contentType: 'image/jpeg' });
+    process.stdout.write(url);
+  `;
+  const url = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    encoding: 'utf8'
+  });
+  const signed = new URL(url);
+  assert.equal(
+    signed.searchParams.get('X-Amz-SignedHeaders'),
+    'content-type;host;if-none-match'
+  );
 });
