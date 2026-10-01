@@ -50,7 +50,6 @@ import {
   storageAssetUrl,
   storageDelete,
   storageGetSignedUrl,
-  storageObjectExists,
   storageObjectMetadata,
   storageObjectLooksLikeImage,
   storagePathBelongsToProperty,
