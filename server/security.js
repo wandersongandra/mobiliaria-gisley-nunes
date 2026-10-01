@@ -12,6 +12,7 @@ import {
 } from './config.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const MAX_RATE_BUCKETS = 10000;
 const rateBuckets = new Map();
 
 function firstHeader(value) {
@@ -240,30 +241,54 @@ export function clientAddress(req) {
   return String(req.socket?.remoteAddress || 'unknown');
 }
 
+function compactRateBuckets(now) {
+  for (const [bucketKey, bucket] of rateBuckets.entries()) {
+    if (now >= bucket.resetAt) rateBuckets.delete(bucketKey);
+  }
+
+  while (rateBuckets.size >= MAX_RATE_BUCKETS) {
+    const oldestKey = rateBuckets.keys().next().value;
+    if (oldestKey === undefined) break;
+    rateBuckets.delete(oldestKey);
+  }
+}
+
+export function rateLimiterBucketCount() {
+  return rateBuckets.size;
+}
+
 export function createRateLimiter({ windowMs, max, namespace = 'default' }) {
+  const safeWindowMs = Math.max(1000, Number(windowMs) || 1000);
+  const safeMax = Math.max(1, Math.floor(Number(max) || 1));
+
   return (req, res, next) => {
     const now = Date.now();
     const remote = clientAddress(req);
     const key = `${namespace}:${remote}`;
-    const current = rateBuckets.get(key);
+    let current = rateBuckets.get(key);
 
     if (!current || now >= current.resetAt) {
-      rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
-      return next();
+      if (!current && rateBuckets.size >= MAX_RATE_BUCKETS) compactRateBuckets(now);
+      current = { count: 1, resetAt: now + safeWindowMs };
+      rateBuckets.set(key, current);
+    } else if (current.count < safeMax) {
+      current.count += 1;
     }
 
-    if (current.count >= max) {
-      const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+    const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+    const remaining = Math.max(0, safeMax - current.count);
+    res.setHeader('RateLimit-Limit', String(safeMax));
+    res.setHeader('RateLimit-Remaining', String(remaining));
+    res.setHeader('RateLimit-Reset', String(retryAfter));
+
+    if (current.count >= safeMax && remaining === 0) {
+      // A requisição que alcança exatamente o limite ainda é aceita; somente as seguintes são bloqueadas.
+      if (current.count === safeMax && !current.blockNext) {
+        current.blockNext = true;
+        return next();
+      }
       res.setHeader('Retry-After', String(retryAfter));
       return res.status(429).json({ error: 'RATE_LIMITED', retryAfter });
-    }
-
-    current.count += 1;
-
-    if (rateBuckets.size > 5000) {
-      for (const [bucketKey, bucket] of rateBuckets.entries()) {
-        if (now >= bucket.resetAt) rateBuckets.delete(bucketKey);
-      }
     }
 
     return next();
