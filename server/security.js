@@ -71,6 +71,11 @@ export function requestHostOrigin(req) {
   const host = safeHost(req.get('host'));
   if (!host) return '';
 
+  const publicOrigin = configuredPublicOrigin();
+  const adminOrigin = configuredAdminOrigin();
+  if (publicOrigin && configuredHost(publicOrigin) === host) return publicOrigin;
+  if (adminOrigin && configuredHost(adminOrigin) === host) return adminOrigin;
+
   const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
   const forwardedProto = trustCloudflare ? firstHeader(req.headers['x-forwarded-proto']) : '';
   const proto = forwardedProto === 'https' || req.secure ? 'https' : 'http';
