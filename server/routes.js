@@ -56,11 +56,12 @@ import {
   storageProviderName
 } from './storage.js';
 import {
-  normalizeAuditLimit,
+  normalizeAuditQuery,
   normalizeContactLead,
-  normalizeLeadStatus,
+  normalizeLeadStatusRequest,
   normalizePhotoInput,
   normalizePhotoOrder,
+  normalizeResourceId,
   normalizeTeamCreate,
   normalizeTeamPatch,
   normalizeTestimonial,
@@ -230,7 +231,8 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.get('/api/admin/properties/:id', requireCapability('property.read'), async (req, res, next) => {
     try {
-      const property = await getProperty(req.params.id);
+      const id = normalizeResourceId(req.params.id, { max: 36 });
+      const property = await getProperty(id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       return res.json({ property: adminProperty(property) });
     } catch (error) {
@@ -240,12 +242,13 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.put('/api/admin/properties/:id', requireCapability('property.write'), async (req, res, next) => {
     try {
-      const current = await getProperty(req.params.id);
+      const id = normalizeResourceId(req.params.id, { max: 36 });
+      const current = await getProperty(id);
       if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canMutateProperty(req.admin, current) || !canRequestPublication(req.admin, req.body || {})) {
         return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       }
-      const property = await saveProperty(req.body, req.params.id, {
+      const property = await saveProperty(req.body, id, {
         requireDraft: !hasCapability(req.admin, 'property.publish')
       });
       await writeAudit(req, 'property.update', 'property', property.id, { title: property.title, status: property.status });
@@ -257,9 +260,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.delete('/api/admin/properties/:id', requireCapability('property.archive'), async (req, res, next) => {
     try {
-      const removed = await softDeleteProperty(req.params.id);
+      const id = normalizeResourceId(req.params.id, { max: 36 });
+      const removed = await softDeleteProperty(id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
-      await writeAudit(req, 'property.archive', 'property', req.params.id);
+      await writeAudit(req, 'property.archive', 'property', id);
       return res.status(204).end();
     } catch (error) {
       return next(error);
@@ -303,14 +307,15 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         width,
         height
       } = normalizePhotoInput(req.body || {});
-      const property = await getProperty(req.params.id);
+      const propertyId = normalizeResourceId(req.params.id, { max: 36 });
+      const property = await getProperty(propertyId);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       if ((property.photos?.length || 0) >= 40) return res.status(409).json({ error: 'PHOTO_LIMIT_REACHED' });
 
       const extensions = mimeExtensions[contentType];
       const extension = extensionOf(storagePath);
-      if (!storagePathBelongsToProperty(storagePath, req.params.id) || !extensions?.has(extension)) {
+      if (!storagePathBelongsToProperty(storagePath, propertyId) || !extensions?.has(extension)) {
         return res.status(400).json({ error: 'INVALID_ASSET' });
       }
 
@@ -328,7 +333,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       try {
         photos = await addPhoto({
           id: photoId,
-          propertyId: req.params.id,
+          propertyId,
           storagePath,
           url: storageAssetUrl(storagePath),
           altText: altText || `Foto de ${property.title}`,
@@ -350,7 +355,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         }
         throw error;
       }
-      await writeAudit(req, 'photo.add', 'photo', photoId, { propertyId: req.params.id, storagePath });
+      await writeAudit(req, 'photo.add', 'photo', photoId, { propertyId, storagePath });
       return res.status(201).json({ photos });
     } catch (error) {
       return next(error);
@@ -359,12 +364,13 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.delete('/api/admin/photos/:id', requireCapability('media.manage'), async (req, res, next) => {
     try {
-      const photo = await getPhoto(req.params.id);
+      const photoId = normalizeResourceId(req.params.id, { max: 36 });
+      const photo = await getPhoto(photoId);
       if (!photo) return res.status(404).json({ error: 'NOT_FOUND' });
       const property = await getProperty(photo.property_id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
-      const removed = await removePhoto(req.params.id, {
+      const removed = await removePhoto(photoId, {
         requireDraft: !hasCapability(req.admin, 'property.publish')
       });
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -373,7 +379,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       } catch (error) {
         console.warn('[storage] orphan cleanup deferred:', error.message);
       }
-      await writeAudit(req, 'photo.remove', 'photo', req.params.id, { propertyId: removed.property_id });
+      await writeAudit(req, 'photo.remove', 'photo', photoId, { propertyId: removed.property_id });
       return res.status(204).end();
     } catch (error) {
       return next(error);
@@ -383,13 +389,14 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.put('/api/admin/properties/:id/photos/order', requireCapability('media.manage'), async (req, res, next) => {
     try {
       const photoIds = normalizePhotoOrder(req.body || {});
-      const property = await getProperty(req.params.id);
+      const propertyId = normalizeResourceId(req.params.id, { max: 36 });
+      const property = await getProperty(propertyId);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
-      const photos = await reorderPhotos(req.params.id, photoIds, {
+      const photos = await reorderPhotos(propertyId, photoIds, {
         requireDraft: !hasCapability(req.admin, 'property.publish')
       });
-      await writeAudit(req, 'photo.reorder', 'property', req.params.id, { photoCount: photos.length });
+      await writeAudit(req, 'photo.reorder', 'property', propertyId, { photoCount: photos.length });
       return res.json({ photos });
     } catch (error) {
       return next(error);
@@ -403,11 +410,11 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       const property = await getProperty(photo.property_id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
-      const photos = await setPhotoCover(req.params.id, {
+      const photos = await setPhotoCover(photoId, {
         requireDraft: !hasCapability(req.admin, 'property.publish')
       });
       if (!photos) return res.status(404).json({ error: 'NOT_FOUND' });
-      await writeAudit(req, 'photo.cover', 'photo', req.params.id);
+      await writeAudit(req, 'photo.cover', 'photo', photoId);
       return res.json({ photos });
     } catch (error) {
       return next(error);
@@ -441,9 +448,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.delete('/api/admin/testimonials/:id', requireCapability('testimonial.manage'), async (req, res, next) => {
     try {
-      const removed = await removeTestimonial(req.params.id);
+      const id = normalizeResourceId(req.params.id, { max: 36 });
+      const removed = await removeTestimonial(id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
-      await writeAudit(req, 'testimonial.remove', 'testimonial', req.params.id);
+      await writeAudit(req, 'testimonial.remove', 'testimonial', id);
       return res.status(204).end();
     } catch (error) {
       return next(error);
@@ -456,10 +464,11 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.patch('/api/admin/leads/:id', requireCapability('lead.status'), async (req, res, next) => {
     try {
-      const status = normalizeLeadStatus(req.body?.status);
-      const updated = await updateContactLeadStatus(req.params.id, status);
+      const id = normalizeResourceId(req.params.id, { max: 36 });
+      const status = normalizeLeadStatusRequest(req.body || {});
+      const updated = await updateContactLeadStatus(id, status);
       if (!updated) return res.status(404).json({ error: 'NOT_FOUND' });
-      await writeAudit(req, 'lead.status', 'lead', req.params.id, { status });
+      await writeAudit(req, 'lead.status', 'lead', id, { status });
       return res.json({ ok: true });
     } catch (error) {
       return next(error);
@@ -468,9 +477,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.delete('/api/admin/leads/:id', requireCapability('lead.erase'), async (req, res, next) => {
     try {
-      const removed = await deleteContactLead(req.params.id);
+      const id = normalizeResourceId(req.params.id, { max: 36 });
+      const removed = await deleteContactLead(id);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
-      await writeAudit(req, 'lead.delete', 'lead', req.params.id, { reason: 'privacy_or_admin_request' });
+      await writeAudit(req, 'lead.delete', 'lead', id, { reason: 'privacy_or_admin_request' });
       return res.status(204).end();
     } catch (error) {
       return next(error);
@@ -479,7 +489,8 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.get('/api/admin/audit', requireCapability('audit.read'), async (req, res, next) => {
     try {
-      const audit = (await listAuditLog({ limit: normalizeAuditLimit(req.query?.limit) })).map(auditView);
+      const { limit } = normalizeAuditQuery(req.query || {});
+      const audit = (await listAuditLog({ limit })).map(auditView);
       return res.json({ audit });
     } catch (error) {
       return next(error);
