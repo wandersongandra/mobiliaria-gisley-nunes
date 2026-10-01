@@ -139,3 +139,36 @@ test('cookie administrativo inválido é limpo pela sonda de sessão', async () 
     assert.match(setCookie, /Expires=Thu, 01 Jan 1970|Max-Age=0/i);
   });
 });
+
+
+test('API rejeita body não JSON antes da lógica de negócio', async () => {
+  await withServer(async (origin) => {
+    const response = await fetch(`${origin}/api/contact`, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        'Content-Type': 'text/plain',
+        Accept: 'application/json'
+      },
+      body: 'name=Ana&email=ana@example.com'
+    });
+
+    assert.equal(response.status, 415);
+    assert.deepEqual(await response.json(), { error: 'UNSUPPORTED_MEDIA_TYPE' });
+  });
+});
+
+test('API aceita mutação sem body quando a rota não precisa de payload', async () => {
+  await withServer(async (origin) => {
+    const response = await fetch(`${origin}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        Accept: 'application/json'
+      }
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+  });
+});
