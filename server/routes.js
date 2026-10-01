@@ -117,7 +117,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
   app.get('/api/auth/login', loginLimiter, login);
   app.get('/api/auth/callback', loginLimiter, callback);
   app.post('/api/auth/logout', requireSameOrigin, logout);
-  app.post('/api/auth/logout-all', requireSameOrigin, requireAdmin(), logoutAll);
+  app.post('/api/auth/logout-all', requireSameOrigin, logoutAll);
   app.get('/api/admin/session', async (req, res, next) => {
     try {
       res.setHeader('Cache-Control', 'no-store');
