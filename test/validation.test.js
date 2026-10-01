@@ -1,9 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings } from '../server/validation.js';
+import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTeamCreate } from '../server/validation.js';
 
-test('normalizePropertyInput limita números negativos e texto', () => {
-  const data = normalizePropertyInput({ title: ' Casa Ipê ', location: 'Belvedere · Belo Horizonte', price: -10, bedrooms: 999, purpose: 'Outro' });
+test('normalizePropertyInput rejeita números e enums fora do contrato', () => {
+  assert.throws(
+    () => normalizePropertyInput({ title: 'Casa', location: 'Belvedere · Belo Horizonte', price: -10 }),
+    /INVALID_PROPERTY_NUMBER/
+  );
+  assert.throws(
+    () => normalizePropertyInput({ title: 'Casa', location: 'Belvedere · Belo Horizonte', bedrooms: 999 }),
+    /INVALID_PROPERTY_NUMBER/
+  );
+  assert.throws(
+    () => normalizePropertyInput({ title: 'Casa', location: 'Belvedere · Belo Horizonte', purpose: 'Outro' }),
+    /INVALID_PROPERTY/
+  );
+
+  const data = normalizePropertyInput({
+    title: ' Casa Ipê ',
+    location: 'Belvedere · Belo Horizonte',
+    price: 0,
+    bedrooms: 50,
+    purpose: 'Comprar'
+  });
   assert.equal(data.title, 'Casa Ipê');
   assert.equal(data.price, 0);
   assert.equal(data.bedrooms, 50);
