@@ -117,3 +117,25 @@ test('rotas de autenticação usam no-store e logout global exige sessão válid
     assert.equal(logout.headers.get('referrer-policy'), 'no-referrer');
   });
 });
+
+
+test('cookie administrativo inválido é limpo pela sonda de sessão', async () => {
+  await withServer(async (origin) => {
+    const response = await fetch(`${origin}/api/admin/session`, {
+      headers: {
+        Accept: 'application/json',
+        Cookie: 'gisley_admin_session=token-invalido'
+      }
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      authenticated: false,
+      user: null
+    });
+
+    const setCookie = response.headers.get('set-cookie') || '';
+    assert.match(setCookie, /gisley_admin_session=/);
+    assert.match(setCookie, /Expires=Thu, 01 Jan 1970|Max-Age=0/i);
+  });
+});
