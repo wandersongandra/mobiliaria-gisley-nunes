@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import { adminOpenIds, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
-import { normalizeContactLead, normalizePropertyInput, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
+import { normalizeContactLead, normalizePropertyInput, normalizePropertySlug, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
 let pool;
 
@@ -392,9 +392,10 @@ export async function getProperty(id) {
 }
 
 export async function getPropertyBySlug(slug) {
-  if (!hasDatabase()) return isProduction ? null : (seedRows().find((row) => row.slug === slug && row.status === 'published') || null);
+  const normalizedSlug = normalizePropertySlug(slug);
+  if (!hasDatabase()) return isProduction ? null : (seedRows().find((row) => row.slug === normalizedSlug && row.status === 'published') || null);
   const db = getPool();
-  const [rows] = await db.execute(propertyQuery("WHERE p.slug = ? AND p.status = 'published' LIMIT 1"), [String(slug || '').slice(0, 180)]);
+  const [rows] = await db.execute(propertyQuery("WHERE p.slug = ? AND p.status = 'published' LIMIT 1"), [normalizedSlug]);
   if (!rows[0]) return null;
   await hydratePhotos(rows);
   return rows[0];
