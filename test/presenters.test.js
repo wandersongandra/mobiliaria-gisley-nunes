@@ -66,3 +66,45 @@ test('adminProperty remove campos internos de storage sem quebrar gestão da gal
     assert.equal(Object.hasOwn(result.photos[0], key), false, `campo interno vazou: ${key}`);
   }
 });
+
+
+test('adminProperty mantém metadados internos de storage fora da resposta', () => {
+  const result = adminProperty({
+    id: 'property-id',
+    slug: 'casa-teste',
+    title: 'Casa Teste',
+    status: 'draft',
+    photos: [{
+      id: 'photo-id',
+      property_id: 'property-id',
+      storage_path: 'gisley/properties/property-id/private.webp',
+      storage_provider: 'r2',
+      mime_type: 'image/webp',
+      file_size: 123456,
+      width: 1600,
+      height: 1200,
+      uploaded_by: 'editor@gisley.test',
+      url: 'https://media.gisley.test/gisley/properties/property-id/private.webp',
+      alt_text: 'Sala',
+      sort_order: 0,
+      is_cover: 1,
+      created_at: '2026-10-01T12:00:00.000Z'
+    }]
+  });
+
+  const photo = result.photos[0];
+  for (const key of [
+    'property_id',
+    'storage_path',
+    'storage_provider',
+    'mime_type',
+    'file_size',
+    'width',
+    'height',
+    'uploaded_by'
+  ]) {
+    assert.equal(Object.hasOwn(photo, key), false, key);
+  }
+  assert.equal(photo.id, 'photo-id');
+  assert.equal(photo.url, 'https://media.gisley.test/gisley/properties/property-id/private.webp');
+});
