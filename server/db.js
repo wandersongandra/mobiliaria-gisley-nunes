@@ -628,7 +628,13 @@ export async function updateContactLeadStatus(id, status) {
 export async function recordAudit({ actorEmail, action, entityType, entityId = null, details = null }) {
   const db = getPool();
   const { randomUUID } = await import('node:crypto');
-  const safeDetails = details && typeof details === 'object' ? JSON.stringify(details).slice(0, 8000) : null;
+  let safeDetails = null;
+  if (details && typeof details === 'object') {
+    const serialized = JSON.stringify(details);
+    safeDetails = serialized.length <= 8000
+      ? serialized
+      : JSON.stringify({ truncated: true, originalLength: serialized.length });
+  }
   await db.execute(
     'INSERT INTO morada_audit_log (id,actor_email,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)',
     [
