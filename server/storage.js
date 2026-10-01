@@ -1,6 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
 import {
-  configuredMediaOrigin,
   hasLegacyStorage,
   hasR2Storage,
   hasStorage,
