@@ -38,6 +38,8 @@ import {
   canRequestPublication,
   hasCapability,
   requireCapability,
+  staffMutationError,
+  staffRemovalError,
   staffView
 } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
@@ -544,18 +546,12 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
       const patch = normalizeTeamPatch(req.body || {});
 
-      const isSelf = current.open_id && String(current.open_id) === String(req.admin.openId);
-      if (isSelf && ((patch.role && patch.role !== req.admin.role) || patch.active === false)) {
-        return res.status(400).json({ error: 'CANNOT_CHANGE_SELF_ACCESS' });
-      }
-
-      if (
-        current.open_id
-        && isAllowedOpenId(current.open_id)
-        && ((patch.role && patch.role !== 'manager') || patch.active === false)
-      ) {
-        return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
-      }
+      const protectedTarget = {
+        ...current,
+        is_bootstrap: Boolean(current.open_id && isAllowedOpenId(current.open_id))
+      };
+      const mutationError = staffMutationError(req.admin, protectedTarget, patch);
+      if (mutationError) return res.status(400).json({ error: mutationError });
       const member = await saveStaffAccess({
         email,
         name: patch.name ?? current.name,
@@ -585,12 +581,12 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       const current = await findStaffAccess(email);
       if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
 
-      if (current.open_id && String(current.open_id) === String(req.admin.openId)) {
-        return res.status(400).json({ error: 'CANNOT_REMOVE_SELF' });
-      }
-      if (current.open_id && isAllowedOpenId(current.open_id)) {
-        return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
-      }
+      const protectedTarget = {
+        ...current,
+        is_bootstrap: Boolean(current.open_id && isAllowedOpenId(current.open_id))
+      };
+      const removalError = staffRemovalError(req.admin, protectedTarget);
+      if (removalError) return res.status(400).json({ error: removalError });
 
       const removed = await removeStaffAccess(email);
       if (!removed) return res.status(404).json({ error: 'NOT_FOUND' });
