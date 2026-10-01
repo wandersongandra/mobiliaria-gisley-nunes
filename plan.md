@@ -11,7 +11,7 @@ Manter duas experiências separadas, usando o mesmo backend:
 
 - `https://www.gisleynunesimoveis.com.br` — site público;
 - `https://painel.gisleynunesimoveis.com.br` — CRM;
-- `https://media.gisleynunesimoveis.com.br` — mídia pública do Cloudflare R2.
+- `https://media.gisleynunesimoveis.com.br` — reservado para futuro gateway/Worker autorizado; **não** apontar diretamente para o bucket R2.
 
 ## Arquitetura
 
