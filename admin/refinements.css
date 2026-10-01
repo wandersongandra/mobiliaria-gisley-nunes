@@ -43,3 +43,6 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 .audit-row strong{display:block;color:#123c46;font-family:Fraunces,Georgia,serif;font-size:16px;font-weight:600}
 .audit-row span,.audit-row time{display:block;margin-top:3px;color:#7a898a;font-size:9px}
 @media(max-width:680px){.audit-head{display:block}.audit-head p{margin-top:8px;text-align:left}.audit-row{grid-template-columns:1fr}.audit-row>div:last-child{text-align:left}}
+
+.team-identity{display:block;max-width:250px;margin-top:5px;color:#718182;font:8px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-form label small{color:#8a9899;font-size:8px;font-weight:400}
