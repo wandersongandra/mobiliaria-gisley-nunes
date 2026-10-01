@@ -551,6 +551,22 @@ export async function addPhoto({
   return listPhotos(propertyId);
 }
 
+export async function findPublishedPhotoByStoragePath(storagePath) {
+  if (!hasDatabase()) return null;
+  const db = getPool();
+  const key = String(storagePath || '').trim().slice(0, 500);
+  if (!key) return null;
+  const [rows] = await db.execute(
+    `SELECT ph.id,ph.property_id,ph.storage_path
+     FROM morada_property_photos ph
+     INNER JOIN morada_properties p ON p.id=ph.property_id
+     WHERE ph.storage_path=? AND p.status='published'
+     LIMIT 1`,
+    [key]
+  );
+  return rows[0] || null;
+}
+
 export async function getPhoto(photoId) {
   const db = getPool();
   const [rows] = await db.execute(
