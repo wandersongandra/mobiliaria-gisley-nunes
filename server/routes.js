@@ -405,7 +405,8 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.put('/api/admin/photos/:id/cover', requireCapability('media.manage'), async (req, res, next) => {
     try {
-      const photo = await getPhoto(req.params.id);
+      const photoId = normalizeResourceId(req.params.id, { max: 36 });
+      const photo = await getPhoto(photoId);
       if (!photo) return res.status(404).json({ error: 'NOT_FOUND' });
       const property = await getProperty(photo.property_id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
