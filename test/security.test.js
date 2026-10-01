@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { configuredAdminOrigin, configuredPublicOrigin } from '../server/config.js';
 import {
+  clientAddress,
   hostIsKnown,
   requestHostOrigin,
   requestOrigin,
@@ -207,4 +208,24 @@ test('origens canônicas separam mutações públicas e administrativas', () => 
 
   if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
   if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+});
+
+
+test('CF-Connecting-IP é ignorado por padrão mesmo em modo Cloudflare', () => {
+  const prevMode = process.env.TRUST_PROXY_MODE;
+  const prevClient = process.env.TRUST_CLIENT_IP_HEADER;
+  process.env.TRUST_PROXY_MODE = 'cloudflare';
+  process.env.TRUST_CLIENT_IP_HEADER = 'false';
+
+  const req = {
+    headers: { 'cf-connecting-ip': '203.0.113.99' },
+    socket: { remoteAddress: '10.0.0.5' }
+  };
+  assert.equal(clientAddress(req), '10.0.0.5');
+
+  process.env.TRUST_CLIENT_IP_HEADER = 'true';
+  assert.equal(clientAddress(req), '203.0.113.99');
+
+  if (prevMode === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = prevMode;
+  if (prevClient === undefined) delete process.env.TRUST_CLIENT_IP_HEADER; else process.env.TRUST_CLIENT_IP_HEADER = prevClient;
 });
