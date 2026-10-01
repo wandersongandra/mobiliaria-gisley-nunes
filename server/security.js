@@ -1,7 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
-import { configuredAdminOrigin } from './config.js';
-import { configuredPublicOrigin, isProduction } from './config.js';
+import {
+  configuredAdminOrigin,
+  configuredMediaOrigin,
+  configuredPublicOrigin,
+  hasLegacyStorage,
+  hasR2Storage,
+  isProduction,
+  r2Storage,
+  storage
+} from './config.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const rateBuckets = new Map();
@@ -19,7 +27,8 @@ export function requestHostOrigin(req) {
   const host = safeHost(req.get('host'));
   if (!host) return '';
 
-  const forwardedProto = firstHeader(req.headers['x-forwarded-proto']);
+  const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
+  const forwardedProto = trustCloudflare ? firstHeader(req.headers['x-forwarded-proto']) : '';
   const proto = forwardedProto === 'https' || req.secure ? 'https' : 'http';
   return `${proto}://${host}`;
 }
@@ -32,14 +41,43 @@ export function securityHeaders(req, res, next) {
   const nonce = randomBytes(18).toString('base64url');
   res.locals.cspNonce = nonce;
 
+  const mediaOrigin = configuredMediaOrigin();
+  const imageSources = ["'self'", 'data:', 'blob:'];
+  const connectSources = ["'self'"];
+  const mediaSources = ["'self'"];
+
+  if (!isProduction) {
+    imageSources.push('https:');
+    connectSources.push('https:');
+    mediaSources.push('https:');
+  } else {
+    if (mediaOrigin) {
+      imageSources.push(mediaOrigin);
+      mediaSources.push(mediaOrigin);
+    }
+    if (hasR2Storage()) {
+      const r2Origin = `https://${r2Storage.accountId}.r2.cloudflarestorage.com`;
+      imageSources.push(r2Origin);
+      connectSources.push(r2Origin);
+      mediaSources.push(r2Origin);
+    }
+    if (hasLegacyStorage()) {
+      try {
+        const legacyOrigin = new URL(storage.apiUrl).origin;
+        connectSources.push(legacyOrigin);
+        imageSources.push(legacyOrigin);
+      } catch {}
+    }
+  }
+
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
     "style-src 'self' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob: https:",
-    "connect-src 'self' https:",
-    "media-src 'self' https:",
+    `img-src ${[...new Set(imageSources)].join(' ')}`,
+    `connect-src ${[...new Set(connectSources)].join(' ')}`,
+    `media-src ${[...new Set(mediaSources)].join(' ')}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
