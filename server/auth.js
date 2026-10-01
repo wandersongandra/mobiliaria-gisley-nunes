@@ -4,13 +4,14 @@ import { findAdmin, findStaffAccess, saveStaffAccess, upsertAdmin } from './db.j
 import { configuredAdminOrigin, hasDatabase, isAllowedEmail, oauth, sessionSecret } from './config.js';
 import { requestHostOrigin } from './security.js';
 
-const sessionCookie = 'webdev_app_session';
-const stateCookie = 'morada_oauth_state';
+const sessionCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_admin_session' : 'gisley_admin_session';
+const stateCookie = process.env.NODE_ENV === 'production' ? '__Secure-gisley_oauth_state' : 'gisley_oauth_state';
 const sessionIssuer = 'gisley-nunes-imoveis';
 const sessionAudience = 'morada-admin';
 
 function secureCookie(req) {
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
+  const forwardedProto = trustCloudflare ? String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() : '';
   return process.env.NODE_ENV === 'production' || forwardedProto === 'https' || req.secure;
 }
 
