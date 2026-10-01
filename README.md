@@ -27,12 +27,12 @@ O painel em `/admin` concentra imóveis, fotos, contatos recebidos pelo site, da
 
 - **Gestor:** acesso completo; gerencia equipe, dados do site, depoimentos, imóveis, fotos e contatos.
 - **Corretor / Editor:** cadastra e edita imóveis e fotos e acompanha contatos, sem poder administrar equipe ou dados institucionais.
-- Os e-mails definidos em `GISELY_ADMIN_EMAILS` são gestores principais e não podem ser removidos/rebaixados pelo painel.
-- Novos acessos são cadastrados pelo gestor usando o e-mail que a pessoa utilizará no login.
+- Os `openId` definidos em `GISELY_ADMIN_OPEN_IDS` são gestores principais e não podem ser removidos/rebaixados pelo painel.
+- Novos acessos são vinculados ao Código de identidade OAuth da pessoa. O e-mail é apenas informação de contato e nunca concede permissão.
 
 ## Segurança
 
-- Sessão administrativa assinada, com expiração e cookies `HttpOnly`, `Secure` em produção e `SameSite=Lax`.
+- Sessão administrativa assinada, com validade absoluta de 8h, idle timeout server-side, revogação por `openId` e cookies `HttpOnly`, `Secure` em produção e `SameSite=Lax`.
 - Rotas administrativas protegidas por autenticação, verificação de mesma origem e limitação de requisições.
 - CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` e proteção contra framing.
 - Imóveis em rascunho ou arquivados não são expostos por slug na área pública.
