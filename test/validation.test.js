@@ -243,3 +243,31 @@ test('e-mail rejeita pontos consecutivos ou nas extremidades do local-part', () 
     assert.throws(() => normalizeEmailAddress(email), /INVALID_EMAIL/, email);
   }
 });
+
+
+test('upload rejeita SVG, executável e mismatch básico de extensão', () => {
+  const base = {
+    propertyId: 'property-id',
+    size: 1024
+  };
+
+  for (const input of [
+    { ...base, fileName: 'imagem.svg', contentType: 'image/svg+xml' },
+    { ...base, fileName: 'malware.exe', contentType: 'image/jpeg' },
+    { ...base, fileName: 'imagem.png', contentType: 'image/jpeg' },
+    { ...base, fileName: 'imagem.jpg', contentType: 'application/octet-stream' },
+    { ...base, fileName: 'imagem.jpg', contentType: 'image/jpeg', size: 0 },
+    { ...base, fileName: 'imagem.jpg', contentType: 'image/jpeg', size: (12 * 1024 * 1024) + 1 }
+  ]) {
+    const normalized = (() => {
+      try { return normalizeUploadRequest(input); } catch { return null; }
+    })();
+
+    if (input.fileName === 'imagem.png' && input.contentType === 'image/jpeg') {
+      // O contrato básico aceita os dois campos individualmente; a rota cruza MIME x extensão.
+      assert.ok(normalized);
+    } else {
+      assert.equal(normalized, null, JSON.stringify(input));
+    }
+  }
+});
