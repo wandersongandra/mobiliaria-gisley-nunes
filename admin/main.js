@@ -79,7 +79,13 @@ async function performLogout({ all = false } = {}) {
       credentials: 'same-origin'
     });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok || body?.ok !== true) throw new Error(body?.error || 'LOGOUT_FAILED');
+    if (!response.ok || body?.ok !== true) {
+      if (body?.localLoggedOut) {
+        showLogin();
+        return;
+      }
+      throw new Error(body?.error || 'LOGOUT_FAILED');
+    }
     showLogin();
   } catch {
     sessionStatus(
