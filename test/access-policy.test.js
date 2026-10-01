@@ -41,14 +41,18 @@ test('API administrativa mantém autenticação global antes das rotas de negóc
   );
 });
 
-test('sonda de sessão continua fora da cadeia autenticada, mas minimizada', () => {
+test('sonda de sessão continua anônima, mas protegida por contexto de origem e minimizada', () => {
+  const contextGuardIndex = routesSource.indexOf("app.use('/api/admin', requireAdminRequestContext)");
   const sessionIndex = routesSource.indexOf("app.get('/api/admin/session'");
-  const guardIndex = routesSource.indexOf("app.use('/api/admin'");
-  assert.ok(sessionIndex >= 0);
-  assert.ok(guardIndex >= 0);
-  assert.ok(sessionIndex < guardIndex, 'session probe deixou de ser a exceção anônima anterior ao guard');
+  const authGuardIndex = routesSource.indexOf("res.setHeader('Cache-Control', 'no-store');\n    res.setHeader('Pragma', 'no-cache');\n    next();\n  }, requireSameOrigin, adminApiGuard, adminMiddleware)");
 
-  const sessionBlock = routesSource.slice(sessionIndex, guardIndex);
+  assert.ok(contextGuardIndex >= 0, 'guard de contexto administrativo ausente');
+  assert.ok(sessionIndex >= 0, 'session probe ausente');
+  assert.ok(authGuardIndex >= 0, 'guard autenticado global ausente');
+  assert.ok(contextGuardIndex < sessionIndex, 'session probe deve passar pelo guard de contexto');
+  assert.ok(sessionIndex < authGuardIndex, 'session probe deve continuar fora da cadeia autenticada');
+
+  const sessionBlock = routesSource.slice(sessionIndex, authGuardIndex);
   assert.ok(sessionBlock.includes('email: user.email'));
   assert.ok(sessionBlock.includes('name: user.name'));
   assert.ok(sessionBlock.includes('role: user.role'));
