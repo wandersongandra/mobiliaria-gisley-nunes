@@ -192,6 +192,7 @@ test('auditView mantém openId bruto somente no banco e entrega hint ao CRM', ()
   });
 
   assert.equal(Object.hasOwn(view, 'actor_open_id'), false);
+  assert.equal(Object.hasOwn(view, 'details'), false);
   assert.equal(view.actor_identity_hint, 'oauth-id…mnop');
   assert.equal(view.actor_email, 'owner@gisley.test');
 });
