@@ -14,6 +14,7 @@ const expected = new Map([
   ['DELETE /api/admin/properties/:id', 'property.archive'],
   ['POST /api/admin/uploads/presign', 'media.manage'],
   ['POST /api/admin/properties/:id/photos', 'media.manage'],
+  ['GET /api/admin/photos/:id/media', 'property.read'],
   ['DELETE /api/admin/photos/:id', 'media.manage'],
   ['PUT /api/admin/properties/:id/photos/order', 'media.manage'],
   ['PUT /api/admin/photos/:id/cover', 'media.manage'],
