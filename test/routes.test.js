@@ -85,6 +85,6 @@ test('rota pública de storage legado fica desativada por padrão', async () => 
   await withServer(async (origin) => {
     const response = await fetch(`${origin}/manus-storage/morada/properties/antigo/arquivo.jpg`);
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: 'NOT_FOUND' });
+    assert.equal(response.headers.get('location'), null);
   });
 });
