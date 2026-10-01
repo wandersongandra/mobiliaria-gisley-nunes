@@ -42,11 +42,9 @@ function configuredOrigin(value) {
   try {
     const url = new URL(raw);
     if (!['http:', 'https:'].includes(url.protocol)) return '';
-    url.username = '';
-    url.password = '';
-    url.pathname = '';
-    url.search = '';
-    url.hash = '';
+    if (url.username || url.password) return '';
+    if (url.pathname && url.pathname !== '/') return '';
+    if (url.search || url.hash) return '';
     return url.origin;
   } catch {
     return '';
