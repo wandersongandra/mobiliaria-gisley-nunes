@@ -264,8 +264,9 @@ export async function callback(req, res) {
     const email = String(userInfo.email || '').trim().toLowerCase();
     const openId = String(userInfo.openId || userInfo.open_id || '').trim();
     const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
+    const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !openId) {
+    if (emailVerified === false || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !openId) {
       return res.status(403).send('Identidade inválida para acesso administrativo.');
     }
 
