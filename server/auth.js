@@ -133,9 +133,27 @@ export async function createSessionToken({ openId, nowMs = Date.now() }) {
   return { token, jti, expiresAtMs };
 }
 
+export function validSessionClaims(payload, nowMs = Date.now()) {
+  const subject = String(payload?.sub || '');
+  const jti = String(payload?.jti || '');
+  const issuedAt = Number(payload?.iat);
+  const expiresAt = Number(payload?.exp);
+  const nowSeconds = Math.floor(nowMs / 1000);
+
+  if (!subject || subject.length > 191 || /\s/.test(subject)) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jti)) return false;
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)) return false;
+  if (issuedAt > nowSeconds + 30) return false;
+  if (expiresAt <= nowSeconds) return false;
+  if (expiresAt <= issuedAt || expiresAt - issuedAt > Math.ceil(SESSION_TTL_MS / 1000) + 30) return false;
+  return true;
+}
+
 export async function verifySessionToken(token) {
   const secretValue = sessionSecret();
   if (weakSessionSecret(secretValue)) return null;
+  if (typeof token !== 'string' || token.length < 32 || token.length > 4096) return null;
+  if (token.split('.').length !== 3) return null;
 
   try {
     const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(secretValue), {
@@ -147,7 +165,7 @@ export async function verifySessionToken(token) {
     });
 
     if (protectedHeader.typ !== 'JWT') return null;
-    if (!payload.sub || !payload.jti) return null;
+    if (!validSessionClaims(payload)) return null;
     return payload;
   } catch {
     return null;
