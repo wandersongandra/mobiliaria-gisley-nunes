@@ -325,55 +325,133 @@ export async function addPhoto({
   uploadedBy = ''
 }) {
   const db = getPool();
-  if (isCover) await db.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
-  await db.execute(
-    'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover,storage_provider,mime_type,file_size,width,height,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-    [
-      id,
-      propertyId,
-      String(storagePath).slice(0, 500),
-      String(url).slice(0, 600),
-      String(altText || 'Foto do imóvel').trim().slice(0, 255),
-      Number(sortOrder || 0),
-      isCover ? 1 : 0,
-      String(storageProvider || 'legacy').slice(0, 20),
-      String(mimeType || '').slice(0, 80),
-      Math.max(0, Number(fileSize || 0)),
-      Math.max(0, Number(width || 0)),
-      Math.max(0, Number(height || 0)),
-      String(uploadedBy || '').slice(0, 255)
-    ]
-  );
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute('SELECT id FROM morada_properties WHERE id=? FOR UPDATE', [propertyId]);
+    if (isCover) await connection.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
+    await connection.execute(
+      'INSERT INTO morada_property_photos (id,property_id,storage_path,url,alt_text,sort_order,is_cover,storage_provider,mime_type,file_size,width,height,uploaded_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      [
+        id,
+        propertyId,
+        String(storagePath).slice(0, 500),
+        String(url).slice(0, 600),
+        String(altText || 'Foto do imóvel').trim().slice(0, 255),
+        Number(sortOrder || 0),
+        isCover ? 1 : 0,
+        String(storageProvider || 'legacy').slice(0, 20),
+        String(mimeType || '').slice(0, 80),
+        Math.max(0, Number(fileSize || 0)),
+        Math.max(0, Number(width || 0)),
+        Math.max(0, Number(height || 0)),
+        String(uploadedBy || '').slice(0, 255)
+      ]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
   return listPhotos(propertyId);
 }
 
 export async function removePhoto(photoId) {
   const db = getPool();
-  const [[photo]] = await db.execute('SELECT property_id, is_cover, storage_path, storage_provider FROM morada_property_photos WHERE id=? LIMIT 1', [photoId]);
-  if (!photo) return false;
-  await db.execute('DELETE FROM morada_property_photos WHERE id=?', [photoId]);
-  if (photo.is_cover) {
-    const [[nextPhoto]] = await db.execute('SELECT id FROM morada_property_photos WHERE property_id=? ORDER BY sort_order ASC, created_at ASC LIMIT 1', [photo.property_id]);
-    if (nextPhoto) await db.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=?', [nextPhoto.id]);
+  const connection = await db.getConnection();
+  let photo;
+  try {
+    await connection.beginTransaction();
+    const [[lockedPhoto]] = await connection.execute(
+      'SELECT property_id, is_cover, storage_path, storage_provider FROM morada_property_photos WHERE id=? LIMIT 1 FOR UPDATE',
+      [photoId]
+    );
+    if (!lockedPhoto) {
+      await connection.rollback();
+      return false;
+    }
+    photo = lockedPhoto;
+    await connection.execute('DELETE FROM morada_property_photos WHERE id=?', [photoId]);
+    if (photo.is_cover) {
+      const [[nextPhoto]] = await connection.execute(
+        'SELECT id FROM morada_property_photos WHERE property_id=? ORDER BY sort_order ASC, created_at ASC LIMIT 1 FOR UPDATE',
+        [photo.property_id]
+      );
+      if (nextPhoto) await connection.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=?', [nextPhoto.id]);
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
   return photo;
 }
 
 export async function setPhotoCover(photoId) {
   const db = getPool();
-  const [[photo]] = await db.execute('SELECT property_id FROM morada_property_photos WHERE id=? LIMIT 1', [photoId]);
-  if (!photo) return null;
-  await db.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [photo.property_id]);
-  await db.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=?', [photoId]);
-  return listPhotos(photo.property_id);
+  const connection = await db.getConnection();
+  let propertyId;
+  try {
+    await connection.beginTransaction();
+    const [[photo]] = await connection.execute(
+      'SELECT property_id FROM morada_property_photos WHERE id=? LIMIT 1 FOR UPDATE',
+      [photoId]
+    );
+    if (!photo) {
+      await connection.rollback();
+      return null;
+    }
+    propertyId = photo.property_id;
+    await connection.execute('UPDATE morada_property_photos SET is_cover=0 WHERE property_id=?', [propertyId]);
+    await connection.execute('UPDATE morada_property_photos SET is_cover=1 WHERE id=? AND property_id=?', [photoId, propertyId]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return listPhotos(propertyId);
 }
 
 export async function reorderPhotos(propertyId, photoIds) {
   const db = getPool();
   const uniqueIds = [...new Set(photoIds.map((id) => String(id || '')).filter(Boolean))].slice(0, 100);
-  for (let index = 0; index < uniqueIds.length; index += 1) {
-    await db.execute('UPDATE morada_property_photos SET sort_order=? WHERE id=? AND property_id=?', [index, uniqueIds[index], propertyId]);
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const [existing] = await connection.execute(
+      'SELECT id FROM morada_property_photos WHERE property_id=? ORDER BY id FOR UPDATE',
+      [propertyId]
+    );
+    const existingIds = existing.map((row) => String(row.id)).sort();
+    const incomingIds = [...uniqueIds].sort();
+    if (
+      existingIds.length !== incomingIds.length
+      || existingIds.some((id, index) => id !== incomingIds[index])
+    ) {
+      throw new Error('INVALID_ORDER');
+    }
+
+    for (let index = 0; index < uniqueIds.length; index += 1) {
+      await connection.execute(
+        'UPDATE morada_property_photos SET sort_order=? WHERE id=? AND property_id=?',
+        [index, uniqueIds[index], propertyId]
+      );
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
+
   return listPhotos(propertyId);
 }
 
