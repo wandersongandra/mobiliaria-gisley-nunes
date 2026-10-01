@@ -18,7 +18,7 @@
             <div class="contact-details">
               <a href="https://wa.me/<%= site.whatsapp %>" target="_blank" rel="noopener noreferrer">WhatsApp · <%= site.phoneDisplay %> ↗</a>
               <a href="mailto:<%= site.email %>"><%= site.email %></a>
-              <span><%= site.address %> · CRECI <%= site.crci %></span>
+              <span><%= site.address %><% if (site.crci) { %> · CRECI <%= site.crci %><% } %></span>
             </div>
           </div>
           <form class="contact-form" id="contact-form"><label class="contact-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
