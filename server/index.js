@@ -10,7 +10,13 @@ import { assertAuthConfiguration } from './auth.js';
 import { assertAssetsReady, assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
 import { escapeLd, organizationLd, propertyLd, sitemapDate } from './seo.js';
-import { requestHostOrigin, requestOrigin, securityHeaders } from './security.js';
+import {
+  assertSecurityConfiguration,
+  requestHostOrigin,
+  requestOrigin,
+  requireKnownHost,
+  securityHeaders
+} from './security.js';
 import { publicProperty } from './presenters.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,6 +28,7 @@ app.set('query parser', 'simple');
 app.set('view engine', 'ejs');
 app.set('views', path.join(root, 'views'));
 app.use(securityHeaders);
+app.use(requireKnownHost);
 app.use(express.json({ limit: '256kb', type: 'application/json' }));
 app.use(cookieParser());
 
@@ -203,6 +210,7 @@ app.use((error, req, res, next) => {
 async function start() {
   if (isProduction) {
     assertAssetsReady();
+    assertSecurityConfiguration();
     assertAuthConfiguration();
   }
   let migration;
