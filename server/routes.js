@@ -3,6 +3,7 @@ import {
   addPhoto,
   addTestimonial,
   createContactLead,
+  consumeIdentityPairing,
   databaseReady,
   deleteContactLead,
   findStaffAccess,
@@ -28,7 +29,7 @@ import {
   updateContactLeadStatus
 } from './db.js';
 import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
-import { callback, currentAdmin, login, logout, logoutAll, requireAdmin } from './auth.js';
+import { callback, currentAdmin, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
   canCreateProperty,
@@ -495,13 +496,27 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.post('/api/admin/team', requireCapability('team.manage'), async (req, res, next) => {
     try {
-      const { email, openId, name, role } = normalizeTeamCreate(req.body || {});
+      const { email, pairingCode, name, role } = normalizeTeamCreate(req.body || {});
 
-      if (await findStaffAccess(email) || await findStaffAccessByOpenId(openId)) {
+      if (await findStaffAccess(email)) {
         return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
       }
 
-      const member = await saveStaffAccess({ email, openId, name, role, active: true, invitedBy: req.admin.email });
+      const pairing = await consumeIdentityPairing(hashPairingCode(pairingCode), email);
+      if (!pairing) return res.status(400).json({ error: 'INVALID_PAIRING_CODE' });
+
+      if (await findStaffAccessByOpenId(pairing.openId)) {
+        return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
+      }
+
+      const member = await saveStaffAccess({
+        email,
+        openId: pairing.openId,
+        name,
+        role,
+        active: true,
+        invitedBy: req.admin.email
+      });
       await writeAudit(req, 'team.create', 'staff', email, {
         role: member.role,
         active: Boolean(member.active),
