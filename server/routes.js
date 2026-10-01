@@ -52,7 +52,17 @@ import {
   storagePresign,
   storageProviderName
 } from './storage.js';
-import { normalizeContactLead, normalizeTestimonial } from './validation.js';
+import {
+  normalizeAuditLimit,
+  normalizeContactLead,
+  normalizeLeadStatus,
+  normalizePhotoInput,
+  normalizePhotoOrder,
+  normalizeTeamCreate,
+  normalizeTeamPatch,
+  normalizeTestimonial,
+  normalizeUploadRequest
+} from './validation.js';
 import { adminProperties, adminProperty, publicProperties, publicProperty } from './presenters.js';
 
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth' });
@@ -253,14 +263,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.post('/api/admin/uploads/presign', requireCapability('media.manage'), async (req, res, next) => {
     try {
-      const { propertyId, fileName, contentType, size } = req.body || {};
-      const parsedSize = Number(size);
-      const extensions = mimeExtensions[String(contentType || '').toLowerCase()];
+      const { propertyId, fileName, contentType, size } = normalizeUploadRequest(req.body || {});
+      const extensions = mimeExtensions[contentType];
       const extension = extensionOf(fileName);
-
-      if (!propertyId || !fileName || !extensions || !extensions.has(extension) || !Number.isFinite(parsedSize) || parsedSize <= 0 || parsedSize > 12 * 1024 * 1024) {
-        return res.status(400).json({ error: 'INVALID_FILE' });
-      }
+      if (!extensions?.has(extension)) return res.status(400).json({ error: 'INVALID_FILE' });
 
       const property = await getProperty(propertyId);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -291,33 +297,15 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         size,
         width,
         height
-      } = req.body || {};
+      } = normalizePhotoInput(req.body || {});
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
       if ((property.photos?.length || 0) >= 40) return res.status(409).json({ error: 'PHOTO_LIMIT_REACHED' });
 
-      const parsedSize = Number(size || 0);
-      const parsedWidth = Number(width || 0);
-      const parsedHeight = Number(height || 0);
-      const extensions = mimeExtensions[String(contentType || '').toLowerCase()];
+      const extensions = mimeExtensions[contentType];
       const extension = extensionOf(storagePath);
-
-      if (
-        !storagePath
-        || !storagePathBelongsToProperty(storagePath, req.params.id)
-        || !extensions
-        || !extensions.has(extension)
-        || !Number.isFinite(parsedSize)
-        || parsedSize <= 0
-        || parsedSize > 12 * 1024 * 1024
-        || !Number.isFinite(parsedWidth)
-        || !Number.isFinite(parsedHeight)
-        || parsedWidth <= 0
-        || parsedHeight <= 0
-        || parsedWidth > 20000
-        || parsedHeight > 20000
-      ) {
+      if (!storagePathBelongsToProperty(storagePath, req.params.id) || !extensions?.has(extension)) {
         return res.status(400).json({ error: 'INVALID_ASSET' });
       }
 
@@ -343,9 +331,9 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
           isCover: Boolean(isCover),
           storageProvider: storageProviderName(),
           mimeType: contentType,
-          fileSize: parsedSize,
-          width: parsedWidth,
-          height: parsedHeight,
+          fileSize: size,
+          width,
+          height,
           uploadedBy: req.admin.email,
           requireDraft: !hasCapability(req.admin, 'property.publish')
         });
@@ -389,8 +377,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.put('/api/admin/properties/:id/photos/order', requireCapability('media.manage'), async (req, res, next) => {
     try {
-      const { photoIds } = req.body || {};
-      if (!Array.isArray(photoIds) || photoIds.length > 100) return res.status(400).json({ error: 'INVALID_ORDER' });
+      const photoIds = normalizePhotoOrder(req.body || {});
       const property = await getProperty(req.params.id);
       if (!property) return res.status(404).json({ error: 'NOT_FOUND' });
       if (!canManagePropertyMedia(req.admin, property)) return res.status(403).json({ error: 'CAPABILITY_REQUIRED' });
@@ -464,7 +451,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.patch('/api/admin/leads/:id', requireCapability('lead.status'), async (req, res, next) => {
     try {
-      const status = String(req.body?.status || '');
+      const status = normalizeLeadStatus(req.body?.status);
       const updated = await updateContactLeadStatus(req.params.id, status);
       if (!updated) return res.status(404).json({ error: 'NOT_FOUND' });
       await writeAudit(req, 'lead.status', 'lead', req.params.id, { status });
@@ -487,7 +474,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.get('/api/admin/audit', requireCapability('audit.read'), async (req, res, next) => {
     try {
-      const audit = (await listAuditLog({ limit: req.query?.limit })).map(auditView);
+      const audit = (await listAuditLog({ limit: normalizeAuditLimit(req.query?.limit) })).map(auditView);
       return res.json({ audit });
     } catch (error) {
       return next(error);
@@ -508,19 +495,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.post('/api/admin/team', requireCapability('team.manage'), async (req, res, next) => {
     try {
-      const email = String(req.body?.email || '').trim().toLowerCase();
-      const openId = String(req.body?.openId || '').trim();
-      const name = String(req.body?.name || '').trim();
-      const role = req.body?.role === 'manager' ? 'manager' : 'editor';
-
-      if (
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-        || !/^\S{1,191}$/.test(openId)
-        || !name
-        || name.length > 255
-      ) {
-        return res.status(400).json({ error: 'INVALID_TEAM_MEMBER' });
-      }
+      const { email, openId, name, role } = normalizeTeamCreate(req.body || {});
 
       if (await findStaffAccess(email) || await findStaffAccessByOpenId(openId)) {
         return res.status(409).json({ error: 'TEAM_MEMBER_EXISTS' });
@@ -550,27 +525,28 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
       const current = await findStaffAccess(email);
       if (!current) return res.status(404).json({ error: 'NOT_FOUND' });
+      const patch = normalizeTeamPatch(req.body || {});
 
       const isSelf = current.open_id && String(current.open_id) === String(req.admin.openId);
-      if (isSelf && ((req.body?.role && req.body.role !== req.admin.role) || req.body?.active === false)) {
+      if (isSelf && ((patch.role && patch.role !== req.admin.role) || patch.active === false)) {
         return res.status(400).json({ error: 'CANNOT_CHANGE_SELF_ACCESS' });
       }
 
       if (
         current.open_id
         && isAllowedOpenId(current.open_id)
-        && ((req.body?.role && req.body.role !== 'manager') || req.body?.active === false)
+        && ((patch.role && patch.role !== 'manager') || patch.active === false)
       ) {
         return res.status(400).json({ error: 'BOOTSTRAP_MANAGER_PROTECTED' });
       }
       const member = await saveStaffAccess({
         email,
-        name: String(req.body?.name ?? current.name).trim(),
+        name: patch.name ?? current.name,
         openId: current.open_id,
         role: current.open_id && isAllowedOpenId(current.open_id)
           ? 'manager'
-          : (req.body?.role === 'manager' ? 'manager' : (req.body?.role === 'editor' ? 'editor' : current.role)),
-        active: typeof req.body?.active === 'boolean' ? req.body.active : Boolean(current.active),
+          : (patch.role ?? current.role),
+        active: patch.active ?? Boolean(current.active),
         invitedBy: current.invited_by || req.admin.email
       });
       if (current.open_id) await revokeAdminSessionsByOpenId(current.open_id);
