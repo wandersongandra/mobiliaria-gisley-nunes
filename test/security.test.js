@@ -8,7 +8,8 @@ import {
   requestOrigin,
   requireAdminOrigin,
   requireAdminRequestContext,
-  requireSameOrigin
+  requireSameOrigin,
+  securityHeaders
 } from '../server/security.js';
 
 function mockRequest({ host = 'localhost:3000', proto = '' } = {}) {
@@ -454,4 +455,26 @@ test('Host com lista, espaços ou sufixo malicioso não é aceito', () => {
 
   if (prevPublic === undefined) delete process.env.PUBLIC_ORIGIN; else process.env.PUBLIC_ORIGIN = prevPublic;
   if (prevAdmin === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = prevAdmin;
+});
+
+
+test('CSP bloqueia atributos de script, frames, workers e objetos', () => {
+  const req = {};
+  const headers = new Map();
+  const res = {
+    locals: {},
+    setHeader(name, value) { headers.set(String(name).toLowerCase(), String(value)); }
+  };
+  let nextCalled = false;
+  securityHeaders(req, res, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, true);
+  const csp = headers.get('content-security-policy') || '';
+  assert.match(csp, /script-src-attr 'none'/);
+  assert.match(csp, /frame-src 'none'/);
+  assert.match(csp, /worker-src 'none'/);
+  assert.match(csp, /object-src 'none'/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.equal(csp.includes("'unsafe-eval'"), false);
+  assert.equal(csp.includes("script-src 'self' 'unsafe-inline'"), false);
 });
