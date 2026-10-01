@@ -21,7 +21,7 @@ import {
   oauth,
   sessionSecret
 } from './config.js';
-import { requestHostOrigin } from './security.js';
+import { clearCsrfToken, ensureCsrfToken, requestHostOrigin } from './security.js';
 
 const sessionCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_admin_session' : 'gisley_admin_session';
 const stateCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_oauth_state' : 'gisley_oauth_state';
@@ -448,6 +448,7 @@ export async function callback(req, res) {
 
     res.setHeader('Cache-Control', 'no-store');
     res.cookie(sessionCookie, issued.token, cookieOptions(req, { maxAge: SESSION_TTL_MS, path: '/' }));
+    ensureCsrfToken(req, res, { rotate: true });
     return res.redirect(303, configuredAdminOrigin() ? `${configuredAdminOrigin()}/admin` : '/admin');
   } catch (error) {
     console.error('[oauth]', error.message);
@@ -470,6 +471,7 @@ export async function logout(req, res) {
 
   res.setHeader('Cache-Control', 'no-store');
   clearSessionCookie(req, res);
+  clearCsrfToken(req, res);
 
   if (revocationError) {
     return res.status(503).json({
@@ -496,6 +498,7 @@ export async function logoutAll(req, res) {
 
   res.setHeader('Cache-Control', 'no-store');
   clearSessionCookie(req, res);
+  clearCsrfToken(req, res);
 
   if (revocationError) {
     return res.status(503).json({
