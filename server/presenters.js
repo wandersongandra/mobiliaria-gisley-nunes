@@ -1,3 +1,15 @@
+function safeMediaUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('/media/') || raw.startsWith('/manus-storage/')) return raw;
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'https:' ? url.toString() : '';
+  } catch {
+    return '';
+  }
+}
+
 export function publicProperty(row = {}) {
   return {
     slug: String(row.slug || ''),
@@ -17,10 +29,10 @@ export function publicProperty(row = {}) {
     iptu: Number(row.iptu || 0),
     description: String(row.description || ''),
     is_featured: Boolean(row.is_featured),
-    cover_url: String(row.cover_url || ''),
+    cover_url: safeMediaUrl(row.cover_url),
     updated_at: row.updated_at || null,
     photos: Array.isArray(row.photos) ? row.photos.map((photo) => ({
-      url: String(photo.url || ''),
+      url: safeMediaUrl(photo.url),
       alt_text: String(photo.alt_text || ''),
       sort_order: Number(photo.sort_order || 0),
       is_cover: Boolean(photo.is_cover)
@@ -59,7 +71,7 @@ export function adminProperty(row = {}) {
     updated_at: row.updated_at || null,
     photos: Array.isArray(row.photos) ? row.photos.map((photo) => ({
       id: String(photo.id || ''),
-      url: String(photo.url || ''),
+      url: safeMediaUrl(photo.url),
       alt_text: String(photo.alt_text || ''),
       sort_order: Number(photo.sort_order || 0),
       is_cover: Boolean(photo.is_cover),
