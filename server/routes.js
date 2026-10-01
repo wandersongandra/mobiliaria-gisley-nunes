@@ -51,6 +51,7 @@ import {
   storageDelete,
   storageGetSignedUrl,
   storageObjectExists,
+  storageObjectMetadata,
   storageObjectLooksLikeImage,
   storagePathBelongsToProperty,
   storagePresign,
@@ -346,8 +347,25 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         return res.status(400).json({ error: 'INVALID_ASSET' });
       }
 
-      if (!(await storageObjectExists(storagePath))) {
+      const objectMetadata = await storageObjectMetadata(storagePath);
+      if (!objectMetadata.exists) {
         return res.status(400).json({ error: 'ASSET_NOT_UPLOADED' });
+      }
+
+      if (
+        objectMetadata.size !== null
+        && (objectMetadata.size !== size || objectMetadata.size > 12 * 1024 * 1024)
+      ) {
+        try { await storageDelete(storagePath); } catch {}
+        return res.status(400).json({ error: 'INVALID_ASSET' });
+      }
+
+      if (
+        objectMetadata.contentType
+        && objectMetadata.contentType !== contentType.toLowerCase()
+      ) {
+        try { await storageDelete(storagePath); } catch {}
+        return res.status(400).json({ error: 'INVALID_ASSET' });
       }
 
       if (!(await storageObjectLooksLikeImage(storagePath, contentType))) {
