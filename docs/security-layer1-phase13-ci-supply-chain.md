@@ -16,7 +16,7 @@ Status: **controles versionados implementados; validação do deploy pendente**.
 
 - Não foi possível verificar configurações da organização/repositório que não estejam versionadas (proteção de branch, exigência de aprovação, secret exposure em PR, environments e regras de deploy).
 - Ainda não existe backend hospedado para validar o caminho real entre CI e deploy. O site público atual no Cloudflare não equivale a hospedagem da plataforma/API.
-- CI (incluindo MySQL, scanner histórico de segredos, audit moderado e Docker) e CodeQL passaram no commit `f379f69e2dd88558fc72bf55560b762edaeeb44f`. A nova pinagem exige repetição dos workflows antes do PASS final.
+- CI (incluindo MySQL, scanner histórico de segredos, audit moderado e Docker) e CodeQL passaram no commit `8c9a7fcdbf8e6657ff23072d26637325f151943a`, já com pinagem por SHA.
 
 ## Testes de regressão
 

@@ -21,5 +21,5 @@ Status: **implementação e testes de código aprovados; validação operacional
 
 - `test/operational-logging.test.js`: prova de que erros não classificados não reproduzem campos sensíveis.
 - `test/errors.test.js`: mantém testes de respostas opacas para erros e payloads malformados.
-- A CI do commit `f379f69e2dd88558fc72bf55560b762edaeeb44f` aprovou scanner de segredos, testes, build, audit moderado e Docker. A mudança posterior de pinagem de Actions ainda aguarda a nova execução.
+- CI completa e CodeQL passaram no commit `8c9a7fcdbf8e6657ff23072d26637325f151943a`, incluindo scanner de segredos, MySQL, testes, build, audit moderado, Docker e Actions pinadas.
 - A fase só pode receber PASS operacional depois de configurar a hospedagem da plataforma, revisar o destino/retenção de logs e confirmar o fluxo de exclusão no ambiente hospedado.

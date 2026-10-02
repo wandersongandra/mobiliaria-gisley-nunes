@@ -14,8 +14,8 @@ A suíte existente e os testes adicionados cobrem acesso sem sessão, papéis e 
 - `vite build`: **passou**.
 - `scripts/build-pages-preview.mjs`: **passou; 12 páginas geradas**.
 - Scanner histórico de segredos: **passou na CI do GitHub**. A execução local foi interrompida porque o clone filtrado buscava blobs de todo o histórico.
-- CI (ambos os jobs, incluindo MySQL, audit moderado e build Docker) e CodeQL: **PASS** no commit `f379f69e2dd88558fc72bf55560b762edaeeb44f`.
-- A pinagem das GitHub Actions foi adicionada depois desse commit e precisa de uma execução verde no novo HEAD. O teste MySQL local foi ignorado, mas passou na CI com MySQL 8.4.
+- CI (ambos os jobs, incluindo MySQL, scanner histórico de segredos, audit moderado e build Docker) e CodeQL: **PASS** no commit `8c9a7fcdbf8e6657ff23072d26637325f151943a`, já com pinagem de Actions.
+- O teste MySQL local foi ignorado, mas passou na CI com MySQL 8.4.
 
 ## Veredito
 
@@ -26,9 +26,8 @@ Os controles de código das Fases 1–11 têm implementação e evidências vers
 ## Bloqueios explícitos para PASS final
 
 1. Hospedar o backend/plataforma e validar OAuth ponta a ponta, cookies, callback, logs e exclusão de leads no ambiente real.
-2. Executar novamente CI, CodeQL, MySQL, scanner de segredos e build de container no HEAD com pinagem de Actions.
-3. Conferir regras de branch, ambientes, secrets e aprovações no GitHub.
-4. Definir prazo de retenção/expurgo para leads e trilha de auditoria com a política operacional e jurídica responsável.
-5. Fazer teste externo de Cloudflare/proxy e abuso com backend hospedado, incluindo IP confiável, host e origem encaminhados.
+2. Conferir regras de branch, ambientes, secrets e aprovações no GitHub.
+3. Definir prazo de retenção/expurgo para leads e trilha de auditoria com a política operacional e jurídica responsável.
+4. Fazer teste OAuth ponta a ponta, Cloudflare/proxy e abuso com backend hospedado, incluindo IP confiável, host e origem encaminhados.
 
 Até que esses gates terminem, as fases com evidência de código podem ser tratadas como **implementadas/validadas parcialmente**, mas o status agregado permanece **NO-GO**.
