@@ -22,6 +22,7 @@ import {
   sessionSecret
 } from './config.js';
 import { clearCsrfToken, ensureCsrfToken, requestHostOrigin } from './security.js';
+import { logOperationalError } from './operational-logging.js';
 
 const sessionCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_admin_session' : 'gisley_admin_session';
 const stateCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_oauth_state' : 'gisley_oauth_state';
@@ -451,7 +452,7 @@ export async function callback(req, res) {
     ensureCsrfToken(req, res, { rotate: true });
     return res.redirect(303, configuredAdminOrigin() ? `${configuredAdminOrigin()}/admin` : '/admin');
   } catch (error) {
-    console.error('[oauth]', error.message);
+    logOperationalError(console.error, 'oauth.callback_failed', error);
     return res.status(400).send('Não foi possível concluir o acesso. Tente novamente.');
   }
 }

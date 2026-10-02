@@ -19,6 +19,7 @@ import {
 } from './security.js';
 import { publicProperty } from './presenters.js';
 import { apiErrorHandler } from './errors.js';
+import { logOperationalError } from './operational-logging.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -217,7 +218,7 @@ async function start() {
     if (isProduction && !migration.configured) throw new Error('DATABASE_NOT_CONFIGURED');
   } catch (error) {
     if (isProduction) throw error;
-    console.warn('[db] migration deferred:', error.message);
+    logOperationalError(console.warn, 'db.migration_deferred', error);
     migration = { configured: false };
   }
   if (isProduction) {
@@ -276,7 +277,7 @@ async function start() {
       try {
         await closePool();
       } catch (dbError) {
-        console.error('[db] shutdown:', dbError.message);
+        logOperationalError(console.error, 'db.shutdown_failed', dbError);
       }
       clearTimeout(forceExit);
       process.exit(error ? 1 : 0);
@@ -290,6 +291,6 @@ async function start() {
 }
 
 start().catch((error) => {
-  console.error('[startup]', isProduction ? error.message : (error.stack || error.message));
+  logOperationalError(console.error, 'startup.failed', error);
   process.exit(1);
 });

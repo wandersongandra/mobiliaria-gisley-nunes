@@ -93,12 +93,12 @@ Não houve merge na `main`.
 
 Durante a retomada da Fase 2, uma nova execução do audit de produção identificou quatro advisories moderados em `ip-address@10.5.0`, dependência transitiva de `express-rate-limit`. O requisito corrigido começa em `10.7.1`.
 
-- O lockfile foi atualizado para `ip-address@10.7.3`; `package.json` e os limites de versão diretos não mudaram.
-- `pnpm audit --prod --audit-level=moderate` (pnpm 10.4.1): **PASS — nenhum advisory conhecido**.
-- `pnpm test`: **169 aprovados, 0 falhas, 1 teste MySQL ignorado** por não haver serviço MySQL local.
-- `pnpm build`: **PASS**.
+- O lockfile e `pnpm-workspace.yaml` fixam a dependência transitiva em `ip-address@10.7.2`, versão publicada há mais tempo e acima do mínimo corrigido `10.7.1`. A tentativa inicial com `10.7.3` foi bloqueada pela política local de idade mínima de publicação.
+- `pnpm audit --prod --audit-level=moderate`: **PASS — nenhum advisory conhecido**.
+- `node --test`: **174 aprovados, 0 falhas, 1 teste MySQL ignorado** por não haver serviço MySQL local.
+- Build Vite e build de preview Cloudflare: **PASS**; preview gerou 12 páginas.
 - A CI e o CodeQL do HEAD remoto anterior (`06832527ff4ba5cb572e27386618ef517ab91dae`) passaram. Esses resultados antecedem esta alteração do lockfile e precisam ser renovados após ela.
-- A varredura local de segredos históricos não terminou: o clone filtrado precisou buscar blobs antigos durante `git log -p`. A CI do HEAD remoto anterior já tinha esse gate aprovado; como o scanner exclui o lockfile, esta mudança não altera a superfície que ele verifica.
+- A varredura local de segredos históricos não terminou dentro desta sessão: o clone filtrado precisou buscar blobs antigos durante `git log -p`. A CI do HEAD remoto anterior já tinha esse gate aprovado; as mudanças atuais acrescentam testes e sanitização de logs e exigem novo resultado de CI.
 
 O usuário esclareceu que, no momento, somente o site público está hospedado no Cloudflare; ainda não há plataforma para hospedar o backend nem ambiente de validação. A validação OAuth ponta a ponta fica adiada até essa infraestrutura ser definida. Isso é uma pendência operacional pré-produção, não uma falha confirmada no código.
 

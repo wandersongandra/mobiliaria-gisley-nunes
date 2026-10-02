@@ -72,6 +72,7 @@ import {
   normalizeUploadRequest
 } from './validation.js';
 import { adminProperties, adminProperty, publicProperties, publicProperty } from './presenters.js';
+import { logOperationalError } from './operational-logging.js';
 
 const apiSafetyLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -141,7 +142,7 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
       details
     });
   } catch (error) {
-    console.warn('[audit] write failed:', error.message);
+    logOperationalError(console.warn, 'audit.write_failed', error);
   }
 }
 
@@ -427,7 +428,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       } catch (error) {
         if (error?.message !== 'ASSET_ALREADY_REGISTERED') {
           try { await storageDelete(storagePath); } catch (cleanupError) {
-            console.warn('[storage] failed to clean unpersisted upload:', cleanupError.message);
+            logOperationalError(console.warn, 'storage.upload_cleanup_failed', cleanupError);
           }
         }
         throw error;
@@ -469,7 +470,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       try {
         await storageDelete(removed.storage_path);
       } catch (error) {
-        console.warn('[storage] orphan cleanup deferred:', error.message);
+        logOperationalError(console.warn, 'storage.orphan_cleanup_deferred', error);
       }
       await writeAudit(req, 'photo.remove', 'photo', photoId, { propertyId: removed.property_id });
       return res.status(204).end();

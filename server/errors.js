@@ -1,4 +1,4 @@
-import { isProduction } from './config.js';
+import { logOperationalError } from './operational-logging.js';
 
 const HTTP_ERRORS = Object.freeze({
   CAPABILITY_REQUIRED: [403, 'CAPABILITY_REQUIRED'],
@@ -65,7 +65,7 @@ export function classifyHttpError(error) {
 
 export function apiErrorHandler(error, req, res, next) {
   const contract = classifyHttpError(error);
-  console.error('[api]', isProduction ? contract.code : (error?.stack || error?.message));
+  logOperationalError(console.error, 'api.error', error);
   if (res.headersSent) return next(error);
   return res.status(contract.status).json({ error: contract.code });
 }
