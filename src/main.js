@@ -323,9 +323,14 @@ function initContactForm() {
     if (button) {
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
+      button.classList.add('is-loading');
       button.textContent = 'Enviando';
     }
-    if (status) status.textContent = 'Enviando sua mensagem';
+    form.dataset.state = 'sending';
+    if (status) {
+      status.dataset.state = 'sending';
+      status.textContent = 'Enviando sua mensagem';
+    }
 
     try {
       const response = await fetch('/api/contact', {
@@ -343,11 +348,17 @@ function initContactForm() {
 
       if (!response.ok) throw new Error('CONTACT_FAILED');
       form.reset();
-      if (status) status.textContent = 'Mensagem enviada. Retornaremos em breve.';
+      form.dataset.state = 'success';
+      if (status) {
+        status.dataset.state = 'success';
+        status.textContent = 'Mensagem enviada. Retornaremos em breve.';
+      }
     } catch {
       const fallbackText = `Olá! Meu nome é ${String(data.name || '').trim()}. ${String(data.message || '').trim()}`.slice(0, 1200);
       const whatsapp = await buildWhatsAppFallback(fallbackText);
+      form.dataset.state = 'error';
       if (status) {
+        status.dataset.state = 'error';
         status.textContent = 'Não foi possível registrar a mensagem. ';
         if (whatsapp) {
           const link = document.createElement('a');
@@ -364,6 +375,7 @@ function initContactForm() {
       if (button) {
         button.disabled = false;
         button.removeAttribute('aria-busy');
+        button.classList.remove('is-loading');
         button.innerHTML = originalText;
       }
     }
@@ -494,7 +506,25 @@ function initScrollPolish() {
   updateHeader();
   window.addEventListener('scroll', updateHeader, { passive: true });
 
-  const targets = document.querySelectorAll('.section-heading, .brand-statement, .experience-intro, .stats, .testimonial-feature, .contact-grid, .about-visual, .about-values-grid, .catalog-results-head, .property-description');
+  const targetGroups = [
+    ['.section-heading', 'motion-rise'],
+    ['.brand-statement', 'motion-rule'],
+    ['.experience-intro', 'motion-drift'],
+    ['.stats', 'motion-grid'],
+    ['.testimonial-feature', 'motion-quote'],
+    ['.contact-grid', 'motion-form'],
+    ['.about-visual', 'motion-drift'],
+    ['.about-values-grid', 'motion-rise'],
+    ['.catalog-results-head', 'motion-rule'],
+    ['.property-description', 'motion-quote']
+  ];
+  const targets = [];
+  targetGroups.forEach(([selector, motionClass]) => {
+    document.querySelectorAll(selector).forEach((target) => {
+      target.classList.add('motion-target', motionClass);
+      targets.push(target);
+    });
+  });
   if (!('IntersectionObserver' in window)) {
     targets.forEach((target) => target.classList.add('is-revealed'));
     return;
@@ -521,12 +551,21 @@ function initTestimonials() {
   const next = document.querySelector('[data-quote-next]');
   let index = 0;
 
-  const show = (i) => {
-    features.forEach((feature, j) => { feature.hidden = j !== i; });
+  const show = (i, direction = 1) => {
+    features.forEach((feature, j) => {
+      feature.hidden = j !== i;
+      if (j === i) {
+        feature.dataset.direction = direction > 0 ? 'next' : 'previous';
+        feature.classList.remove('is-active');
+        requestAnimationFrame(() => feature.classList.add('is-active'));
+      } else {
+        feature.classList.remove('is-active');
+      }
+    });
   };
 
-  prev?.addEventListener('click', () => { index = (index - 1 + features.length) % features.length; show(index); });
-  next?.addEventListener('click', () => { index = (index + 1) % features.length; show(index); });
+  prev?.addEventListener('click', () => { index = (index - 1 + features.length) % features.length; show(index, -1); });
+  next?.addEventListener('click', () => { index = (index + 1) % features.length; show(index, 1); });
   show(0);
 }
 
