@@ -94,7 +94,7 @@ jobs:
         run: php artisan migrate --force
 
       - name: Application contract tests
-        run: php artisan test --testsuite=Feature
+        run: vendor/bin/phpunit --testsuite=Feature
 
       - name: Composer security audit
         run: composer audit --no-interaction
