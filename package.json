@@ -16,7 +16,7 @@
     "security:secrets": "node scripts/scan-secrets.mjs",
     "cf:build": "pnpm run build:preview",
     "cf:deploy": "pnpm dlx wrangler@4.145.0 deploy --config wrangler.jsonc",
-    "cf:preview": "pnpm dlx wrangler@4.145.0 preview --config wrangler.preview.jsonc"
+    "cf:preview": "pnpm dlx wrangler@4.145.0 deploy --config wrangler.preview.jsonc"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
