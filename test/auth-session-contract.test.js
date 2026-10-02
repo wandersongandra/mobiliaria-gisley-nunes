@@ -17,12 +17,31 @@ test('OAuth challenge é consumível uma única vez sob lock transacional', () =
   const schemaEnd = dbSource.indexOf('CREATE TABLE IF NOT EXISTS morada_admin_sessions', schemaStart);
   const challengeSchema = dbSource.slice(schemaStart, schemaEnd);
   const consume = functionBlock('consumeAuthChallenge', 'createAdminSession');
+  const create = functionBlock('createAuthChallenge', 'consumeAuthChallenge');
 
   assert.match(challengeSchema, /state_hash CHAR\(64\) PRIMARY KEY/);
+  assert.match(challengeSchema, /invitation_hash CHAR\(64\) NULL/);
+  assert.match(create, /invitation_hash/);
   assert.match(consume, /beginTransaction\(\)/);
   assert.match(consume, /FOR UPDATE/);
   assert.match(consume, /DELETE FROM morada_auth_challenges/);
   assert.match(consume, /commit\(\)/);
+});
+
+test('convite de equipe é hash-only, expira e vincula identidade uma única vez sob lock', () => {
+  const schemaStart = dbSource.indexOf('CREATE TABLE IF NOT EXISTS morada_staff_invitations');
+  const schemaEnd = dbSource.indexOf('CREATE TABLE IF NOT EXISTS morada_identity_pairings', schemaStart);
+  const invitationSchema = dbSource.slice(schemaStart, schemaEnd);
+  const accept = functionBlock('acceptStaffInvitation', 'createAuthChallenge');
+
+  assert.match(invitationSchema, /token_hash CHAR\(64\) PRIMARY KEY/);
+  assert.equal(invitationSchema.includes('invitation_token'), false);
+  assert.match(invitationSchema, /accepted_at TIMESTAMP/);
+  assert.match(invitationSchema, /revoked_at TIMESTAMP/);
+  assert.match(accept, /SELECT token_hash,email,name,role,invited_by,expires_at_ms,accepted_at,revoked_at/);
+  assert.match(accept, /FOR UPDATE/);
+  assert.match(accept, /INSERT INTO morada_staff_access/);
+  assert.match(accept, /accepted_at=CURRENT_TIMESTAMP/);
 });
 
 test('pairing code não é persistido em claro e o vínculo é uso único sob lock', () => {

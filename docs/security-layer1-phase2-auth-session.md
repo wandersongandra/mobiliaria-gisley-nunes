@@ -8,9 +8,9 @@ Escopo: OAuth, cookies, JWT, sessão server-side, revogação, vínculo de ident
 ## Superfície Analisada
 
 - `server/auth.js`: `/api/auth/login`, `/api/auth/callback`, logout, logout-all, cookies, OAuth state, JWT, resolução de identidade e sessão.
-- `server/db.js`: `morada_auth_challenges`, `morada_identity_pairings`, `morada_admin_sessions`, locks transacionais, revogação, `last_seen_at_ms` e retenção.
+- `server/db.js`: `morada_auth_challenges`, `morada_identity_pairings`, `morada_staff_invitations`, `morada_admin_sessions`, locks transacionais, revogação, `last_seen_at_ms` e retenção.
 - `server/config.js`: segredo de sessão, origens canônicas, timeout ocioso e limite de sessões.
-- `server/routes.js`: guards de origem, rate limit, session probe, pairing e logout.
+- `server/routes.js`: guards de origem, rate limit, session probe, convites, pairing legado e logout.
 - `server/security.js` e `server/index.js`: host/origin, cookies atrás de proxy, headers e tratamento de erros.
 - Testes em `test/auth.test.js`, `test/auth-session.test.js`, `test/auth-session-contract.test.js`, `test/session-security.test.js`, `test/session-config.test.js`, `test/errors.test.js`, `test/routes.test.js` e `test/security*.test.js`.
 - `docs/security-layer1-phase1-surface.md`: preservação dos guards e da separação entre domínio público e painel.
@@ -35,6 +35,7 @@ Escopo: OAuth, cookies, JWT, sessão server-side, revogação, vínculo de ident
 | F2-13 | CSRF administrativo | High | O controle original de mesma origem bloqueava ataques cross-origin, porém não havia um token anti-CSRF independente ligado ao navegador. O Advanced Security também não conseguia modelar o guard customizado. | Adicionado double-submit token de 256 bits: cookie `__Host-gisley_csrf` em produção, `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, comparação em tempo constante e header `X-CSRF-Token`. O controle de `Origin`/`Sec-Fetch-Site` foi mantido como defesa adicional. Token é rotacionado no login e removido no logout/logout-all. | Testes HTTP cobrem ausência, divergência e token válido; testes de autorização atravessam CSRF válido antes de verificar capabilities. |
 | F2-14 | Rate limiting reconhecível e defesa em profundidade | High | O projeto já possuía limites customizados por IP/rota, porém a query `js/missing-rate-limiting` do CodeQL não conseguia modelá-los e o guard global não tinha uma implementação padrão independente. | Mantidos todos os limites específicos existentes e adicionada barreira global com `express-rate-limit@8.7.0` para `/api`, limite alto de segurança, headers padrão e chave normalizada com `ipKeyGenerator`. | CI e Advanced Security reexecutados; alertas High do PR caíram a zero. |
 | F2-15 | Dependência transitiva do limiter | High | A primeira resolução de `express-rate-limit@8.7.0` fixou `ip-address@10.2.0`, atingida pelo advisory `GHSA-mwp4-54f8-5fhr`. O gate `pnpm audit --prod --audit-level=high` falhou. | Lockfile atualizado para `ip-address@10.5.0`, compatível com o range do pacote e acima da versão corrigida mínima. | Frozen install PASS e production dependency audit PASS no CI. |
+| F2-16 | Cadastro dependente de pareamento manual | Medium | O gestor precisava esperar o primeiro login do convidado e copiar um código de 15 minutos para concluir o vínculo. | Convite criado pelo gestor com token aleatório de 256 bits, hash no banco, validade de 72 horas, aceite único sob lock, e-mail OAuth exato e revogação pelo painel. O pareamento antigo permanece somente para migração. | `test/validation.test.js`, `test/auth.test.js`, `test/auth-session-contract.test.js`, `test/routes.test.js` |
 
 ## Resultado dos Testes
 
@@ -101,5 +102,11 @@ Durante a retomada da Fase 2, uma nova execução do audit de produção identif
 - A varredura local de segredos históricos não terminou dentro desta sessão: o clone filtrado precisou buscar blobs antigos durante `git log -p`. A CI do HEAD remoto anterior já tinha esse gate aprovado; as mudanças atuais acrescentam testes e sanitização de logs e exigem novo resultado de CI.
 
 O usuário esclareceu que, no momento, somente o site público está hospedado no Cloudflare; ainda não há plataforma para hospedar o backend nem ambiente de validação. A validação OAuth ponta a ponta fica adiada até essa infraestrutura ser definida. Isso é uma pendência operacional pré-produção, não uma falha confirmada no código.
+
+## Atualização arquitetural — convites de equipe — 2026-10-02
+
+O cadastro cotidiano foi reorganizado para que o usuário-chefe Gisley seja o bootstrap definido por `GISELY_ADMIN_OPEN_IDS` e convide os demais usuários no próprio painel. O convite não concede acesso por e-mail: ele apenas carrega um token temporário até o OAuth confirmar o mesmo e-mail e vincular o `openId` à permissão escolhida (`editor` ou `manager`). O link bruto é retornado uma única vez à interface para cópia manual; banco, logs e auditoria mantêm somente hash e metadados não sensíveis.
+
+Essa etapa melhora a manutenção sem exigir provedor de e-mail antes da hospedagem. O próximo passo estrutural recomendado é extrair as migrações de `server/db.js` e os módulos de rota por domínio, conforme `docs/architecture-maintainability.md`.
 
 O resultado da Fase 2 permanece **NO-GO para produção** até a validação OAuth ponta a ponta. A PR #1 segue em modo draft; não houve merge na `main` nem publicação.

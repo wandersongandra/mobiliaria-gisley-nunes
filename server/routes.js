@@ -4,6 +4,7 @@ import {
   addPhoto,
   addTestimonial,
   createContactLead,
+  createStaffInvitation,
   bindStaffAccessFromPairing,
   databaseReady,
   deleteContactLead,
@@ -16,9 +17,11 @@ import {
   listAuditLog,
   listContactLeads,
   listProperties,
+  listStaffInvitations,
   listStaffAccess,
   removePhoto,
   removeStaffAccess,
+  revokeStaffInvitationsByEmail,
   removeTestimonial,
   recordAudit,
   reorderPhotos,
@@ -30,8 +33,8 @@ import {
   softDeleteProperty,
   updateContactLeadStatus
 } from './db.js';
-import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
-import { authCookieNames, callback, clearSessionCookie, currentAdmin, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
+import { configuredAdminOrigin, hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
+import { STAFF_INVITATION_TTL_MS, authCookieNames, callback, clearSessionCookie, currentAdmin, hashInvitationToken, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
   canArchiveProperty,
@@ -46,7 +49,7 @@ import {
   staffView
 } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { clientAddress, createRateLimiter, ensureCsrfToken, requireAdminOrigin, requireAdminRequestContext, requireCsrfToken, requireSameOrigin } from './security.js';
+import { clientAddress, createRateLimiter, ensureCsrfToken, requestHostOrigin, requireAdminOrigin, requireAdminRequestContext, requireCsrfToken, requireSameOrigin } from './security.js';
 import {
   safeFileName,
   storageAssetUrl,
@@ -67,11 +70,12 @@ import {
   normalizePhotoOrder,
   normalizeResourceId,
   normalizeTeamCreate,
+  normalizeTeamInvitation,
   normalizeTeamPatch,
   normalizeTestimonial,
   normalizeUploadRequest
 } from './validation.js';
-import { adminProperties, adminProperty, publicProperties, publicProperty } from './presenters.js';
+import { adminProperties, adminProperty, publicProperties, publicProperty, staffInvitationView } from './presenters.js';
 import { logOperationalError } from './operational-logging.js';
 
 const apiSafetyLimiter = rateLimit({
@@ -600,6 +604,64 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       res.json({ team });
     } catch (error) {
       next(error);
+    }
+  });
+
+  app.get('/api/admin/team/invitations', requireCapability('team.manage'), async (req, res, next) => {
+    try {
+      const invitations = (await listStaffInvitations()).map(staffInvitationView);
+      return res.json({ invitations });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post('/api/admin/team/invitations', requireCapability('team.manage'), async (req, res, next) => {
+    try {
+      const { email, name, role } = normalizeTeamInvitation(req.body || {});
+      const origin = configuredAdminOrigin() || requestHostOrigin(req);
+      if (!origin) return res.status(400).json({ error: 'ADMIN_ORIGIN_NOT_CONFIGURED' });
+
+      const token = crypto.randomBytes(32).toString('base64url');
+      const expiresAtMs = Date.now() + STAFF_INVITATION_TTL_MS;
+      await createStaffInvitation({
+        tokenHash: hashInvitationToken(token),
+        email,
+        name,
+        role,
+        invitedBy: req.admin.email,
+        expiresAtMs
+      });
+
+      await writeAudit(req, 'team.invite', 'staff', email, {
+        role,
+        expiresAtMs,
+        tokenStoredAsHash: true
+      });
+
+      return res.status(201).json({
+        invitation: {
+          email,
+          name,
+          role,
+          expiresAtMs,
+          url: `${origin}/admin?invite=${encodeURIComponent(token)}`
+        }
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.delete('/api/admin/team/invitations/:email', requireCapability('team.manage'), destructiveLimiter, async (req, res, next) => {
+    try {
+      const email = normalizeEmailAddress(req.params.email, { error: 'INVALID_EMAIL' });
+      const revoked = await revokeStaffInvitationsByEmail(email);
+      if (!revoked) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'team.invite.revoke', 'staff', email, { invitationsRevoked: revoked });
+      return res.status(204).end();
+    } catch (error) {
+      return next(error);
     }
   });
 

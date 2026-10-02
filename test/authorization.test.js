@@ -140,6 +140,9 @@ test('editor recebe 403 em todas as rotas exclusivas de gestor', async () => {
     ['DELETE', '/api/admin/leads/lead-id'],
     ['GET', '/api/admin/audit'],
     ['GET', '/api/admin/team'],
+    ['GET', '/api/admin/team/invitations'],
+    ['POST', '/api/admin/team/invitations'],
+    ['DELETE', '/api/admin/team/invitations/person%40example.com'],
     ['POST', '/api/admin/team'],
     ['PATCH', '/api/admin/team/person%40example.com'],
     ['DELETE', '/api/admin/team/person%40example.com']

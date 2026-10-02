@@ -6,7 +6,9 @@ import {
   cookieOptions,
   createSessionToken,
   hashOAuthState,
+  hashInvitationToken,
   hashPairingCode,
+  isValidInvitationToken,
   isValidOAuthCode,
   isValidOAuthState,
   normalizeOAuthIdentity,
@@ -69,6 +71,11 @@ test('state OAuth usa hash estável e comparação em tempo constante', () => {
   assert.equal(hashPairingCode(pairing).length, 64);
   assert.equal(hashPairingCode(pairing), hashPairingCode(pairing));
   assert.notEqual(hashPairingCode(pairing), hashPairingCode(pairing + 'x'));
+
+  const invitation = 'A'.repeat(43);
+  assert.equal(hashInvitationToken(invitation).length, 64);
+  assert.equal(hashInvitationToken(invitation), hashInvitationToken(invitation));
+  assert.notEqual(hashInvitationToken(invitation), hashInvitationToken(`${invitation}x`));
 });
 
 test('parâmetros OAuth aceitam somente valores escalares e canônicos', () => {
@@ -82,6 +89,11 @@ test('parâmetros OAuth aceitam somente valores escalares e canônicos', () => {
   assert.equal(isValidOAuthCode(['authorization-code_123']), false);
   assert.equal(isValidOAuthCode('code\nwith-control'), false);
   assert.equal(isValidOAuthCode('x'.repeat(4097)), false);
+
+  assert.equal(isValidInvitationToken('A'.repeat(43)), true);
+  assert.equal(isValidInvitationToken('A'.repeat(42)), false);
+  assert.equal(isValidInvitationToken(['A'.repeat(43)]), false);
+  assert.equal(isValidInvitationToken('A'.repeat(42) + '!'), false);
 });
 
 test('JWT administrativo aceita token íntegro e rejeita adulteração/expiração', async () => {

@@ -27,8 +27,10 @@ O painel em `/admin` concentra imóveis, fotos, contatos recebidos pelo site, da
 
 - **Gestor:** acesso completo; gerencia equipe, dados do site, depoimentos, imóveis, fotos e contatos.
 - **Corretor / Editor:** cadastra e edita imóveis e fotos e acompanha contatos, sem poder administrar equipe ou dados institucionais.
-- Os `openId` definidos em `GISELY_ADMIN_OPEN_IDS` são gestores principais e não podem ser removidos/rebaixados pelo painel.
-- Novos acessos são vinculados ao Código de identidade OAuth da pessoa. O e-mail é apenas informação de contato e nunca concede permissão.
+- Os `openId` definidos em `GISELY_ADMIN_OPEN_IDS` são o usuário-chefe Gisley (e eventuais gestores bootstrap) e não podem ser removidos/rebaixados pelo painel.
+- A Gisley ou outro gestor gera no painel um convite de uso único, com validade de 72 horas, e envia o link por WhatsApp ou e-mail.
+- O convidado só conclui o cadastro quando autentica no OAuth com o mesmo e-mail do convite; o e-mail sozinho nunca concede permissão.
+- O vínculo final guarda a identidade OAuth (`openId`) no banco e passa a ser administrado em `/admin` por papel, status e revogação de sessão.
 
 ## Segurança
 

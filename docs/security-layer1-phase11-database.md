@@ -50,7 +50,8 @@ Produção agora exige:
 ### Sessão/identidade
 - JTI PK;
 - OpenID único onde aplicável;
-- pairing codes únicos;
+- hashes de convite e pairing legado únicos;
+- convites com aceite/revogação e validade explícitos;
 - challenges de uso único;
 - criação de sessão usa transação e lock de identidade.
 

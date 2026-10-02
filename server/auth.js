@@ -5,6 +5,8 @@ import {
   createAdminSession,
   createAuthChallenge,
   createIdentityPairing,
+  acceptStaffInvitation,
+  findStaffInvitationByHash,
   findActiveAdminSession,
   findAdmin,
   findStaffAccessByOpenId,
@@ -31,6 +33,7 @@ const sessionAudience = 'gisley-admin';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const IDENTITY_PAIRING_TTL_MS = 15 * 60 * 1000;
+export const STAFF_INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 
 function secureCookie(req) {
   const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
@@ -108,6 +111,10 @@ export function hashPairingCode(value) {
   return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
 }
 
+export function hashInvitationToken(value) {
+  return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
 export function safeStateEqual(left, right) {
   const a = Buffer.from(String(left || ''), 'utf8');
   const b = Buffer.from(String(right || ''), 'utf8');
@@ -123,6 +130,10 @@ export function isValidOAuthCode(value) {
     && value.length > 0
     && value.length <= 4096
     && /^[\x21-\x7E]+$/.test(value);
+}
+
+export function isValidInvitationToken(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
 }
 
 export async function createSessionToken({ openId, nowMs = Date.now() }) {
@@ -316,6 +327,24 @@ export async function login(req, res, next) {
     const origin = configuredAdminOrigin() || requestHostOrigin(req);
     if (!origin) return res.status(400).send('Origem inválida.');
 
+    const inviteParam = req.query?.invite;
+    let invitationHash = null;
+    if (inviteParam !== undefined) {
+      if (!isValidInvitationToken(inviteParam)) {
+        return res.status(400).send('Convite inválido ou expirado.');
+      }
+      invitationHash = hashInvitationToken(inviteParam);
+      const invitation = await findStaffInvitationByHash(invitationHash);
+      if (
+        !invitation
+        || invitation.accepted_at
+        || invitation.revoked_at
+        || Number(invitation.expires_at_ms) <= Date.now()
+      ) {
+        return res.status(400).send('Convite inválido ou expirado.');
+      }
+    }
+
     const redirectUri = `${origin}/api/auth/callback`;
     const state = randomBytes(32).toString('base64url');
     const expiresAtMs = Date.now() + OAUTH_STATE_TTL_MS;
@@ -323,7 +352,8 @@ export async function login(req, res, next) {
     await createAuthChallenge({
       stateHash: hashOAuthState(state),
       redirectUri,
-      expiresAtMs
+      expiresAtMs,
+      invitationHash
     });
 
     res.setHeader('Cache-Control', 'no-store');
@@ -405,8 +435,41 @@ export async function callback(req, res) {
     }
     const { email, openId, name } = identity;
 
+    let access = null;
+    if (challenge.invitationHash) {
+      const invitation = await findStaffInvitationByHash(challenge.invitationHash);
+      if (
+        !invitation
+        || invitation.accepted_at
+        || invitation.revoked_at
+        || Number(invitation.expires_at_ms) <= Date.now()
+      ) {
+        return res.status(403).send('Este convite expirou, foi revogado ou já foi utilizado.');
+      }
+      if (String(invitation.email || '').trim().toLowerCase() !== email) {
+        return res.status(403).send('Este convite foi destinado a outro e-mail.');
+      }
+      try {
+        access = await acceptStaffInvitation({
+          tokenHash: challenge.invitationHash,
+          openId,
+          email
+        });
+      } catch (error) {
+        if (error?.message === 'INVITATION_EMAIL_MISMATCH') {
+          return res.status(403).send('Este convite foi destinado a outro e-mail.');
+        }
+        if (error?.message === 'TEAM_MEMBER_EXISTS') {
+          return res.status(409).send('Este e-mail ou identidade já possui um acesso administrativo.');
+        }
+        throw error;
+      }
+      if (!access) return res.status(403).send('Este convite expirou, foi revogado ou já foi utilizado.');
+    } else {
+      access = await findStaffAccessByOpenId(openId);
+    }
+
     const bootstrapManager = isAllowedOpenId(openId);
-    const access = await findStaffAccessByOpenId(openId);
     const resolvedAccess = resolveAdminAccess({ openId, email, access });
     if (!resolvedAccess) {
       const pairingCode = randomBytes(12).toString('base64url');

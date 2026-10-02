@@ -27,6 +27,9 @@ const expected = new Map([
   ['DELETE /api/admin/leads/:id', 'lead.erase'],
   ['GET /api/admin/audit', 'audit.read'],
   ['GET /api/admin/team', 'team.manage'],
+  ['GET /api/admin/team/invitations', 'team.manage'],
+  ['POST /api/admin/team/invitations', 'team.manage'],
+  ['DELETE /api/admin/team/invitations/:email', 'team.manage'],
   ['POST /api/admin/team', 'team.manage'],
   ['PATCH /api/admin/team/:email', 'team.manage'],
   ['DELETE /api/admin/team/:email', 'team.manage']

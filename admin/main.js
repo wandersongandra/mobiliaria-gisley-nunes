@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], leads: [], team: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
+const state = { user: null, csrfToken: '', properties: [], leads: [], team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -41,6 +41,7 @@ function clearSensitiveState() {
   state.properties = [];
   state.leads = [];
   state.team = [];
+  state.invitations = [];
   state.audit = [];
   state.editing = null;
   state.search = '';
@@ -49,18 +50,32 @@ function clearSensitiveState() {
   const propertyList = $('#property-list');
   const leadList = $('#lead-list');
   const teamList = $('#team-list');
+  const invitationList = $('#team-invitations');
+  const invitationResult = $('#team-invite-result');
   const auditList = $('#audit-list');
   if (propertyList) propertyList.innerHTML = '';
   if (leadList) leadList.innerHTML = '';
   if (teamList) teamList.innerHTML = '';
+  if (invitationList) invitationList.innerHTML = '';
+  if (invitationResult) invitationResult.hidden = true;
   if (auditList) auditList.innerHTML = '';
+}
+
+function invitationTokenFromUrl() {
+  const value = new URLSearchParams(window.location.search).get('invite');
+  return /^[A-Za-z0-9_-]{43}$/.test(value || '') ? value : '';
+}
+
+function loginUrl() {
+  const token = invitationTokenFromUrl();
+  return token ? `/api/auth/login?invite=${encodeURIComponent(token)}` : '/api/auth/login';
 }
 
 function showLogin() {
   clearSensitiveState();
   dashboard.hidden = true;
   loginScreen.hidden = false;
-  $('#login-button').href = '/api/auth/login';
+  $('#login-button').href = loginUrl();
 }
 
 function sessionStatus(message = '', tone = '') {
@@ -494,6 +509,8 @@ const auditLabels = {
   'lead.status': 'Status do contato alterado',
   'lead.delete': 'Dados de contato apagados',
   'team.create': 'Acesso de equipe criado',
+  'team.invite': 'Convite de equipe gerado',
+  'team.invite.revoke': 'Convite de equipe revogado',
   'team.update': 'Acesso de equipe atualizado',
   'team.remove': 'Acesso de equipe removido'
 };
@@ -567,32 +584,65 @@ function renderTeam() {
   }));
 }
 
+function renderTeamInvitations() {
+  const list = $('#team-invitations');
+  if (!list) return;
+  list.innerHTML = state.invitations.length ? state.invitations.map((invitation) => {
+    const roleLabel = invitation.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
+    const expires = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(invitation.expires_at_ms));
+    return `<article class="team-invitation-row"><div><strong>${escapeHTML(invitation.name)}</strong><span>${escapeHTML(invitation.email)} · ${roleLabel} · expira ${escapeHTML(expires)}</span></div><button class="danger" type="button" data-team-invite-revoke="${escapeHTML(invitation.email)}">Revogar</button></article>`;
+  }).join('') : '<div class="empty-properties compact"><p>Nenhum convite pendente.</p></div>';
+
+  list.querySelectorAll('[data-team-invite-revoke]').forEach((button) => button.addEventListener('click', async () => {
+    try {
+      await request(`/api/admin/team/invitations/${encodeURIComponent(button.dataset.teamInviteRevoke)}`, { method: 'DELETE' });
+      await loadTeam();
+      teamNotify('Convite revogado.');
+    } catch {
+      teamNotify('Não foi possível revogar este convite.', 'error');
+    }
+  }));
+}
+
 async function loadTeam() {
   try {
     state.team = (await request('/api/admin/team')).team || [];
+    state.invitations = (await request('/api/admin/team/invitations')).invitations || [];
     renderTeam();
+    renderTeamInvitations();
   } catch {
     const list = $('#team-list');
     if (list) list.innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar a equipe agora.</p></div>';
+    const invitations = $('#team-invitations');
+    if (invitations) invitations.innerHTML = '';
   }
 }
 
-async function addTeamMember(event) {
+async function createTeamInvitation(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(teamForm));
   try {
-    await request('/api/admin/team', { method: 'POST', body: JSON.stringify(data) });
+    const result = await request('/api/admin/team/invitations', { method: 'POST', body: JSON.stringify(data) });
     teamForm.reset();
+    const invitation = result.invitation;
+    const resultBox = $('#team-invite-result');
+    const urlInput = $('#team-invite-url');
+    const expiry = $('#team-invite-expiry');
+    if (resultBox && urlInput && expiry) {
+      urlInput.value = invitation.url;
+      expiry.textContent = `Válido até ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(invitation.expiresAtMs))}.`;
+      resultBox.hidden = false;
+    }
     await loadTeam();
-    teamNotify('Acesso vinculado. O código temporário foi consumido e não pode ser reutilizado.');
+    teamNotify('Convite gerado. Copie o link e envie somente à pessoa convidada.');
   } catch (error) {
     teamNotify(
-      error.message === 'INVALID_TEAM_MEMBER'
-        ? 'Confira nome, e-mail e o código temporário de vinculação.'
-        : error.message === 'INVALID_PAIRING_CODE'
-          ? 'Código expirado, inválido ou pertencente a outro e-mail.'
+      error.message === 'INVALID_INVITATION'
+        ? 'Confira nome, e-mail e permissão.'
           : error.message === 'TEAM_MEMBER_EXISTS'
             ? 'Esse e-mail ou identidade já está vinculado a outro acesso.'
+          : error.message === 'INVITATION_EXISTS'
+            ? 'Não foi possível gerar outro convite agora. Tente novamente.'
           : 'Não foi possível adicionar este acesso.',
       'error'
     );
@@ -718,7 +768,19 @@ dialog.addEventListener('close', clearPendingFiles);
 document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); switchView(link.dataset.view); }));
 siteForm?.addEventListener('submit', saveSite);
 testimonialForm?.addEventListener('submit', addTestimonial);
-teamForm?.addEventListener('submit', addTeamMember);
+teamForm?.addEventListener('submit', createTeamInvitation);
+$('#copy-team-invite')?.addEventListener('click', async () => {
+  const input = $('#team-invite-url');
+  if (!input?.value) return;
+  try {
+    await navigator.clipboard.writeText(input.value);
+    teamNotify('Link copiado. Envie-o somente à pessoa convidada.');
+  } catch {
+    input.focus();
+    input.select();
+    teamNotify('Selecione e copie o link manualmente.', 'error');
+  }
+});
 $('#refresh-audit')?.addEventListener('click', loadAudit);
 $('#property-search')?.addEventListener('input', (event) => { state.search = event.target.value; renderProperties(); });
 init();

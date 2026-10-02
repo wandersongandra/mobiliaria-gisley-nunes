@@ -3,16 +3,20 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   bindStaffAccessFromPairing,
+  acceptStaffInvitation,
   closePool,
   consumeAuthChallenge,
   createAdminSession,
   createAuthChallenge,
   createIdentityPairing,
+  createStaffInvitation,
+  findStaffInvitationByHash,
   findActiveAdminSession,
   getPool,
   migrate,
   revokeAdminSession,
   revokeAdminSessionsByOpenId,
+  revokeStaffInvitationsByEmail,
   saveStaffAccess
 } from '../server/db.js';
 
@@ -59,12 +63,15 @@ test('MySQL valida concorrência, pairing atômico, limite e revogação de sess
   const suffix = randomUUID();
   const challengeHashes = [hash(`challenge-a:${suffix}`), hash(`challenge-b:${suffix}`)];
   const pairingHashes = [hash(`pairing-conflict:${suffix}`), hash(`pairing-race:${suffix}`)];
+  const invitationHashes = [hash(`invitation-race:${suffix}`), hash(`invitation-revoke:${suffix}`)];
   const identityOpenIds = [`f2-auth:${suffix}`, `f2-conflict:${suffix}`, `f2-race:${suffix}`];
   const identityEmails = [
     `f2-auth-${suffix}@example.invalid`,
     `f2-conflict-${suffix}@example.invalid`,
     `f2-race-${suffix}@example.invalid`
   ];
+  const invitationEmail = `f2-invite-${suffix}@example.invalid`;
+  const invitationOpenId = `f2-invite:${suffix}`;
   const createdJtis = Array.from({ length: 8 }, () => randomUUID());
   let schemaReady = false;
 
@@ -84,6 +91,52 @@ test('MySQL valida concorrência, pairing atômico, limite e revogação de sess
     ]);
     assert.equal(challengeResults.filter(Boolean).length, 1);
     assert.equal(challengeResults.filter((value) => value?.redirectUri).length, 1);
+
+    await createStaffInvitation({
+      tokenHash: invitationHashes[0],
+      email: invitationEmail,
+      name: 'Convite de teste',
+      role: 'editor',
+      invitedBy: 'gestor@example.invalid',
+      expiresAtMs: Date.now() + 60_000
+    });
+    assert.ok(await findStaffInvitationByHash(invitationHashes[0]));
+    await assert.rejects(
+      acceptStaffInvitation({
+        tokenHash: invitationHashes[0],
+        openId: `${invitationOpenId}:wrong`,
+        email: `outro-${suffix}@example.invalid`
+      }),
+      { message: 'INVITATION_EMAIL_MISMATCH' }
+    );
+    const invitationResults = await Promise.all([
+      acceptStaffInvitation({ tokenHash: invitationHashes[0], openId: invitationOpenId, email: invitationEmail }),
+      acceptStaffInvitation({ tokenHash: invitationHashes[0], openId: invitationOpenId, email: invitationEmail })
+    ]);
+    assert.equal(invitationResults.filter(Boolean).length, 1);
+    const [[acceptedInvitation]] = await pool.execute(
+      'SELECT accepted_at FROM morada_staff_invitations WHERE token_hash=?',
+      [invitationHashes[0]]
+    );
+    assert.ok(acceptedInvitation.accepted_at);
+
+    await createStaffInvitation({
+      tokenHash: invitationHashes[1],
+      email: `revogar-${suffix}@example.invalid`,
+      name: 'Convite revogado',
+      role: 'manager',
+      invitedBy: 'gestor@example.invalid',
+      expiresAtMs: Date.now() + 60_000
+    });
+    assert.equal(await revokeStaffInvitationsByEmail(`revogar-${suffix}@example.invalid`), 1);
+    assert.equal(
+      await acceptStaffInvitation({
+        tokenHash: invitationHashes[1],
+        openId: `f2-revoked:${suffix}`,
+        email: `revogar-${suffix}@example.invalid`
+      }),
+      null
+    );
 
     await saveStaffAccess({
       email: identityEmails[1],
@@ -168,10 +221,14 @@ test('MySQL valida concorrência, pairing atômico, limite e revogação de sess
         for (const codeHash of pairingHashes) {
           await pool.execute('DELETE FROM morada_identity_pairings WHERE code_hash=?', [codeHash]);
         }
+        for (const tokenHash of invitationHashes) {
+          await pool.execute('DELETE FROM morada_staff_invitations WHERE token_hash=?', [tokenHash]);
+        }
         for (const openId of identityOpenIds) {
           await pool.execute('DELETE FROM morada_admin_sessions WHERE open_id=?', [openId]);
           await pool.execute('DELETE FROM morada_staff_access WHERE open_id=?', [openId]);
         }
+        await pool.execute('DELETE FROM morada_staff_access WHERE open_id=?', [invitationOpenId]);
         await pool.execute('DELETE FROM morada_staff_access WHERE email=?', [identityEmails[1]]);
       }
     } finally {

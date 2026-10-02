@@ -13,6 +13,9 @@ const managerOnlyRoutes = [
   ['delete', '/api/admin/leads/:id', 'lead.erase'],
   ['get', '/api/admin/audit', 'audit.read'],
   ['get', '/api/admin/team', 'team.manage'],
+  ['get', '/api/admin/team/invitations', 'team.manage'],
+  ['post', '/api/admin/team/invitations', 'team.manage'],
+  ['delete', '/api/admin/team/invitations/:email', 'team.manage'],
   ['post', '/api/admin/team', 'team.manage'],
   ['patch', '/api/admin/team/:email', 'team.manage'],
   ['delete', '/api/admin/team/:email', 'team.manage']
@@ -87,6 +90,7 @@ test('capability precede rate limit on manager-only destructive routes', () => {
     ["app.delete('/api/admin/properties/:id'", "requireCapability('property.archive')", 'destructiveLimiter'],
     ["app.delete('/api/admin/testimonials/:id'", "requireCapability('testimonial.manage')", 'destructiveLimiter'],
     ["app.delete('/api/admin/leads/:id'", "requireCapability('lead.erase')", 'destructiveLimiter'],
+    ["app.delete('/api/admin/team/invitations/:email'", "requireCapability('team.manage')", 'destructiveLimiter'],
     ["app.delete('/api/admin/team/:email'", "requireCapability('team.manage')", 'destructiveLimiter']
   ];
 

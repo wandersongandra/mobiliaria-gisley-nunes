@@ -9,7 +9,7 @@ Status: **implementação e testes de código aprovados; validação operacional
 - A resposta pública de erro continua usando códigos HTTP opacos, sem expor detalhes internos.
 - A exclusão de lead exige a capacidade `lead.erase` e limite para operações destrutivas. A auditoria dessa ação registra motivo operacional fixo, sem copiar a mensagem do lead.
 - A visualização de auditoria omite detalhes internos e identificadores de identidade do provedor.
-- Testes adversariais incluem marcadores de JWT, cookie, código OAuth, URL assinada, conteúdo de lead e stack trace, além de injeção no nome do evento.
+- Testes adversariais incluem marcadores de JWT, cookie, código OAuth, token de convite, URL assinada, conteúdo de lead e stack trace, além de injeção no nome do evento.
 
 ## Retenção e limites de evidência
 

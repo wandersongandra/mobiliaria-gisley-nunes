@@ -10,6 +10,7 @@ import {
   normalizeResourceId,
   normalizeSiteSettings,
   normalizeTeamCreate,
+  normalizeTeamInvitation,
   normalizeTeamPatch,
   normalizeUploadRequest
 } from '../server/validation.js';
@@ -94,6 +95,26 @@ test('normalizeTeamCreate exige código temporário de vinculação válido', ()
   assert.equal(data.email, 'corretor@example.com');
   assert.equal(data.pairingCode, 'AbCdEfGhIjKlMnOp');
   assert.equal(data.role, 'editor');
+});
+
+test('normalizeTeamInvitation valida contrato explícito do convite', () => {
+  assert.throws(
+    () => normalizeTeamInvitation({ email: 'corretor@example.com', name: 'Teste', role: 'editor', pairingCode: 'nao-deve-entrar' }),
+    /INVALID_INVITATION/
+  );
+  assert.throws(
+    () => normalizeTeamInvitation({ email: 'invalido', name: 'Teste', role: 'editor' }),
+    /INVALID_INVITATION/
+  );
+  assert.throws(
+    () => normalizeTeamInvitation({ email: 'corretor@example.com', name: '', role: 'editor' }),
+    /INVALID_INVITATION/
+  );
+
+  assert.deepEqual(
+    normalizeTeamInvitation({ email: ' CORRETOR@EXAMPLE.COM ', name: ' Corretor Teste ', role: 'manager' }),
+    { email: 'corretor@example.com', name: 'Corretor Teste', role: 'manager' }
+  );
 });
 
 

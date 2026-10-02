@@ -46,6 +46,9 @@ const protectedAdminRoutes = [
   ['DELETE', '/api/admin/leads/lead-id'],
   ['GET', '/api/admin/audit'],
   ['GET', '/api/admin/team'],
+  ['GET', '/api/admin/team/invitations'],
+  ['POST', '/api/admin/team/invitations'],
+  ['DELETE', '/api/admin/team/invitations/editor%40example.com'],
   ['POST', '/api/admin/team'],
   ['PATCH', '/api/admin/team/editor%40example.com'],
   ['DELETE', '/api/admin/team/editor%40example.com']
