@@ -39,7 +39,7 @@ function normalizeProperty(item) {
       areaM2 > 0 ? `${areaM2} m²` : null
     ].filter(Boolean),
     image: String(item.cover_url ?? item.coverUrl ?? ''),
-    tag: item.is_featured ? 'destaque' : 'curadoria'
+    tag: item.is_featured ? 'destaque' : String(item.purpose || 'Comprar').toLowerCase()
   };
 }
 
@@ -285,7 +285,7 @@ function initListing() {
       if (count) count.textContent = '00';
       if (empty) empty.hidden = true;
       if (filterSummary) {
-        filterSummary.innerHTML = '<span>Não conseguimos carregar os imóveis agora.</span><button type="button" id="retry-properties">Tentar novamente</button>';
+        filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis.</span><button type="button" id="retry-properties">Tentar novamente</button>';
         filterSummary.querySelector('#retry-properties')?.addEventListener('click', loadProperties, { once: true });
       }
     } finally {
@@ -323,9 +323,9 @@ function initContactForm() {
     if (button) {
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
-      button.textContent = 'Enviando…';
+      button.textContent = 'Enviando';
     }
-    if (status) status.textContent = 'Enviando sua mensagem com segurança…';
+    if (status) status.textContent = 'Enviando sua mensagem';
 
     try {
       const response = await fetch('/api/contact', {
@@ -343,18 +343,18 @@ function initContactForm() {
 
       if (!response.ok) throw new Error('CONTACT_FAILED');
       form.reset();
-      if (status) status.textContent = 'Mensagem enviada. Recebemos seu contato e retornaremos em breve.';
+      if (status) status.textContent = 'Mensagem enviada. Retornaremos em breve.';
     } catch {
       const fallbackText = `Olá! Meu nome é ${String(data.name || '').trim()}. ${String(data.message || '').trim()}`.slice(0, 1200);
       const whatsapp = await buildWhatsAppFallback(fallbackText);
       if (status) {
-        status.textContent = 'Não conseguimos registrar a mensagem agora. ';
+        status.textContent = 'Não foi possível registrar a mensagem. ';
         if (whatsapp) {
           const link = document.createElement('a');
           link.href = whatsapp;
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
-          link.textContent = 'Fale com a equipe pelo WhatsApp.';
+          link.textContent = 'Tentar pelo WhatsApp.';
           status.append(link);
         } else {
           status.append('Tente novamente em alguns instantes.');
@@ -415,16 +415,16 @@ function renderPropertyDetail(property) {
         <p class="property-location">${escapeHTML(property.location)}</p>
         <strong class="property-price">${escapeHTML(property.price_label)}</strong>
         <div class="property-summary-divider"></div>
-        <p class="property-section-label">Informações do imóvel</p>
+        <p class="property-section-label">Detalhes do imóvel</p>
         <div class="property-features">${features}</div>
         <div class="property-actions">
-          <a class="button button-primary" href="#contato">Falar sobre este imóvel <span aria-hidden="true">↗</span></a>
-          <a class="property-back-link" href="/imoveis">← Voltar aos imóveis</a>
+          <a class="button button-primary" href="#contato">Tenho interesse <span aria-hidden="true">↗</span></a>
+          <a class="property-back-link" href="/imoveis">← Ver outros imóveis</a>
         </div>
       </aside>
     </section>
     <section class="property-description">
-      <div><p class="eyebrow">sobre o imóvel</p><span class="property-description-index">01</span></div>
+      <div><p class="eyebrow">descrição</p><span class="property-description-index">01</span></div>
       <p class="property-description-copy">${escapeHTML(property.description || '')}</p>
     </section>`;
 }
@@ -437,7 +437,7 @@ function initPropertyDetail() {
   let property = null;
   try { property = JSON.parse(dataEl.textContent); } catch {}
   if (!property) {
-    root.innerHTML = '<p class="empty-state">Não foi possível exibir este imóvel.</p>';
+    root.innerHTML = '<p class="empty-state">Não foi possível carregar este imóvel.</p>';
     return;
   }
 

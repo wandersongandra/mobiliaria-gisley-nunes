@@ -6,19 +6,19 @@
         <div>
           <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Início</a><span aria-hidden="true">›</span><a href="/bairros">Bairros</a><span aria-hidden="true">›</span><span aria-current="page"><%= neighborhood.name %></span></nav>
           <p class="eyebrow"><span class="eyebrow-dot"></span> imóveis por bairro</p>
-          <h1><%= neighborhood.name %><br /><em>do seu jeito.</em></h1>
+          <h1><%= neighborhood.name %><br /><em>imóveis disponíveis.</em></h1>
         </div>
-        <div class="neighborhood-detail-aside"><span><%= neighborhood.count %> <%= neighborhood.count === 1 ? 'imóvel publicado' : 'imóveis publicados' %></span><p>Explore as opções publicadas em <%= neighborhood.name %>. A disponibilidade muda; fale com a equipe para confirmar detalhes ou receber alternativas.</p></div>
+        <div class="neighborhood-detail-aside"><span><%= neighborhood.count %> <%= neighborhood.count === 1 ? 'imóvel publicado' : 'imóveis publicados' %></span><p>Veja os imóveis publicados em <%= neighborhood.name %>. Fale com a equipe para confirmar valores e disponibilidade.</p></div>
       </section>
 
       <section class="section shell neighborhood-listings" aria-labelledby="neighborhood-listings-title">
-        <div class="catalog-results-head"><p class="eyebrow">imóveis disponíveis</p><span id="neighborhood-listings-title">Opções para comprar ou alugar em <%= neighborhood.name %>.</span></div>
+        <div class="catalog-results-head"><p class="eyebrow">imóveis disponíveis</p><span id="neighborhood-listings-title">Comprar ou alugar em <%= neighborhood.name %>.</span></div>
         <div class="listing-grid neighborhood-listing-grid">
           <% neighborhood.properties.forEach((property, index) => { %><%- include('partials/property-card', { property, imageLoading: index === 0 ? 'eager' : 'lazy' }) %><% }) %>
         </div>
       </section>
 
-      <section class="directory-note shell"><p class="eyebrow">não encontrou o que procurava?</p><h2>Seu próximo endereço<br /><em>pode começar aqui.</em></h2><a class="button button-primary" href="/contato">Falar sobre minha busca <span aria-hidden="true">↗</span></a></section>
+      <section class="directory-note shell"><p class="eyebrow">não encontrou o imóvel?</p><h2>Envie sua busca<br /><em>para a equipe.</em></h2><a class="button button-primary" href="/contato">Falar sobre minha busca <span aria-hidden="true">↗</span></a></section>
     </main>
     <%- include('partials/footer') %>
     <script type="module" src="<%= assets.js %>"></script>
