@@ -1,0 +1,99 @@
+name: Laravel CI
+
+on:
+  push:
+    branches:
+      - migration/laravel-backend-2026-10-02
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'bootstrap/**'
+      - 'config/**'
+      - 'database/**'
+      - 'public/**'
+      - 'resources/**'
+      - 'routes/**'
+      - 'composer.json'
+      - 'composer.lock'
+      - '.github/workflows/laravel-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  laravel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: gisley_laravel_ci
+          MYSQL_USER: gisley_ci
+          MYSQL_PASSWORD: integration-only
+          MYSQL_ROOT_PASSWORD: root-integration-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      APP_NAME: Gisley Nunes Imóveis
+      APP_ENV: testing
+      APP_DEBUG: 'false'
+      APP_URL: https://example.test
+      ADMIN_ORIGIN: https://example.test
+      APP_KEY: base64:WnNWZXBUN3RkWElVcHBtM3hJUkE5NzlZdksyRWxyOE1GNnl0dHZNaz0=
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: gisley_laravel_ci
+      DB_USERNAME: gisley_ci
+      DB_PASSWORD: integration-only
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      GISELY_ADMIN_OPEN_IDS: test-bootstrap-open-id
+      R2_ACCOUNT_ID: test-account
+      R2_BUCKET: test-bucket
+      R2_ACCESS_KEY_ID: test-key
+      R2_SECRET_ACCESS_KEY: test-secret
+      MANUS_OAUTH_PORTAL_URL: https://oauth.example.test
+      MANUS_OAUTH_API_URL: https://oauth-api.example.test
+      MANUS_PROJECT_ID: test-project
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: PHP runtime
+        run: |
+          php -v
+          composer --version
+          php -m | grep -qi pdo_mysql
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: PHP syntax
+        run: |
+          find app bootstrap config database/migrations routes -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+      - name: Application boot and routes
+        run: |
+          php artisan about
+          php artisan route:list
+
+      - name: Compile Blade views
+        run: php artisan view:cache
+
+      - name: Database migrations
+        run: php artisan migrate --force
+
+      - name: Configuration cache
+        run: |
+          php artisan config:cache
+          php artisan route:cache
