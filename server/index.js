@@ -98,24 +98,24 @@ function pageMeta(req, { title, description, path: pathname, ogImage, ogImageAlt
 
 app.get('/', (req, res) => res.render('home', {
   page: pageMeta(req, {
-    title: 'Gisley Nunes Imóveis — encontre seu próximo lugar',
-    description: 'Imóveis selecionados em Belo Horizonte e região, com atendimento próximo, transparente e especializado.',
+    title: 'Imóveis em Belo Horizonte e região — Gisley Nunes',
+    description: 'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
     path: '/'
   })
 }));
 
 app.get(['/imoveis', '/imoveis/'], (req, res) => res.render('imoveis', {
   page: pageMeta(req, {
-    title: 'Imóveis — Gisley Nunes Imóveis',
-    description: 'Catálogo completo de imóveis selecionados em Belo Horizonte e região, para comprar ou alugar.',
+    title: 'Imóveis para comprar ou alugar em Belo Horizonte — Gisley Nunes',
+    description: 'Explore imóveis para comprar ou alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
     path: '/imoveis'
   })
 }));
 
 app.get('/servicos', (req, res) => res.render('servicos', {
   page: pageMeta(req, {
-    title: 'Serviços imobiliários — Gisley Nunes Imóveis',
-    description: 'Encontre um imóvel para comprar ou alugar, ou fale com a Gisley Nunes sobre o seu imóvel em Belo Horizonte e região.',
+    title: 'Comprar, alugar ou anunciar imóveis — Gisley Nunes',
+    description: 'Veja como a Gisley Nunes pode ajudar você a comprar, alugar ou anunciar um imóvel em Belo Horizonte e região.',
     path: '/servicos'
   }),
   pageLd: escapeLd(breadcrumbLd([
@@ -132,13 +132,13 @@ app.get('/bairros', async (req, res, next) => {
     res.render('bairros', {
       neighborhoods,
       page: pageMeta(req, {
-        title: 'Bairros em Belo Horizonte — Gisley Nunes Imóveis',
-        description: 'Explore imóveis disponíveis por bairro em Belo Horizonte e região na curadoria da Gisley Nunes.',
+        title: 'Bairros com imóveis em Belo Horizonte — Gisley Nunes',
+        description: 'Explore bairros com imóveis publicados em Belo Horizonte e região. Encontre opções por localização e fale com a equipe.',
         path: '/bairros'
       }),
       pageLd: escapeLd(collectionPageLd({
-        name: 'Bairros em Belo Horizonte',
-        description: 'Bairros com imóveis publicados na curadoria Gisley Nunes.',
+        name: 'Bairros com imóveis em Belo Horizonte',
+        description: 'Bairros com imóveis publicados pela Gisley Nunes.',
         url: `${origin}/bairros`,
         items: neighborhoods.map((item) => ({ title: item.name, url: `${origin}/bairros/${item.slug}` }))
       }))
@@ -166,7 +166,7 @@ app.get('/bairros/:slug', async (req, res, next) => {
       neighborhood,
       page: pageMeta(req, {
         title: `Imóveis em ${neighborhood.name}, Belo Horizonte — Gisley Nunes`,
-        description: `Veja imóveis disponíveis em ${neighborhood.name}, Belo Horizonte, na curadoria atual da Gisley Nunes Imóveis.`,
+        description: `Veja imóveis publicados em ${neighborhood.name}, Belo Horizonte, para comprar ou alugar com a Gisley Nunes.`,
         path: `/bairros/${neighborhood.slug}`
       }),
       pageLd: escapeLd([
@@ -177,7 +177,7 @@ app.get('/bairros/:slug', async (req, res, next) => {
         ]),
         collectionPageLd({
           name: `Imóveis em ${neighborhood.name}`,
-          description: `Imóveis publicados em ${neighborhood.name}, Belo Horizonte.`,
+          description: `Imóveis para comprar ou alugar em ${neighborhood.name}, Belo Horizonte.`,
           url: neighborhoodUrl,
           items: neighborhood.properties.map((property) => ({ title: property.title, url: `${origin}/imoveis/${property.slug}` }))
         })
@@ -189,7 +189,7 @@ app.get('/bairros/:slug', async (req, res, next) => {
 app.get('/sobre', (req, res) => res.render('sobre', {
   page: pageMeta(req, {
     title: 'Sobre — Gisley Nunes Imóveis',
-    description: 'Conheça a Gisley Nunes: atendimento próximo e curadoria de imóveis em Belo Horizonte e região.',
+    description: 'Conheça a Gisley Nunes e sua forma de trabalhar com imóveis em Belo Horizonte e região.',
     path: '/sobre'
   })
 }));
@@ -197,7 +197,7 @@ app.get('/sobre', (req, res) => res.render('sobre', {
 app.get('/contato', (req, res) => res.render('contato', {
   page: pageMeta(req, {
     title: 'Contato — Gisley Nunes Imóveis',
-    description: 'Fale com a Gisley Nunes: WhatsApp, e-mail e atendimento em Belo Horizonte e região.',
+    description: 'Fale com a Gisley Nunes por WhatsApp, e-mail ou formulário sobre comprar, alugar ou anunciar um imóvel.',
     path: '/contato'
   })
 }));
@@ -268,14 +268,14 @@ app.get('/llms.txt', async (req, res, next) => {
     const lines = [
       '# Gisley Nunes Imóveis',
       '',
-      '> Imobiliária em Belo Horizonte e região. Curadoria de imóveis para comprar e alugar, com atendimento próximo e especializado.',
+      '> Imóveis para comprar e alugar em Belo Horizonte e região, com informação clara e atendimento próximo.',
       '',
       '## Páginas',
       `- [Início](${origin}/): apresentação e imóveis em destaque.`,
       `- [Imóveis](${origin}/imoveis): catálogo completo com filtros.`,
       `- [Sobre](${origin}/sobre): história e valores.`,
       `- [Contato](${origin}/contato): canais de atendimento.`,
-      `- [Serviços](${origin}/servicos): comprar, alugar ou anunciar um imóvel.`,
+      `- [Serviços](${origin}/servicos): caminhos para comprar, alugar ou anunciar um imóvel.`,
       `- [Bairros](${origin}/bairros): imóveis agrupados por localização.`,
       `- [Privacidade](${origin}/privacidade): política de privacidade.`,
       '',
@@ -329,7 +329,7 @@ async function start() {
       return res.status(404).render('404', {
         page: pageMeta(req, {
           title: 'Página não encontrada — Gisley Nunes Imóveis',
-          description: 'A página procurada não foi encontrada. Continue navegando pelos imóveis da Gisley Nunes.',
+          description: 'A página procurada não foi encontrada. Volte ao catálogo e continue a busca por um imóvel.',
           path: req.path,
           robots: 'noindex,nofollow'
         })

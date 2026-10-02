@@ -171,7 +171,7 @@ function initListing() {
 
     filterSummary.innerHTML = active.length
       ? `<span><strong>${resultCount}</strong> ${resultCount === 1 ? 'imóvel encontrado' : 'imóveis encontrados'}</span><div class="active-filters">${active.map((label) => `<span class="filter-chip">${escapeHTML(label)}</span>`).join('')}<button type="button" id="clear-filters-inline">Limpar filtros</button></div>`
-      : `<span><strong>${resultCount}</strong> imóveis na curadoria Gisley Nunes</span>`;
+      : `<span><strong>${resultCount}</strong> imóveis disponíveis</span>`;
 
     document.querySelector('#clear-filters-inline')?.addEventListener('click', clearFilters);
   }
@@ -219,9 +219,9 @@ function initListing() {
     const options = purpose === 'Alugar'
       ? [
           ['all', 'Qualquer valor'],
-          ['1', 'Até R$ 5 mil / mês'],
-          ['2', 'R$ 5 mil a R$ 10 mil / mês'],
-          ['3', 'Acima de R$ 10 mil / mês']
+          ['1', 'Até R$ 5 mil/mês'],
+          ['2', 'R$ 5 mil a R$ 10 mil/mês'],
+          ['3', 'Acima de R$ 10 mil/mês']
         ]
       : [
           ['all', 'Qualquer valor'],
@@ -285,7 +285,7 @@ function initListing() {
       if (count) count.textContent = '00';
       if (empty) empty.hidden = true;
       if (filterSummary) {
-        filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis agora.</span><button type="button" id="retry-properties">Tentar novamente</button>';
+        filterSummary.innerHTML = '<span>Não conseguimos carregar os imóveis agora.</span><button type="button" id="retry-properties">Tentar novamente</button>';
         filterSummary.querySelector('#retry-properties')?.addEventListener('click', loadProperties, { once: true });
       }
     } finally {
@@ -343,18 +343,18 @@ function initContactForm() {
 
       if (!response.ok) throw new Error('CONTACT_FAILED');
       form.reset();
-      if (status) status.textContent = 'Mensagem enviada. A equipe Gisley Nunes recebeu seu contato e retornará em breve.';
+      if (status) status.textContent = 'Mensagem enviada. Recebemos seu contato e retornaremos em breve.';
     } catch {
       const fallbackText = `Olá! Meu nome é ${String(data.name || '').trim()}. ${String(data.message || '').trim()}`.slice(0, 1200);
       const whatsapp = await buildWhatsAppFallback(fallbackText);
       if (status) {
-        status.textContent = 'Não foi possível registrar a mensagem agora. ';
+        status.textContent = 'Não conseguimos registrar a mensagem agora. ';
         if (whatsapp) {
           const link = document.createElement('a');
           link.href = whatsapp;
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
-          link.textContent = 'Fale conosco pelo WhatsApp.';
+          link.textContent = 'Fale com a equipe pelo WhatsApp.';
           status.append(link);
         } else {
           status.append('Tente novamente em alguns instantes.');
@@ -415,16 +415,16 @@ function renderPropertyDetail(property) {
         <p class="property-location">${escapeHTML(property.location)}</p>
         <strong class="property-price">${escapeHTML(property.price_label)}</strong>
         <div class="property-summary-divider"></div>
-        <p class="property-section-label">Detalhes essenciais</p>
+        <p class="property-section-label">Informações do imóvel</p>
         <div class="property-features">${features}</div>
         <div class="property-actions">
-          <a class="button button-primary" href="#contato">Agendar uma conversa <span aria-hidden="true">↗</span></a>
-          <a class="property-back-link" href="/imoveis">← Voltar à curadoria</a>
+          <a class="button button-primary" href="#contato">Falar sobre este imóvel <span aria-hidden="true">↗</span></a>
+          <a class="property-back-link" href="/imoveis">← Voltar aos imóveis</a>
         </div>
       </aside>
     </section>
     <section class="property-description">
-      <div><p class="eyebrow">sobre este imóvel</p><span class="property-description-index">01</span></div>
+      <div><p class="eyebrow">sobre o imóvel</p><span class="property-description-index">01</span></div>
       <p class="property-description-copy">${escapeHTML(property.description || '')}</p>
     </section>`;
 }
@@ -437,7 +437,7 @@ function initPropertyDetail() {
   let property = null;
   try { property = JSON.parse(dataEl.textContent); } catch {}
   if (!property) {
-    root.innerHTML = '<p class="empty-state">Imóvel não encontrado.</p>';
+    root.innerHTML = '<p class="empty-state">Não foi possível exibir este imóvel.</p>';
     return;
   }
 

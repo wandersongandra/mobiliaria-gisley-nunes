@@ -128,8 +128,8 @@ const neighborhoods = catalogNeighborhoods(properties);
 await render('home.ejs', 'index.html', {
   assets,
   page: page({
-    title: 'Gisley Nunes Imóveis — preview de design',
-    description: 'Preview visual do site Gisley Nunes Imóveis.',
+    title: 'Imóveis em Belo Horizonte e região — Gisley Nunes',
+    description: 'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
     pathname: '/'
   })
 });
@@ -137,8 +137,8 @@ await render('home.ejs', 'index.html', {
 await render('imoveis.ejs', 'imoveis/index.html', {
   assets,
   page: page({
-    title: 'Imóveis — Gisley Nunes Imóveis',
-    description: 'Catálogo de imóveis selecionados em Belo Horizonte e região.',
+    title: 'Imóveis para comprar ou alugar em Belo Horizonte — Gisley Nunes',
+    description: 'Explore imóveis para comprar ou alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
     pathname: '/imoveis'
   })
 });
@@ -146,8 +146,8 @@ await render('imoveis.ejs', 'imoveis/index.html', {
 await render('servicos.ejs', 'servicos/index.html', {
   assets,
   page: page({
-    title: 'Serviços imobiliários — Gisley Nunes Imóveis',
-    description: 'Compre, alugue ou anuncie um imóvel com a Gisley Nunes Imóveis.',
+    title: 'Comprar, alugar ou anunciar imóveis — Gisley Nunes',
+    description: 'Veja como a Gisley Nunes pode ajudar você a comprar, alugar ou anunciar um imóvel em Belo Horizonte e região.',
     pathname: '/servicos'
   }),
   pageLd: escapeLd(breadcrumbLd([
@@ -160,13 +160,13 @@ await render('bairros.ejs', 'bairros/index.html', {
   assets,
   neighborhoods,
   page: page({
-    title: 'Bairros em Belo Horizonte — Gisley Nunes Imóveis',
-    description: 'Explore imóveis disponíveis por bairro em Belo Horizonte e região.',
+    title: 'Bairros com imóveis em Belo Horizonte — Gisley Nunes',
+    description: 'Explore bairros com imóveis publicados em Belo Horizonte e região. Encontre opções por localização e fale com a equipe.',
     pathname: '/bairros'
   }),
   pageLd: escapeLd(collectionPageLd({
     name: 'Bairros em Belo Horizonte',
-    description: 'Bairros com imóveis publicados na curadoria Gisley Nunes.',
+    description: 'Bairros com imóveis publicados pela Gisley Nunes.',
     url: `${previewOrigin}/bairros`,
     items: neighborhoods.map((item) => ({ title: item.name, url: `${previewOrigin}/bairros/${item.slug}` }))
   }))
@@ -179,7 +179,7 @@ for (const neighborhood of neighborhoods) {
     neighborhood,
     page: page({
       title: `Imóveis em ${neighborhood.name}, Belo Horizonte — Gisley Nunes`,
-      description: `Veja imóveis disponíveis em ${neighborhood.name}, Belo Horizonte.`,
+      description: `Veja imóveis publicados em ${neighborhood.name}, Belo Horizonte, para comprar ou alugar com a Gisley Nunes.`,
       pathname: `/bairros/${neighborhood.slug}`
     }),
     pageLd: escapeLd([
@@ -190,7 +190,7 @@ for (const neighborhood of neighborhoods) {
       ]),
       collectionPageLd({
         name: `Imóveis em ${neighborhood.name}`,
-        description: `Imóveis publicados em ${neighborhood.name}, Belo Horizonte.`,
+        description: `Imóveis para comprar ou alugar em ${neighborhood.name}, Belo Horizonte.`,
         url: neighborhoodUrl,
         items: neighborhood.properties.map((property) => ({ title: property.title, url: `${previewOrigin}/imoveis/${property.slug}` }))
       })
@@ -202,7 +202,7 @@ await render('sobre.ejs', 'sobre/index.html', {
   assets,
   page: page({
     title: 'Sobre — Gisley Nunes Imóveis',
-    description: 'Conheça a proposta de atendimento e curadoria da Gisley Nunes.',
+    description: 'Conheça a Gisley Nunes e sua forma de trabalhar com imóveis em Belo Horizonte e região.',
     pathname: '/sobre'
   })
 });
@@ -211,7 +211,7 @@ await render('contato.ejs', 'contato/index.html', {
   assets,
   page: page({
     title: 'Contato — Gisley Nunes Imóveis',
-    description: 'Fale com a Gisley Nunes Imóveis.',
+    description: 'Fale com a Gisley Nunes por WhatsApp, e-mail ou formulário sobre comprar, alugar ou anunciar um imóvel.',
     pathname: '/contato'
   })
 });
@@ -245,7 +245,7 @@ await render('404.ejs', '404.html', {
   assets,
   page: page({
     title: 'Página não encontrada — Gisley Nunes Imóveis',
-    description: 'A página procurada não foi encontrada.',
+    description: 'A página procurada não foi encontrada. Volte ao catálogo e continue a busca por um imóvel.',
     pathname: '/404'
   })
 });
@@ -281,14 +281,14 @@ await writeFile(path.join(outDir, 'sitemap.xml'), `<?xml version="1.0" encoding=
 const llmsLines = [
   '# Gisley Nunes Imóveis',
   '',
-  '> Imobiliária em Belo Horizonte e região. Curadoria de imóveis para comprar e alugar, com atendimento próximo e especializado.',
+  '> Imóveis para comprar e alugar em Belo Horizonte e região, com informação clara e atendimento próximo.',
   '',
   '## Páginas',
   `- [Início](${previewOrigin}/): apresentação e imóveis em destaque.`,
   `- [Imóveis](${previewOrigin}/imoveis): catálogo completo com filtros.`,
   `- [Sobre](${previewOrigin}/sobre): história e valores.`,
   `- [Contato](${previewOrigin}/contato): canais de atendimento.`,
-  `- [Serviços](${previewOrigin}/servicos): comprar, alugar ou anunciar um imóvel.`,
+  `- [Serviços](${previewOrigin}/servicos): caminhos para comprar, alugar ou anunciar um imóvel.`,
   `- [Bairros](${previewOrigin}/bairros): imóveis agrupados por localização.`,
   `- [Privacidade](${previewOrigin}/privacidade): política de privacidade.`,
   '',
