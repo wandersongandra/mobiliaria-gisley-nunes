@@ -53,7 +53,7 @@ Validação independente no SHA `cdf1a86cb6ac8909656cd01862c06faf10ac9933`:
 - Os alertas de CSRF e rate limiting foram resolvidos com controles efetivos; nenhuma suppression/ignore foi adicionada para forçar verde.
 - O scan identificou inicialmente um advisory High transitivo em `ip-address@10.2.0`; a resolução foi corrigida para `10.5.0` e o gate High voltou a passar.
 - Cloudflare Workers/Preview: o pipeline externo continua **intermitente**. Houve deployment bem-sucedido do SHA `7a704826`, enquanto um build posterior do SHA final reportou falha sem log disponível por esta integração. Isso é tratado como pendência de infraestrutura, não como evidência de falha da autenticação.
-- Provedor OAuth real end-to-end: **NÃO VERIFICADO / BLOCKED** por ausência de uma identidade/configuração OAuth de teste autorizada.
+- Provedor OAuth real end-to-end: **ADIADO / NÃO VERIFICADO**. O usuário informou que atualmente mantém apenas o site público no Cloudflare; a hospedagem do backend e o ambiente para validação serão definidos depois.
 
 ## Checklist de Aprovação
 
@@ -75,7 +75,7 @@ Validação independente no SHA `cdf1a86cb6ac8909656cd01862c06faf10ac9933`:
 - [x] CI — PASS.
 - [x] CodeQL workflow — PASS.
 - [x] GitHub Advanced Security gate — PASS.
-- [ ] OAuth real end-to-end com provider e identidade de teste autorizados — **BLOCKED / NÃO VERIFICADO**.
+- [ ] OAuth real end-to-end com provider e identidade de teste autorizados — **ADIADO**, aguardando hospedagem do backend e ambiente de teste.
 - [ ] Advisories Moderate de dependências — **4 pendentes de inventário/triagem**, sem High/Critical no gate atual.
 - [ ] Pipeline Cloudflare Preview/Workers intermitente — **pendência operacional externa à autenticação**.
 
@@ -100,4 +100,6 @@ Durante a retomada da Fase 2, uma nova execução do audit de produção identif
 - A CI e o CodeQL do HEAD remoto anterior (`06832527ff4ba5cb572e27386618ef517ab91dae`) passaram. Esses resultados antecedem esta alteração do lockfile e precisam ser renovados após ela.
 - A varredura local de segredos históricos não terminou: o clone filtrado precisou buscar blobs antigos durante `git log -p`. A CI do HEAD remoto anterior já tinha esse gate aprovado; como o scanner exclui o lockfile, esta mudança não altera a superfície que ele verifica.
 
-O resultado da Fase 2 continua **NO-GO operacional** até a confirmação de OAuth ponta a ponta com uma identidade de teste autorizada. A correção segue no PR #1 em modo draft; não houve merge na `main` nem publicação.
+O usuário esclareceu que, no momento, somente o site público está hospedado no Cloudflare; ainda não há plataforma para hospedar o backend nem ambiente de validação. A validação OAuth ponta a ponta fica adiada até essa infraestrutura ser definida. Isso é uma pendência operacional pré-produção, não uma falha confirmada no código.
+
+O resultado da Fase 2 permanece **NO-GO para produção** até a validação OAuth ponta a ponta. A PR #1 segue em modo draft; não houve merge na `main` nem publicação.
