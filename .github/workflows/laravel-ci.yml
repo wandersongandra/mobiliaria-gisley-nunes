@@ -79,7 +79,7 @@ jobs:
 
       - name: PHP syntax
         run: |
-          find app bootstrap config database/migrations routes -name '*.php' -print0 \
+          find app bootstrap config database/migrations routes tests -name '*.php' -print0 \
             | xargs -0 -n1 php -l
 
       - name: Application boot and routes
@@ -92,6 +92,12 @@ jobs:
 
       - name: Database migrations
         run: php artisan migrate --force
+
+      - name: Application contract tests
+        run: php artisan test --testsuite=Feature
+
+      - name: Composer security audit
+        run: composer audit --no-interaction
 
       - name: Configuration cache
         run: |
