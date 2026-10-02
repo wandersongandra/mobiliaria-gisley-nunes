@@ -34,7 +34,12 @@ class SecurityHeaders
             "media-src 'self' https:; upgrade-insecure-requests"
         );
 
-        if ($request->is('api/admin*') || $request->is('api/auth*') || $request->is('admin*')) {\n            $response->headers->set('Cache-Control', 'no-store, private');\n            $response->headers->set('Pragma', 'no-cache');\n        }\n\n        if (app()->environment('production')) {
+        if ($request->is('api/admin*') || $request->is('api/auth*') || $request->is('admin*')) {
+            $response->headers->set('Cache-Control', 'no-store, private');
+            $response->headers->set('Pragma', 'no-cache');
+        }
+
+        if (app()->environment('production')) {
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         }
 
