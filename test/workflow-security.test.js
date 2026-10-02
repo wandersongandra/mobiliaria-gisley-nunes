@@ -13,6 +13,12 @@ test('workflows não concedem escrita de conteúdo nem usam pull_request_target'
   assert.doesNotMatch(`${ci}\n${codeql}`, /^\s+contents:\s*write\s*$/m);
 });
 
+test('todas as GitHub Actions estão fixadas em SHA completo com versão de atualização', () => {
+  const actionRefs = `${ci}\n${codeql}`.split('\n').filter((line) => /^\s*-?\s*uses:/.test(line));
+  assert.ok(actionRefs.length > 0);
+  assert.ok(actionRefs.every((line) => /uses:\s+[^@\s]+@[a-f0-9]{40}\s+#\s+v\d+/.test(line)), actionRefs.join('\n'));
+});
+
 test('CI bloqueia dependências de produção com avisos moderados ou superiores', () => {
   assert.match(ci, /pnpm audit --prod --audit-level=moderate/);
 });
