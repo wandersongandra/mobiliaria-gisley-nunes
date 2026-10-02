@@ -1,0 +1,38 @@
+@include('partials.head')
+  <body data-page="imoveis">
+    @include('partials.header')
+    <main id="conteudo">
+      <section class="page-hero shell catalog-hero">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> catálogo de imóveis</p>
+          <h1>Imóveis para comprar<br /><em>ou alugar.</em></h1>
+        </div>
+        <div class="page-hero-aside">
+          <span>Seleção disponível</span>
+          <p>Consulte imóveis em {{ $site['area'] }} e use os filtros para encontrar uma opção.</p>
+        </div>
+      </section>
+
+      <section class="search-card shell catalog-search" aria-labelledby="search-title">
+        <div class="catalog-search-head"><div><p class="eyebrow">filtros de busca</p><h2 id="search-title">Escolha bairro, tipo e valor.</h2></div><span class="listing-count"><strong id="listing-count">00</strong> imóveis</span></div>
+        <form id="search-form" class="search-form">
+          <label class="field"><span>Eu quero</span><select id="purpose"><option value="all">Comprar ou alugar</option><option value="Comprar">Comprar</option><option value="Alugar">Alugar</option></select></label>
+          <label class="field field-wide"><span>Bairro</span><select id="location"><option value="all">Todos os bairros</option></select></label>
+          <label class="field"><span>Tipo de imóvel</span><select id="type"><option value="all">Todos os tipos</option></select></label>
+          <label class="field"><span>Faixa de preço</span><select id="price" disabled><option value="all">Escolha comprar ou alugar</option></select></label>
+          <label class="field"><span>Quartos</span><select id="bedrooms"><option value="all">Qualquer número</option><option value="1">1 quarto</option><option value="2">2 quartos</option><option value="3">3 quartos</option><option value="4+">4 ou mais</option></select></label>
+          <button class="search-button" type="submit" aria-label="Buscar imóveis"><span>Buscar</span><span aria-hidden="true">⌕</span></button>
+        </form>
+        <div class="filter-summary" id="filter-summary" aria-live="polite"><span>carregando imóveis</span></div>
+      </section>
+
+      <section class="section shell listings-section catalog-results" id="imoveis" aria-labelledby="listings-title">
+        <div class="catalog-results-head"><p class="eyebrow">imóveis disponíveis</p><span>Use os filtros para comparar opções em {{ $site['area'] }}.</span></div>
+        <div class="listing-grid" id="listing-grid"></div>
+        <p class="empty-state" id="empty-state" hidden>Não encontramos um imóvel com esses filtros. <button type="button" id="clear-filters">Limpar filtros</button></p>
+      </section>
+    </main>
+    @include('partials.footer')
+    <script type="module" src="{{ $assets['js'] }}"></script>
+  </body>
+</html>

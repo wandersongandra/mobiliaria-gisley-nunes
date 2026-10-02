@@ -1,0 +1,38 @@
+@include('partials.head')
+  <body data-page="contato">
+    @include('partials.header')
+    <main id="conteudo">
+      <section class="page-hero shell contact-hero">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> contato</p>
+          <h1>Fale com a Gisley Nunes<br /><em>Imóveis.</em></h1>
+        </div>
+        <p class="page-lead">Escolha um canal e conte se você quer comprar, alugar ou anunciar um imóvel.</p>
+      </section>
+
+      <section class="contact-section" id="contato" aria-labelledby="contact-title">
+        <div class="shell contact-grid">
+          <div>
+            <p class="eyebrow">canais de atendimento</p>
+            <h2 id="contact-title">Como podemos<br /><em>ajudar?</em></h2>
+            <div class="contact-details">
+              <a href="https://wa.me/{{ $site['whatsapp'] }}" target="_blank" rel="noopener noreferrer">WhatsApp · {{ $site['phoneDisplay'] }} ↗</a>
+              <a href="mailto:{{ $site['email'] }}">{{ $site['email'] }}</a>
+              <span>{{ $site['address'] }}@if(!empty($site['crci'])) · CRECI {{ $site['crci'] }}@endif</span>
+            </div>
+          </div>
+          <form class="contact-form" id="contact-form"><label class="contact-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
+            <div class="form-row"><label>Seu nome<input required name="name" autocomplete="name" maxlength="120" placeholder="Seu nome" /></label><label>Seu e-mail<input required type="email" name="email" autocomplete="email" maxlength="255" placeholder="voce@email.com" /></label></div>
+            <label>Como podemos ajudar?<select name="interest"><option>Quero comprar um imóvel</option><option>Quero alugar um imóvel</option><option>Quero anunciar meu imóvel</option><option>Tenho outra dúvida</option></select></label>
+            <label>Mensagem<textarea required name="message" rows="3" maxlength="3000" placeholder="Conte o que você procura"></textarea></label>
+            <button class="button button-primary" type="submit">Enviar mensagem <span aria-hidden="true">↗</span></button>
+            <p class="form-privacy">Ao enviar, seus dados serão usados para responder ao contato e registrados no CRM. <a href="/privacidade">Veja a política de privacidade.</a></p>
+            <p class="form-status" id="form-status" role="status"></p>
+          </form>
+        </div>
+      </section>
+    </main>
+    @include('partials.footer')
+    <script type="module" src="{{ $assets['js'] }}"></script>
+  </body>
+</html>
