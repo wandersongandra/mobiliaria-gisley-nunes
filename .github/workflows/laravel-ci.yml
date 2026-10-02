@@ -47,7 +47,7 @@ jobs:
       APP_DEBUG: 'false'
       APP_URL: https://example.test
       ADMIN_ORIGIN: https://example.test
-      APP_KEY: base64:WnNWZXBUN3RkWElVcHBtM3hJUkE5NzlZdksyRWxyOE1GNnl0dHZNaz0=
+      APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       DB_CONNECTION: mysql
       DB_HOST: 127.0.0.1
       DB_PORT: 3306

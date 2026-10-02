@@ -525,7 +525,7 @@ class PropertyService
     private function integer(mixed $value, int $max): int
     {
         $number = $this->number($value, $max);
-        if ((int) $number !== $number) {
+        if ((float) (int) $number !== $number) {
             throw new RuntimeException('INVALID_PROPERTY_NUMBER');
         }
 
