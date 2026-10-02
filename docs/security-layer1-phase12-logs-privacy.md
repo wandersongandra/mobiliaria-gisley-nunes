@@ -5,6 +5,7 @@ Status: **implementação e testes locais em andamento; validação operacional 
 ## Controles verificados no código
 
 - Erros de API, OAuth, auditoria, limpeza de arquivos e banco não registram mensagens ou stack traces arbitrários. O logger em `server/operational-logging.js` emite somente eventos enumerados e códigos técnicos permitidos; os demais erros viram `UNCLASSIFIED`.
+- O lockfile fixa `ip-address@10.7.2`, dependência transitiva corrigida e madura o bastante para passar a política local de idade mínima; a versão mais nova disponível no momento foi barrada pelo cooldown local.
 - A resposta pública de erro continua usando códigos HTTP opacos, sem expor detalhes internos.
 - A exclusão de lead exige a capacidade `lead.erase` e limite para operações destrutivas. A auditoria dessa ação registra motivo operacional fixo, sem copiar a mensagem do lead.
 - A visualização de auditoria omite detalhes internos e identificadores de identidade do provedor.
