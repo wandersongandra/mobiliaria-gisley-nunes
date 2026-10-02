@@ -1,0 +1,87 @@
+<?php
+
+use App\Http\Middleware\RequireAdmin;
+use App\Http\Middleware\RequireCapability;
+use App\Http\Middleware\RequireSameOrigin;
+use App\Http\Middleware\SecurityHeaders;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/_app/health',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(SecurityHeaders::class);
+
+        $middleware->validateCsrfTokens(except: [
+            'api/contact',
+        ]);
+
+        $middleware->alias([
+            'same-origin' => RequireSameOrigin::class,
+            'admin' => RequireAdmin::class,
+            'capability' => RequireCapability::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (\Throwable $e, Request $request): ?Response {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            report($e);
+
+            $message = $e->getMessage();
+            $known = [
+                'INVALID_PROPERTY',
+                'INVALID_PROPERTY_NUMBER',
+                'INVALID_CONTACT',
+                'INVALID_FILE',
+                'INVALID_ASSET',
+                'INVALID_ORDER',
+                'INVALID_SITE_SETTINGS',
+                'INVALID_TESTIMONIAL',
+                'INVALID_LEAD_STATUS',
+                'INVALID_INVITATION',
+                'INVALID_TEAM_MEMBER',
+                'INVALID_EMAIL',
+                'INVALID_LIMIT',
+                'INVALID_PAIRING_CODE',
+                'INVITATION_EMAIL_MISMATCH',
+                'TEAM_MEMBER_EXISTS',
+                'SLUG_CONFLICT',
+                'PHOTO_LIMIT_REACHED',
+                'CAPABILITY_REQUIRED',
+                'ASSET_NOT_UPLOADED',
+                'ASSET_ALREADY_REGISTERED',
+                'STORAGE_NOT_CONFIGURED',
+                'AUTH_REQUIRED',
+                'MANAGER_REQUIRED',
+                'NOT_FOUND',
+            ];
+
+            if (in_array($message, $known, true)) {
+                $status = match ($message) {
+                    'AUTH_REQUIRED' => 401,
+                    'CAPABILITY_REQUIRED', 'MANAGER_REQUIRED' => 403,
+                    'NOT_FOUND' => 404,
+                    'SLUG_CONFLICT', 'PHOTO_LIMIT_REACHED', 'ASSET_ALREADY_REGISTERED', 'TEAM_MEMBER_EXISTS' => 409,
+                    'STORAGE_NOT_CONFIGURED' => 503,
+                    default => 400,
+                };
+
+                return response()->json(['error' => $message], $status);
+            }
+
+            return response()->json([
+                'error' => app()->environment('production') ? 'INTERNAL_ERROR' : $message,
+            ], 500);
+        });
+    })
+    ->create();
