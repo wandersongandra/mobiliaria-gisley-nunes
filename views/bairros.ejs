@@ -1,0 +1,31 @@
+<%- include('partials/head') %>
+  <body data-page="bairros">
+    <%- include('partials/header') %>
+    <main id="conteudo">
+      <section class="page-hero shell neighborhoods-hero">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> explore por localização</p>
+          <h1>Um bairro pode<br /><em>mudar tudo.</em></h1>
+        </div>
+        <p class="page-lead">Conheça os bairros que aparecem na curadoria atual da Gisley Nunes em Belo Horizonte e região.</p>
+      </section>
+
+      <section class="neighborhood-directory shell" aria-labelledby="neighborhood-title">
+        <div class="directory-head"><div><p class="eyebrow">catálogo por bairro</p><h2 id="neighborhood-title"><%= neighborhoods.length %> <%= neighborhoods.length === 1 ? 'bairro disponível' : 'bairros disponíveis' %></h2></div><a class="text-link" href="/imoveis">Ver todo o catálogo <span>↗</span></a></div>
+        <% if (neighborhoods.length) { %>
+          <div class="neighborhood-grid">
+            <% neighborhoods.forEach((neighborhood, index) => { %>
+              <a class="neighborhood-card" href="/bairros/<%= encodeURIComponent(neighborhood.slug) %>"><span class="neighborhood-index"><%= String(index + 1).padStart(2, '0') %></span><strong><%= neighborhood.name %></strong><span><%= neighborhood.count %> <%= neighborhood.count === 1 ? 'imóvel' : 'imóveis' %> <b aria-hidden="true">↗</b></span></a>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <div class="empty-state"><p>A curadoria por bairro será atualizada quando houver imóveis publicados.</p><a class="button button-primary" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a></div>
+        <% } %>
+      </section>
+
+      <section class="directory-note shell"><p class="eyebrow">quer uma busca específica?</p><h2>Conte o bairro,<br /><em>a gente conversa.</em></h2><a class="button button-primary" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a></section>
+    </main>
+    <%- include('partials/footer') %>
+    <script type="module" src="<%= assets.js %>"></script>
+  </body>
+</html>

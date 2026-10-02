@@ -233,6 +233,22 @@ function initListing() {
     select.value = 'all';
   }
 
+  function applyUrlFilters() {
+    const params = new URLSearchParams(window.location.search);
+    const requestedPurpose = params.get('purpose');
+    if (requestedPurpose && [...filters.purpose.options].some((option) => option.value === requestedPurpose)) {
+      filters.purpose.value = requestedPurpose;
+      updatePriceOptions();
+    }
+    for (const [key, filter] of Object.entries(filters)) {
+      if (!filter || key === 'purpose' || key === 'price') continue;
+      const value = params.get(key);
+      if (value && [...filter.options].some((option) => option.value === value)) filter.value = value;
+    }
+    const requestedPrice = params.get('price');
+    if (requestedPrice && [...filters.price.options].some((option) => option.value === requestedPrice)) filters.price.value = requestedPrice;
+  }
+
   Object.values(filters).forEach((filter) => filter?.addEventListener('change', () => form?.classList.add('has-pending-filters')));
   filters.purpose?.addEventListener('change', updatePriceOptions);
 
@@ -262,6 +278,7 @@ function initListing() {
       catalog = Array.isArray(payload?.properties) ? payload.properties.map(normalizeProperty) : [];
       populateFilterOptions();
       updatePriceOptions();
+      applyUrlFilters();
       renderListings(catalog);
     } catch {
       grid.innerHTML = '';

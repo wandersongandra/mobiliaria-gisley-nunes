@@ -1,0 +1,26 @@
+<%- include('partials/head') %>
+  <body data-page="bairro">
+    <%- include('partials/header') %>
+    <main id="conteudo">
+      <section class="page-hero shell neighborhood-detail-hero">
+        <div>
+          <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Início</a><span aria-hidden="true">›</span><a href="/bairros">Bairros</a><span aria-hidden="true">›</span><span aria-current="page"><%= neighborhood.name %></span></nav>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> imóveis em Belo Horizonte</p>
+          <h1><%= neighborhood.name %><br /><em>do seu jeito.</em></h1>
+        </div>
+        <div class="neighborhood-detail-aside"><span><%= neighborhood.count %> <%= neighborhood.count === 1 ? 'imóvel na seleção' : 'imóveis na seleção' %></span><p>Veja as opções atualmente publicadas em <%= neighborhood.name %> e fale com a equipe para confirmar disponibilidade.</p></div>
+      </section>
+
+      <section class="section shell neighborhood-listings" aria-labelledby="neighborhood-listings-title">
+        <div class="catalog-results-head"><p class="eyebrow">curadoria atual</p><span id="neighborhood-listings-title">Comprar ou alugar em <%= neighborhood.name %>.</span></div>
+        <div class="listing-grid neighborhood-listing-grid">
+          <% neighborhood.properties.forEach((property, index) => { %><%- include('partials/property-card', { property, imageLoading: index === 0 ? 'eager' : 'lazy' }) %><% }) %>
+        </div>
+      </section>
+
+      <section class="directory-note shell"><p class="eyebrow">não encontrou o que procurava?</p><h2>A próxima opção<br /><em>pode estar chegando.</em></h2><a class="button button-primary" href="/contato">Criar uma busca <span aria-hidden="true">↗</span></a></section>
+    </main>
+    <%- include('partials/footer') %>
+    <script type="module" src="<%= assets.js %>"></script>
+  </body>
+</html>

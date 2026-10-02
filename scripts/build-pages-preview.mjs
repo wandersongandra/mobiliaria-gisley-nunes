@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
 import { build } from 'vite';
 import { seedRows } from '../server/seed.js';
-import { escapeLd, organizationLd, propertyLd } from '../server/seo.js';
+import { catalogNeighborhoods } from '../server/catalog.js';
+import { breadcrumbLd, collectionPageLd, escapeJsonForHtml, escapeLd, escapeXml, organizationLd, propertyLd, sitemapDate, websiteLd } from '../server/seo.js';
 import { publicProperty } from '../server/presenters.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -42,7 +43,8 @@ async function render(template, destination, locals) {
     site,
     testimonials,
     cspNonce: 'preview',
-    siteLd: escapeLd(organizationLd(site, previewOrigin))
+    siteLd: escapeLd(organizationLd(site, previewOrigin)),
+    websiteLd: escapeLd(websiteLd(site, previewOrigin))
   }, { async: false });
   const target = path.join(outDir, destination);
   await mkdir(path.dirname(target), { recursive: true });
@@ -121,6 +123,8 @@ const properties = seedRows()
     });
   });
 
+const neighborhoods = catalogNeighborhoods(properties);
+
 await render('home.ejs', 'index.html', {
   assets,
   page: page({
@@ -138,6 +142,61 @@ await render('imoveis.ejs', 'imoveis/index.html', {
     pathname: '/imoveis'
   })
 });
+
+await render('servicos.ejs', 'servicos/index.html', {
+  assets,
+  page: page({
+    title: 'Serviços imobiliários — Gisley Nunes Imóveis',
+    description: 'Compre, alugue ou anuncie um imóvel com a Gisley Nunes Imóveis.',
+    pathname: '/servicos'
+  }),
+  pageLd: escapeLd(breadcrumbLd([
+    { name: 'Início', url: `${previewOrigin}/` },
+    { name: 'Serviços' }
+  ]))
+});
+
+await render('bairros.ejs', 'bairros/index.html', {
+  assets,
+  neighborhoods,
+  page: page({
+    title: 'Bairros em Belo Horizonte — Gisley Nunes Imóveis',
+    description: 'Explore imóveis disponíveis por bairro em Belo Horizonte e região.',
+    pathname: '/bairros'
+  }),
+  pageLd: escapeLd(collectionPageLd({
+    name: 'Bairros em Belo Horizonte',
+    description: 'Bairros com imóveis publicados na curadoria Gisley Nunes.',
+    url: `${previewOrigin}/bairros`,
+    items: neighborhoods.map((item) => ({ title: item.name, url: `${previewOrigin}/bairros/${item.slug}` }))
+  }))
+});
+
+for (const neighborhood of neighborhoods) {
+  const neighborhoodUrl = `${previewOrigin}/bairros/${neighborhood.slug}`;
+  await render('bairro.ejs', `bairros/${neighborhood.slug}/index.html`, {
+    assets,
+    neighborhood,
+    page: page({
+      title: `Imóveis em ${neighborhood.name}, Belo Horizonte — Gisley Nunes`,
+      description: `Veja imóveis disponíveis em ${neighborhood.name}, Belo Horizonte.`,
+      pathname: `/bairros/${neighborhood.slug}`
+    }),
+    pageLd: escapeLd([
+      breadcrumbLd([
+        { name: 'Início', url: `${previewOrigin}/` },
+        { name: 'Bairros', url: `${previewOrigin}/bairros` },
+        { name: neighborhood.name, url: neighborhoodUrl }
+      ]),
+      collectionPageLd({
+        name: `Imóveis em ${neighborhood.name}`,
+        description: `Imóveis publicados em ${neighborhood.name}, Belo Horizonte.`,
+        url: neighborhoodUrl,
+        items: neighborhood.properties.map((property) => ({ title: property.title, url: `${previewOrigin}/imoveis/${property.slug}` }))
+      })
+    ])
+  });
+}
 
 await render('sobre.ejs', 'sobre/index.html', {
   assets,
@@ -167,12 +226,12 @@ await render('privacidade.ejs', 'privacidade/index.html', {
 });
 
 for (const property of properties) {
-  const propertyJson = JSON.stringify(property).replace(/</g, '\\u003c');
+  const propertyJson = escapeJsonForHtml(property);
   await render('imovel.ejs', `imoveis/${property.slug}/index.html`, {
     assets,
     property,
     propertyJson,
-    extraHead: `<script nonce="preview" type="application/ld+json">${escapeLd(propertyLd(property, previewOrigin))}</script>`,
+    pageLd: escapeLd(propertyLd(property, previewOrigin)),
     page: page({
       title: `${property.title} — Gisley Nunes Imóveis`,
       description: property.description || `Conheça ${property.title} em ${property.location}.`,
@@ -196,8 +255,52 @@ await writeFile(path.join(outDir, 'api', 'properties', 'index.html'), JSON.strin
 await mkdir(path.join(outDir, 'api', 'site'), { recursive: true });
 await writeFile(path.join(outDir, 'api', 'site', 'index.html'), JSON.stringify({ site }), 'utf8');
 
+const sitemapEntries = [
+  { path: '/', priority: '1.0', changefreq: 'weekly' },
+  { path: '/imoveis', priority: '0.9', changefreq: 'daily' },
+  { path: '/sobre', priority: '0.5', changefreq: 'monthly' },
+  { path: '/contato', priority: '0.5', changefreq: 'monthly' },
+  { path: '/servicos', priority: '0.7', changefreq: 'monthly' },
+  { path: '/bairros', priority: '0.7', changefreq: 'weekly' },
+  { path: '/privacidade', priority: '0.1', changefreq: 'yearly' },
+  ...neighborhoods.map((neighborhood) => ({ path: `/bairros/${neighborhood.slug}`, priority: '0.7', changefreq: 'weekly' })),
+  ...properties.map((property) => ({
+    path: `/imoveis/${property.slug}`,
+    priority: '0.8',
+    changefreq: 'weekly',
+    lastmod: sitemapDate(property.updated_at)
+  }))
+];
+const sitemapUrls = sitemapEntries.map((entry) => [
+  `  <url><loc>${escapeXml(`${previewOrigin}${entry.path}`)}</loc>`,
+  entry.lastmod ? `<lastmod>${escapeXml(entry.lastmod)}</lastmod>` : '',
+  `<changefreq>${escapeXml(entry.changefreq)}</changefreq><priority>${escapeXml(entry.priority)}</priority></url>`
+].join('')).join('\n');
+await writeFile(path.join(outDir, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls}\n</urlset>\n`, 'utf8');
+
+const llmsLines = [
+  '# Gisley Nunes Imóveis',
+  '',
+  '> Imobiliária em Belo Horizonte e região. Curadoria de imóveis para comprar e alugar, com atendimento próximo e especializado.',
+  '',
+  '## Páginas',
+  `- [Início](${previewOrigin}/): apresentação e imóveis em destaque.`,
+  `- [Imóveis](${previewOrigin}/imoveis): catálogo completo com filtros.`,
+  `- [Sobre](${previewOrigin}/sobre): história e valores.`,
+  `- [Contato](${previewOrigin}/contato): canais de atendimento.`,
+  `- [Serviços](${previewOrigin}/servicos): comprar, alugar ou anunciar um imóvel.`,
+  `- [Bairros](${previewOrigin}/bairros): imóveis agrupados por localização.`,
+  `- [Privacidade](${previewOrigin}/privacidade): política de privacidade.`,
+  '',
+  '## Imóveis',
+  ...neighborhoods.map((neighborhood) => `- Bairro ${neighborhood.name} — ${neighborhood.count} imóveis — ${previewOrigin}/bairros/${neighborhood.slug}`),
+  ...properties.map((property) => `- ${property.title} — ${property.location} — ${property.price_label || ''} — ${previewOrigin}/imoveis/${property.slug}`)
+];
+await writeFile(path.join(outDir, 'llms.txt'), `${llmsLines.join('\n')}\n`, 'utf8');
+
 await writeFile(path.join(outDir, 'robots.txt'), `User-agent: *
 Disallow: /
+Sitemap: ${previewOrigin}/sitemap.xml
 `, 'utf8');
 
 await writeFile(path.join(outDir, '_headers'), `/*
@@ -206,4 +309,4 @@ await writeFile(path.join(outDir, '_headers'), `/*
   Referrer-Policy: strict-origin-when-cross-origin
 `, 'utf8');
 
-console.log(`[preview] generated ${properties.length + 6} pages in dist-preview`);
+console.log(`[preview] generated ${properties.length + neighborhoods.length + 9} pages in dist-preview`);

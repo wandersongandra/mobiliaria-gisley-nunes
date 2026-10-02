@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeJsonForHtml, propertyLd, sitemapDate } from '../server/seo.js';
+import { breadcrumbLd, collectionPageLd, escapeJsonForHtml, propertyLd, sitemapDate, websiteLd } from '../server/seo.js';
 
 test('propertyLd omite oferta quando preço é desconhecido', () => {
   const ld = propertyLd({
@@ -26,6 +26,31 @@ test('propertyLd representa aluguel com preço mensal', () => {
   assert.equal(ld.offers.priceCurrency, 'BRL');
   assert.equal(ld.offers.priceSpecification.unitText, 'MONTH');
   assert.equal(ld.offers.priceSpecification.price, 18500);
+});
+
+test('schemas de navegação e catálogo têm URLs e posições estáveis', () => {
+  const breadcrumbs = breadcrumbLd([
+    { name: 'Início', url: 'https://www.gisley.test/' },
+    { name: 'Bairros', url: 'https://www.gisley.test/bairros' },
+    { name: 'Lourdes', url: 'https://www.gisley.test/bairros/lourdes' }
+  ]);
+  assert.equal(breadcrumbs.itemListElement[2].position, 3);
+  assert.equal(breadcrumbs.itemListElement[2].item, 'https://www.gisley.test/bairros/lourdes');
+
+  const collection = collectionPageLd({
+    name: 'Imóveis em Lourdes',
+    description: 'Catálogo de imóveis.',
+    url: 'https://www.gisley.test/bairros/lourdes',
+    items: [{ title: 'Apartamento Solar', url: 'https://www.gisley.test/imoveis/apartamento-solar' }]
+  });
+  assert.equal(collection.mainEntity.numberOfItems, 1);
+  assert.equal(collection.mainEntity.itemListElement[0].position, 1);
+});
+
+test('WebSite schema mantém a imobiliária como publisher', () => {
+  const schema = websiteLd({ name: 'Gisley Nunes Imóveis' }, 'https://www.gisley.test');
+  assert.equal(schema['@type'], 'WebSite');
+  assert.equal(schema.publisher.name, 'Gisley Nunes Imóveis');
 });
 
 

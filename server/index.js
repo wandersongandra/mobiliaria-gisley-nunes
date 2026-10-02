@@ -9,7 +9,7 @@ import { registerRoutes } from './routes.js';
 import { assertAuthConfiguration } from './auth.js';
 import { assertAssetsReady, assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { escapeJsonForHtml, escapeLd, escapeXml, organizationLd, propertyLd, sitemapDate } from './seo.js';
+import { escapeJsonForHtml, escapeLd, escapeXml, breadcrumbLd, collectionPageLd, organizationLd, propertyLd, sitemapDate, websiteLd } from './seo.js';
 import {
   assertSecurityConfiguration,
   requestHostOrigin,
@@ -18,6 +18,7 @@ import {
   securityHeaders
 } from './security.js';
 import { publicProperty } from './presenters.js';
+import { catalogNeighborhood, catalogNeighborhoods, slugifyCatalogName } from './catalog.js';
 import { apiErrorHandler } from './errors.js';
 import { logOperationalError } from './operational-logging.js';
 
@@ -75,20 +76,22 @@ app.use(async (req, res, next) => {
     res.locals.site = await getSiteInfo();
     res.locals.testimonials = await getTestimonials();
     res.locals.siteLd = escapeLd(organizationLd(res.locals.site, originFrom(req)));
+    res.locals.websiteLd = escapeLd(websiteLd(res.locals.site, originFrom(req)));
     return next();
   } catch (error) { return next(error); }
 });
 
 registerRoutes(app);
 
-function pageMeta(req, { title, description, path: pathname, ogImage, robots = 'index,follow,max-image-preview:large' }) {
+function pageMeta(req, { title, description, path: pathname, ogImage, ogImageAlt, ogType = 'website', robots = 'index,follow,max-image-preview:large' }) {
   const origin = originFrom(req);
   return {
     title,
     description,
     canonical: `${origin}${pathname}`,
     ogImage: ogImage ? (ogImage.startsWith('http') ? ogImage : `${origin}${ogImage}`) : `${origin}/images/gisley-nunes-imoveis-logo.jpeg`,
-    ogType: 'website',
+    ogImageAlt: ogImageAlt || title,
+    ogType,
     robots
   };
 }
@@ -108,6 +111,80 @@ app.get(['/imoveis', '/imoveis/'], (req, res) => res.render('imoveis', {
     path: '/imoveis'
   })
 }));
+
+app.get('/servicos', (req, res) => res.render('servicos', {
+  page: pageMeta(req, {
+    title: 'Serviços imobiliários — Gisley Nunes Imóveis',
+    description: 'Encontre um imóvel para comprar ou alugar, ou fale com a Gisley Nunes sobre o seu imóvel em Belo Horizonte e região.',
+    path: '/servicos'
+  }),
+  pageLd: escapeLd(breadcrumbLd([
+    { name: 'Início', url: `${originFrom(req)}/` },
+    { name: 'Serviços' }
+  ]))
+}));
+
+app.get('/bairros', async (req, res, next) => {
+  try {
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const neighborhoods = catalogNeighborhoods(properties);
+    const origin = originFrom(req);
+    res.render('bairros', {
+      neighborhoods,
+      page: pageMeta(req, {
+        title: 'Bairros em Belo Horizonte — Gisley Nunes Imóveis',
+        description: 'Explore imóveis disponíveis por bairro em Belo Horizonte e região na curadoria da Gisley Nunes.',
+        path: '/bairros'
+      }),
+      pageLd: escapeLd(collectionPageLd({
+        name: 'Bairros em Belo Horizonte',
+        description: 'Bairros com imóveis publicados na curadoria Gisley Nunes.',
+        url: `${origin}/bairros`,
+        items: neighborhoods.map((item) => ({ title: item.name, url: `${origin}/bairros/${item.slug}` }))
+      }))
+    });
+  } catch (error) { next(error); }
+});
+
+app.get('/bairros/:slug', async (req, res, next) => {
+  try {
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const requestedSlug = slugifyCatalogName(req.params.slug);
+    const neighborhood = catalogNeighborhood(properties, requestedSlug);
+    if (!neighborhood) return res.status(404).render('404', {
+      page: pageMeta(req, {
+        title: 'Bairro não encontrado — Gisley Nunes Imóveis',
+        description: 'O bairro procurado não está na curadoria publicada. Veja outros bairros e imóveis disponíveis.',
+        path: req.path,
+        robots: 'noindex,nofollow'
+      })
+    });
+
+    const origin = originFrom(req);
+    const neighborhoodUrl = `${origin}/bairros/${neighborhood.slug}`;
+    res.render('bairro', {
+      neighborhood,
+      page: pageMeta(req, {
+        title: `Imóveis em ${neighborhood.name}, Belo Horizonte — Gisley Nunes`,
+        description: `Veja imóveis disponíveis em ${neighborhood.name}, Belo Horizonte, na curadoria atual da Gisley Nunes Imóveis.`,
+        path: `/bairros/${neighborhood.slug}`
+      }),
+      pageLd: escapeLd([
+        breadcrumbLd([
+          { name: 'Início', url: `${origin}/` },
+          { name: 'Bairros', url: `${origin}/bairros` },
+          { name: neighborhood.name, url: neighborhoodUrl }
+        ]),
+        collectionPageLd({
+          name: `Imóveis em ${neighborhood.name}`,
+          description: `Imóveis publicados em ${neighborhood.name}, Belo Horizonte.`,
+          url: neighborhoodUrl,
+          items: neighborhood.properties.map((property) => ({ title: property.title, url: `${origin}/imoveis/${property.slug}` }))
+        })
+      ])
+    });
+  } catch (error) { next(error); }
+});
 
 app.get('/sobre', (req, res) => res.render('sobre', {
   page: pageMeta(req, {
@@ -165,13 +242,17 @@ app.get('/robots.txt', (req, res) => {
 app.get('/sitemap.xml', async (req, res, next) => {
   try {
     const origin = originFrom(req);
-    const properties = await listProperties({ publicOnly: true });
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const neighborhoods = catalogNeighborhoods(properties);
     const entries = [
       { path: '/', priority: '1.0', changefreq: 'weekly' },
       { path: '/imoveis', priority: '0.9', changefreq: 'daily' },
       { path: '/sobre', priority: '0.5', changefreq: 'monthly' },
       { path: '/contato', priority: '0.5', changefreq: 'monthly' },
+      { path: '/servicos', priority: '0.7', changefreq: 'monthly' },
+      { path: '/bairros', priority: '0.7', changefreq: 'weekly' },
       { path: '/privacidade', priority: '0.1', changefreq: 'yearly' },
+      ...neighborhoods.map((neighborhood) => ({ path: `/bairros/${neighborhood.slug}`, priority: '0.7', changefreq: 'weekly' })),
       ...properties.map((property) => ({ path: `/imoveis/${property.slug}`, priority: '0.8', changefreq: 'weekly', lastmod: sitemapDate(property.updated_at) }))
     ];
     const urls = entries.map((entry) => `  <url><loc>${escapeXml(`${origin}${entry.path}`)}</loc>${entry.lastmod ? `<lastmod>${escapeXml(entry.lastmod)}</lastmod>` : ''}<changefreq>${escapeXml(entry.changefreq)}</changefreq><priority>${escapeXml(entry.priority)}</priority></url>`).join('\n');
@@ -182,7 +263,8 @@ app.get('/sitemap.xml', async (req, res, next) => {
 app.get('/llms.txt', async (req, res, next) => {
   try {
     const origin = originFrom(req);
-    const properties = await listProperties({ publicOnly: true });
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const neighborhoods = catalogNeighborhoods(properties);
     const lines = [
       '# Gisley Nunes Imóveis',
       '',
@@ -193,9 +275,12 @@ app.get('/llms.txt', async (req, res, next) => {
       `- [Imóveis](${origin}/imoveis): catálogo completo com filtros.`,
       `- [Sobre](${origin}/sobre): história e valores.`,
       `- [Contato](${origin}/contato): canais de atendimento.`,
+      `- [Serviços](${origin}/servicos): comprar, alugar ou anunciar um imóvel.`,
+      `- [Bairros](${origin}/bairros): imóveis agrupados por localização.`,
       `- [Privacidade](${origin}/privacidade): política de privacidade.`,
       '',
       '## Imóveis',
+      ...neighborhoods.map((neighborhood) => `- Bairro ${neighborhood.name} — ${neighborhood.count} imóveis — ${origin}/bairros/${neighborhood.slug}`),
       ...properties.map((property) => `- ${property.title} — ${property.location} — ${property.price_label || ''} — ${origin}/imoveis/${property.slug}`)
     ];
     res.type('text/plain; charset=utf-8').send(lines.join('\n'));
