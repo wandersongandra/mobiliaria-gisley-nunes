@@ -11,7 +11,7 @@
   </a>
   <div class="listing-info">
     <div><p class="listing-location">{{ $property['location'] }}</p><h3>{{ $property['title'] }}</h3></div>
-    <strong class="listing-price">{{ $property['price_label'] || 'Consulte' }}</strong>
+    <strong class="listing-price">{{ $property['price_label'] ?: 'Consulte' }}</strong>
   </div>
   <div class="listing-meta">
     @if(!empty($property['bedrooms']))<span>{{ $property['bedrooms'] }} {{ $property['bedrooms'] === 1 ? 'quarto' : 'quartos' }}</span>@endif

@@ -11,11 +11,11 @@
       </section>
 
       <section class="neighborhood-directory shell" aria-labelledby="neighborhood-title">
-        <div class="directory-head"><div><p class="eyebrow">bairros com imóveis publicados</p><h2 id="neighborhood-title">{{ neighborhoods.length }} {{ neighborhoods.length === 1 ? 'bairro disponível' : 'bairros disponíveis' }}</h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
+        <div class="directory-head"><div><p class="eyebrow">bairros com imóveis publicados</p><h2 id="neighborhood-title">{{ count($neighborhoods) }} {{ count($neighborhoods) === 1 ? 'bairro disponível' : 'bairros disponíveis' }}</h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
         @if(count($neighborhoods))
           <div class="neighborhood-grid">
             @foreach($neighborhoods as $index => $neighborhood)
-              <a class="neighborhood-card" href="/bairros/{{ rawurlencode($neighborhood['slug']) }}"><span class="neighborhood-index">{{ str_pad((string)($$index + 1), 2, '0', STR_PAD_LEFT) }}</span><strong>{{ $neighborhood['name'] }}</strong><span>{{ $neighborhood['count'] }} {{ $neighborhood['count'] === 1 ? 'imóvel' : 'imóveis' }} <b aria-hidden="true">↗</b></span></a>
+              <a class="neighborhood-card" href="/bairros/{{ rawurlencode($neighborhood['slug']) }}"><span class="neighborhood-index">{{ str_pad((string)($index + 1), 2, '0', STR_PAD_LEFT) }}</span><strong>{{ $neighborhood['name'] }}</strong><span>{{ $neighborhood['count'] }} {{ $neighborhood['count'] === 1 ? 'imóvel' : 'imóveis' }} <b aria-hidden="true">↗</b></span></a>
             @endforeach
           </div>
         @else
