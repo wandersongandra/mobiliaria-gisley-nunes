@@ -2,7 +2,11 @@
   "name": "gisley-nunes/imoveis",
   "type": "project",
   "description": "Gisley Nunes Imóveis - Laravel backend and public site",
-  "keywords": ["laravel", "real-estate", "gisley-nunes"],
+  "keywords": [
+    "laravel",
+    "real-estate",
+    "gisley-nunes"
+  ],
   "license": "proprietary",
   "require": {
     "php": "^8.2",
@@ -36,5 +40,10 @@
     }
   },
   "minimum-stability": "stable",
-  "prefer-stable": true
+  "prefer-stable": true,
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  }
 }
