@@ -88,3 +88,16 @@ A implementação e os gates automatizados da Fase 2 estão tecnicamente aprovad
 O resultado global permanece **NO-GO** porque o critério acordado exige validação OAuth real ponta a ponta antes de declarar `PASS`. Também permanecem como riscos residuais quatro advisories Moderate de dependências e a instabilidade do pipeline externo do Cloudflare, que devem ser tratados/documentados antes do go-live.
 
 Não houve merge na `main`.
+
+## Continuação da Fase 2 — 2026-10-02
+
+Durante a retomada da Fase 2, uma nova execução do audit de produção identificou quatro advisories moderados em `ip-address@10.5.0`, dependência transitiva de `express-rate-limit`. O requisito corrigido começa em `10.7.1`.
+
+- O lockfile foi atualizado para `ip-address@10.7.3`; `package.json` e os limites de versão diretos não mudaram.
+- `pnpm audit --prod --audit-level=moderate` (pnpm 10.4.1): **PASS — nenhum advisory conhecido**.
+- `pnpm test`: **169 aprovados, 0 falhas, 1 teste MySQL ignorado** por não haver serviço MySQL local.
+- `pnpm build`: **PASS**.
+- A CI e o CodeQL do HEAD remoto anterior (`06832527ff4ba5cb572e27386618ef517ab91dae`) passaram. Esses resultados antecedem esta alteração do lockfile e precisam ser renovados após ela.
+- A varredura local de segredos históricos não terminou: o clone filtrado precisou buscar blobs antigos durante `git log -p`. A CI do HEAD remoto anterior já tinha esse gate aprovado; como o scanner exclui o lockfile, esta mudança não altera a superfície que ele verifica.
+
+O resultado da Fase 2 continua **NO-GO operacional** até a confirmação de OAuth ponta a ponta com uma identidade de teste autorizada. A correção segue no PR #1 em modo draft; não houve merge na `main` nem publicação.
