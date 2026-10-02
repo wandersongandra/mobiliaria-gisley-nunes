@@ -1,0 +1,13 @@
+{
+  // Cloudflare Worker Preview only - never production
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mobiliaria-gisley-nunes",
+  "compatibility_date": "2026-10-02",
+  "preview_urls": true,
+  "assets": {
+    "directory": "./dist-preview",
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash"
+  },
+  "previews": {}
+}
