@@ -1,0 +1,12 @@
+{
+  // Design preview only - not production
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mobiliaria-gisley-nunes",
+  "compatibility_date": "2026-09-30",
+  "previews": {},
+  "assets": {
+    "directory": "./dist-preview",
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash"
+  }
+}

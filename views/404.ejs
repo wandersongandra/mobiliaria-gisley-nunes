@@ -1,0 +1,15 @@
+<%- include('partials/head') %>
+  <body data-page="404">
+    <%- include('partials/header') %>
+    <main id="conteudo">
+      <section class="page-hero shell not-found-page">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> página não encontrada</p>
+        <h1>Página não<br /><em>encontrada.</em></h1>
+        <p class="page-lead">Este endereço não está disponível. Volte ao catálogo para continuar a busca.</p>
+        <div class="not-found-actions"><a class="button button-primary" href="/imoveis">Ver imóveis <span aria-hidden="true">↗</span></a><a class="text-link" href="/">Voltar ao início</a></div>
+      </section>
+    </main>
+    <%- include('partials/footer') %>
+    <script type="module" src="<%= assets.js %>"></script>
+  </body>
+</html>

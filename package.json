@@ -9,14 +9,22 @@
     "build": "vite build",
     "start": "cross-env NODE_ENV=production node server/index.js",
     "preview": "cross-env NODE_ENV=production node server/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:mysql": "cross-env RUN_MYSQL_AUTH_INTEGRATION=true node --test test/auth-db.integration.test.js",
+    "build:preview": "node scripts/build-pages-preview.mjs",
+    "deploy:preview": "pnpm run cf:preview",
+    "security:secrets": "node scripts/scan-secrets.mjs",
+    "cf:build": "pnpm run build:preview",
+    "cf:deploy": "pnpm dlx wrangler@4.145.0 deploy --config wrangler.jsonc",
+    "cf:preview": "pnpm dlx wrangler@4.145.0 preview --config wrangler.jsonc"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "ejs": "^6.0.1",
     "express": "^5.1.0",
     "jose": "^6.1.0",
-    "mysql2": "^3.14.3"
+    "mysql2": "^3.14.3",
+    "express-rate-limit": "^8.7.0"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",

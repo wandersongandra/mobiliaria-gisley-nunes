@@ -1,26 +1,97 @@
-# Plano — Gisley Nunes Imóveis
+# Plano técnico — Gisley Nunes Imóveis
 
 ## Objetivo
-Entregar uma experiência pública premium para a Gisley Nunes Imóveis, em Belo Horizonte, e um painel administrativo protegido para cadastrar imóveis, gerenciar fotos e publicar o catálogo sem editar código.
 
-## Decisões
-- **Arquitetura:** frontend Vite servido por Express, com API JSON, banco MySQL gerenciado e object storage para fotos. A sessão administrativa usa Manus OAuth e o cookie `webdev_app_session` compatível com Preview.
-- **Acesso admin:** whitelist por e-mail em `MORADA_ADMIN_EMAILS`; nenhuma senha própria é criada. Usuários autenticados fora da whitelist recebem 403.
-- **Entrega:** o container roda `server/index.js`, executa migração idempotente na inicialização e serve o build Vite da pasta `dist/`.
-- **Dados:** imóveis, fotos e usuários autorizados têm tabelas próprias; o catálogo público lista apenas imóveis publicados.
-- **SEO:** conteúdo principal presente no HTML inicial, metadados descritivos, Open Graph, canonical relativo configurável e `public/robots.txt`, `public/sitemap.xml` e `public/manus-routes.json`.
-- **Cache:** assets com hash do Vite recebem cache longo; HTML e respostas de API são revalidados. Uploads ficam fora do Git em armazenamento persistente.
-- **Rotas atuais:** `/`, `/imoveis`, `/admin`, `/api/auth/*`, `/api/admin/*`, `/api/properties` e `/_app/health`.
+Manter duas experiências separadas, usando o mesmo backend:
 
-## Estrutura
-- `index.html`: shell semântico e metadados.
-- `src/main.js`: experiência pública, filtros, menu mobile e formulário.
-- `src/styles.css`: sistema visual responsivo.
-- `src/data.js`: imóveis, depoimentos e dados de contato demonstrativos.
-- `public/images/`: logo e imagens de destaque.
-- `admin/`: shell do painel e editor de imóveis.
-- `server/`: Express, OAuth, autorização, API de imóveis/fotos e migração.
-- `Dockerfile`: build e runtime do container publicado.
+- **site público** para catálogo, SEO, contato e páginas institucionais;
+- **CRM protegido** para imóveis, fotos, leads, equipe e configurações.
 
-## Verificação
-Inspecionar a fonte, executar `npm run build`, iniciar o serviço no listener declarado, verificar `GET /`, `GET /manus-routes.json` e `GET /_app/health` com HTTP 200, conferir a migração idempotente e garantir que endpoints admin rejeitam chamadas sem sessão autorizada. O fluxo OAuth/upload real será validado quando o primeiro administrador configurar o e-mail autorizado.
+## Origens previstas
+
+- `https://www.gisleynunesimoveis.com.br` — site público;
+- `https://painel.gisleynunesimoveis.com.br` — CRM;
+- `https://media.gisleynunesimoveis.com.br` — reservado para futuro gateway/Worker autorizado; **não** apontar diretamente para o bucket R2.
+
+## Arquitetura
+
+- Node.js 22 + Express 5;
+- EJS para HTML server-rendered;
+- Vite para os assets do site público;
+- MySQL para dados relacionais;
+- Cloudflare R2 para fotos;
+- OAuth para autenticação administrativa;
+- cookies host-only, `HttpOnly`, `Secure` em produção e `SameSite=Lax`;
+- papéis `manager` e `editor`.
+
+## Dados
+
+O MySQL armazena:
+
+- imóveis;
+- metadados das fotos;
+- usuários autenticados;
+- permissões da equipe;
+- leads;
+- dados institucionais;
+- depoimentos.
+
+Os arquivos das fotos ficam no R2. O banco mantém chave do objeto, URL pública, MIME, tamanho, dimensões, capa, ordem e usuário responsável pelo upload.
+
+## Segurança
+
+- catálogo público expõe somente imóveis publicados;
+- payload público remove IDs e caminhos internos;
+- produção não semeia dados demonstrativos;
+- mutações administrativas exigem sessão + mesma origem;
+- rotas administrativas podem ser isoladas por `ADMIN_ORIGIN`;
+- rate limiting em login, contato e mutações do CRM;
+- CSP restrita;
+- upload com extensão/MIME permitidos, limite de 12 MB, URL temporária R2 e validação dos bytes reais;
+- CodeQL e audit de dependências executados no CI.
+
+## Deploy
+
+Em produção:
+
+1. `DATABASE_URL` é obrigatório;
+2. migrações precisam concluir antes do servidor aceitar tráfego;
+3. `/_app/health` é liveness;
+4. `/_app/ready` é readiness do banco;
+5. o container possui `HEALTHCHECK`;
+6. SIGTERM/SIGINT fecham o servidor e o pool MySQL de forma graciosa.
+
+## Preview visual
+
+`pnpm build:preview` gera `dist-preview`, usado somente para revisão visual no Cloudflare Workers.
+
+O preview:
+
+- usa dados demonstrativos;
+- não representa o backend/CRM real;
+- é bloqueado para indexação;
+- não deve receber credenciais de produção.
+
+## Comandos
+
+```bash
+pnpm install --frozen-lockfile
+pnpm test
+pnpm build
+pnpm build:preview
+pnpm start
+```
+
+## Gates antes de produção
+
+- CI verde;
+- CodeQL verde;
+- Docker build verde;
+- banco e migrações validados;
+- OAuth testado no domínio do painel;
+- R2/CORS testados com upload real;
+- CRUD de imóvel e galeria testados;
+- gestor/editor validados;
+- formulário público e fallback de WhatsApp validados;
+- 404, sitemap, robots e canonical validados;
+- revisão mobile e acessibilidade concluídas.

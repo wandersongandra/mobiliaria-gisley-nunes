@@ -1,5 +1,14 @@
+export function escapeJsonForHtml(value) {
+  return JSON.stringify(value)
+    .replace(/&/g, '\\u0026')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 export function escapeLd(value) {
-  return JSON.stringify(value).replace(/</g, '\\u003c');
+  return escapeJsonForHtml(value);
 }
 
 export function organizationLd(site, origin) {
@@ -11,23 +20,95 @@ export function organizationLd(site, origin) {
     email: site.email,
     telephone: site.phoneDisplay,
     areaServed: site.area,
-    address: { '@type': 'PostalAddress', addressLocality: 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' }
+    address: { '@type': 'PostalAddress', addressLocality: 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' },
+    ...(site.instagramUrl ? { sameAs: [site.instagramUrl] } : {})
+  };
+}
+
+export function websiteLd(site, origin) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: site.name,
+    url: `${origin}/`,
+    publisher: { '@type': 'RealEstateAgent', name: site.name }
+  };
+}
+
+export function breadcrumbLd(items) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      ...(item.url ? { item: item.url } : {})
+    }))
+  };
+}
+
+export function collectionPageLd({ name, description, url, items = [] }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name,
+    description,
+    url,
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: items.length,
+      itemListElement: items.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: item.title,
+        url: item.url
+      }))
+    }
   };
 }
 
 export function propertyLd(property, origin) {
+  const price = Number(property.price || 0);
   const ld = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
     name: property.title,
     url: `${origin}/imoveis/${property.slug}`,
-    offers: { '@type': 'Offer', price: Number(property.price || 0), priceCurrency: 'BRL' },
     address: { '@type': 'PostalAddress', addressLocality: property.city || 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' }
   };
+  if (price > 0) {
+    ld.offers = {
+      '@type': 'Offer',
+      price,
+      priceCurrency: 'BRL',
+      ...(property.purpose === 'Alugar'
+        ? { priceSpecification: { '@type': 'UnitPriceSpecification', price, priceCurrency: 'BRL', unitText: 'MONTH' } }
+        : {})
+    };
+  }
   if (property.description) ld.description = property.description;
   if (property.cover_url) ld.image = property.cover_url;
   if (Number(property.bedrooms || 0)) ld.numberOfBedrooms = Number(property.bedrooms);
   if (Number(property.bathrooms || 0)) ld.numberOfBathroomsTotal = Number(property.bathrooms);
   if (Number(property.area_m2 || 0)) ld.floorSize = { '@type': 'QuantitativeValue', value: Number(property.area_m2), unitCode: 'MTK' };
   return ld;
+}
+
+export function sitemapDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+
+export function escapeXml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&apos;'
+  })[char]);
 }
