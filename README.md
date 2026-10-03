@@ -55,13 +55,16 @@ Defina as variáveis no `.env` fora do Document Root. Não use os valores de exe
 | `APP_KEY`, `APP_URL`, `APP_DEBUG=false` | Criptografia e endereço público do Laravel. Gere a chave uma vez e preserve-a nas atualizações. |
 | `ADMIN_ORIGIN` | Origem HTTPS exata do painel; usada pela validação de origem e proteção CSRF. |
 | `DB_CONNECTION=mysql`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Acesso ao MySQL criado no cPanel. |
-| `SESSION_DRIVER=file`, `SESSION_SECURE_COOKIE=true`, `CACHE_STORE=file` | Sessões e cache compatíveis com hospedagem compartilhada HTTPS. |
+| `SESSION_DRIVER=file`, `SESSION_SECURE_COOKIE=true`, `CACHE_STORE=file`, `QUEUE_CONNECTION=sync` | Sessões, cache e fila compatíveis com hospedagem compartilhada HTTPS. |
+| `TRUSTED_PROXIES` | CIDRs ou IPs dos proxies Cloudflare que chegam à origem, separados por vírgula. Nunca use `*` nem IPs de clientes. |
 | `GISELY_ADMIN_OPEN_IDS` | Lista separada por vírgulas de IDs autorizados como gestores iniciais. |
 | `GISELY_ADMIN_IDLE_TIMEOUT_MINUTES`, `GISELY_MAX_ADMIN_SESSIONS` | Limite de inatividade e sessões administrativas simultâneas. |
 | `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_UPLOAD_EXPIRES_SECONDS` | Upload pré-assinado e limpeza dos arquivos no Cloudflare R2. |
 | `MANUS_OAUTH_PORTAL_URL`, `MANUS_OAUTH_API_URL`, `MANUS_PROJECT_ID` | Endpoints e projeto do provedor OAuth. |
 
 Consulte `.env.example` para a lista completa. Após alterar variáveis, limpe e gere novamente o cache da configuração com `php artisan config:clear && php artisan config:cache`.
+
+Antes de abrir tráfego, execute `php artisan app:production-check`. O comando não imprime valores de segredo e falha se a configuração, extensões, permissões de escrita, drivers de sessão/cache/fila ou proxies confiáveis estiverem incompletos.
 
 > **Grafia das variáveis `GISELY_*`:** o arquivo de configuração chama-se `config/gisley.php` (grafia correta), mas as variáveis de ambiente mantêm de propósito a grafia antiga `GISELY_*`, porque já estão no `.env` implantado e nos workflows de CI. Renomeá-las faria os valores caírem silenciosamente para os defaults, sem nenhum erro. Para renomear de verdade é preciso alterar junto: `config/gisley.php`, `.env.example`, `phpunit.xml`, `.github/workflows/ci.yml`, `.github/workflows/laravel-ci.yml` e o `.env` de produção. O teste `test_renamed_config_file_still_reads_the_legacy_gisely_env_names` protege esse contrato.
 
@@ -118,7 +121,7 @@ composer validate --strict
 composer audit --no-interaction
 ```
 
-O CI executa esses gates em SQLite e roda novamente migrações e testes em MySQL 8.4.
+O CI executa qualidade, segurança, migrações e testes em MySQL 8.4 e uma instalação limpa do pacote sem dependências de desenvolvimento.
 
 A suíte é hermética: `phpunit.xml` declara `DB_CONNECTION=sqlite` com `DB_DATABASE=:memory:` e os demais valores de ambiente necessários, então `composer run test` roda em qualquer checkout, sem MySQL e sem arquivo `.env`. Os `<env>` do PHPUnit usam `force="false"` (padrão), ou seja, variáveis já exportadas no ambiente vencem — é assim que o job MySQL do CI continua testando contra MySQL 8.4.
 

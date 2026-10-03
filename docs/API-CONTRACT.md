@@ -8,8 +8,8 @@ Respostas administrativas e de autenticação usam `Cache-Control: no-store`. Mu
 | --- | --- | --- | --- |
 | `GET /health/live`, `/_app/health` | Não | `{status:"ok"}` | Sem dependência externa. |
 | `GET /health/ready` | Não | `{status:"ok"}` se DB responde | `503` se DB indisponível. |
-| `GET /api/properties` | Não | Contrato legado: `{properties: []}` completo | Cache público; sem paginação. Legado. |
-| `GET /api/v2/properties` | Não | `page` e `per_page` 20–100; `{properties,pagination}` | `422` para paginação inválida; IDs internos omitidos. |
+| `GET /api/properties` | Não | Contrato legado: `{properties: []}` completo | Emite `Deprecation: true` e link para v2. Manter até a janela de remoção ser anunciada. |
+| `GET /api/v2/properties` | Não | `page`, `per_page` 20–100 e filtros `purpose`, `location`, `type`, `price_band`, `bedrooms`; `{properties,pagination,facets}` | `422` para paginação/filtros inválidos; IDs internos omitidos. |
 | `GET /api/properties/{slug}` | Não | Imóvel publicado | `404` para slug inválido/inexistente. |
 | `GET /api/site` | Não | Configuração e depoimentos públicos | Cache público. |
 | `POST /api/contact` | Origem exata | nome, email, interesse, mensagem, propertyPath, honeypot | 8/10 min por IP; `400` para entrada inválida, `201` para aceito. |
