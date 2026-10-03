@@ -386,14 +386,7 @@ class CrmService
     public function createInvitation(array $data): void
     {
         $email = $this->email($data['email'] ?? '', 'INVALID_INVITATION');
-
-        DB::table('morada_staff_invitations')
-            ->where('email', $email)
-            ->whereNull('accepted_at')
-            ->whereNull('revoked_at')
-            ->update(['revoked_at' => now()]);
-
-        DB::table('morada_staff_invitations')->insert([
+        $payload = [
             'token_hash' => $data['tokenHash'],
             'email' => $email,
             'name' => $this->text($data['name'] ?? '', 255, true, 'INVALID_INVITATION'),
@@ -401,7 +394,32 @@ class CrmService
             'invited_by' => $data['invitedBy'],
             'expires_at_ms' => $data['expiresAtMs'],
             'created_at' => now(),
-        ]);
+        ];
+
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            try {
+                DB::transaction(function () use ($email, $payload): void {
+                    DB::table('morada_staff_invitations')
+                        ->where('email', $email)
+                        ->whereNull('accepted_at')
+                        ->whereNull('revoked_at')
+                        ->lockForUpdate()
+                        ->get();
+                    DB::table('morada_staff_invitations')
+                        ->where('email', $email)
+                        ->whereNull('accepted_at')
+                        ->whereNull('revoked_at')
+                        ->update(['revoked_at' => now()]);
+                    DB::table('morada_staff_invitations')->insert($payload);
+                });
+
+                return;
+            } catch (QueryException $error) {
+                if ($attempt === 1 || (int) ($error->errorInfo[1] ?? 0) !== 1062) {
+                    throw $error;
+                }
+            }
+        }
     }
 
     public function listInvitations(): array
