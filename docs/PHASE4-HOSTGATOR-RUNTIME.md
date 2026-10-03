@@ -3,35 +3,35 @@
 Data da verificação: 2026-10-03.
 
 Esta fase foi executada sem deploy público, sem alteração de DNS, sem migration
-no banco HostGator e sem solicitar ou imprimir qualquer segredo.
+da aplicação no banco HostGator e sem solicitar ou imprimir qualquer segredo.
 
 ## Resultado resumido
 
 | Controle | Estado | Evidência |
 | --- | --- | --- |
-| HostGator SSH | BLOCKED | O TCP/SSH respondeu, mas a autenticação foi recusada: `Permission denied (publickey,password,keyboard-interactive)`. |
-| PHP CLI HostGator | NÃO VERIFICADO | A sessão autenticada não foi estabelecida. A versão `8.3.35` foi informada pelo operador, mas não foi revalidada nesta rodada. |
-| PHP web / PHP-FPM | BLOCKED | Requer acesso autenticado e um domínio de teste configurado. |
-| Extensões HostGator | BLOCKED | A matriz só pode ser produzida por `php -m` no servidor alvo. |
-| Composer HostGator | BLOCKED | Composer global foi informado como ausente; instalação no usuário aguarda acesso SSH. |
-| Laravel boot HostGator | BLOCKED | Não foi executado `artisan about` no servidor. |
-| `app:production-check` HostGator | BLOCKED | Não foi executado no ambiente real; não houve configuração falsa. |
-| Storage e permissões | BLOCKED | Não foi possível inspecionar nem escrever no servidor. |
-| Apache / PHP-FPM | BLOCKED | Handler e `.htaccess` só podem ser confirmados no Document Root real. |
-| Document Root | BLOCKED | O alvo esperado é `.../public`, mas o caminho efetivo não foi confirmado. |
-| MySQL HostGator | BLOCKED | Nenhuma conexão ou `migrate:status` foi executada. |
-| Compatibilidade de migrations | BLOCKED | CI MySQL 8 passou; permissões e versão do banco HostGator continuam não verificadas. |
-| Health live/ready | BLOCKED | Não há domínio de staging validado nesta fase. |
-| Cloudflare trusted proxy | BLOCKED | Os CIDRs reais ainda não foram configurados nem confirmados no origin. |
+| HostGator SSH | PASS | Chave `gisley_hostgator_deploy` autenticou no host `192.185.213.23:2222`. |
+| PHP CLI HostGator | PASS | PHP `8.3.35`, CLI, OPcache 8.3.35 e ionCube carregados. |
+| PHP web / PHP-FPM | BLOCKED | O domínio público ainda não aponta para este checkout; não há domínio Laravel de staging configurado. |
+| Extensões HostGator | PASS | pdo, pdo_mysql, openssl, mbstring, fileinfo, json, ctype, tokenizer e curl disponíveis. |
+| Composer HostGator | PASS | `~/bin/composer` 2.10.3 e instalação `--no-dev` já confirmadas. |
+| Laravel boot HostGator | PASS | `artisan` iniciou no checkout e `db:show` conectou à base dedicada. |
+| `app:production-check` HostGator | FAIL | Todos os controles locais passaram; R2 e OAuth permanecem ausentes por dependerem de secrets externos. |
+| Storage e permissões | PASS | Diretórios graváveis, sem `777`; probe temporário de escrita/remoção passou. |
+| Apache / PHP-FPM | BLOCKED | `.htaccess` foi auditado estaticamente; handler web efetivo ainda não pode ser testado. |
+| Document Root | BLOCKED | O cPanel mantém `public_html`; o projeto `public/` não foi apontado para um domínio. |
+| MySQL HostGator | PASS | Conexão Laravel confirmada; MySQL `5.7.44-48`, base dedicada vazia. |
+| Compatibilidade de migrations | PARCIAL | FK, UNIQUE, índices e triggers foram sondados; migration da aplicação não foi executada por segurança. |
+| Health live/ready | BLOCKED | Os URLs públicos retornaram HTML LiteSpeed `200`, não o JSON Laravel esperado. |
+| Cloudflare trusted proxy | PASS (configuração) | Ranges oficiais explícitos foram gravados no `.env`; tráfego Cloudflare real ainda não foi exercitado. |
 | R2 real | BLOCKED | Não há credenciais autorizadas de bucket de teste. |
 | OAuth real | BLOCKED | Não há provedor/callback de teste autorizado. |
-| Infraestrutura automatizada | PARCIAL | Script e workflow manual foram preparados; nenhum acesso SSH ou deploy foi ativado. |
+| Infraestrutura automatizada | PASS (preparação) | Script SHA-locked e workflow gated com `StrictHostKeyChecking=yes` foram versionados; habilitação continua desligada. |
 | Deploy público | NOT EXECUTED | Explicitamente não executado. |
 
 ## Evidência local confirmada
 
 - Branch: `migration/laravel-backend-2026-10-02`.
-- SHA local e remoto no início da fase: `c9556148510664efc4151c0cec7cd9e01bc29b06`.
+- SHA inicial da fase: `3b78b474c2c6d8199697bc132939ac93fd61af4b`.
 - O repositório contém a estrutura Laravel esperada e `composer.lock`.
 - `composer.json` requer PHP `^8.2`, Laravel 12 e `pdo_mysql` é exigido pelo
   `app:production-check`.
@@ -41,19 +41,44 @@ no banco HostGator e sem solicitar ou imprimir qualquer segredo.
   somente requisições que não sejam arquivos/diretórios para `public/index.php`.
 - `/health/live` não acessa banco e `/health/ready` responde `503` sem revelar
   SQL, host, stack trace ou credenciais quando o banco falha.
+- O cPanel não lista `gisleynunesimoveis.com.br`; lista somente os domínios
+  temporários `meusitehostgator.com.br`. O `public_html` atual contém o site
+  antigo e permanece intocado.
 
 ## Extensões exigidas
 
 | Extensão | Obrigatória pelo runtime | HostGator |
 | --- | --- | --- |
-| ctype | Sim | NÃO VERIFICADO |
-| curl | Sim | NÃO VERIFICADO |
-| fileinfo | Sim | NÃO VERIFICADO |
-| json | Sim | NÃO VERIFICADO |
-| mbstring | Sim | NÃO VERIFICADO |
-| openssl | Sim | NÃO VERIFICADO |
-| pdo | Sim | NÃO VERIFICADO |
-| pdo_mysql | Sim | NÃO VERIFICADO |
+| ctype | Sim | PASS |
+| curl | Sim | PASS |
+| fileinfo | Sim | PASS |
+| json | Sim | PASS |
+| mbstring | Sim | PASS |
+| openssl | Sim | PASS |
+| pdo | Sim | PASS |
+| pdo_mysql | Sim | PASS |
+
+## Configuração aplicada no HostGator
+
+- `.env` criado a partir de `.env.example`, com permissão `600`.
+- `APP_ENV=production`, `APP_DEBUG=false`, URLs HTTPS e sessão/cache/fila
+  compatíveis com hospedagem compartilhada.
+- `APP_KEY` gerada diretamente pelo Laravel no servidor; o valor não foi lido
+  nem exibido.
+- Ranges oficiais atuais da Cloudflare configurados explicitamente em
+  `TRUSTED_PROXIES`; nenhum wildcard foi usado.
+- Criada a base dedicada `gisley77_gisley_nunes` e o usuário dedicado
+  `gisley77_gisley_app`. A senha foi gerada/resetada no servidor e só está no
+  `.env` remoto.
+- O usuário possui privilégios restritos à base dedicada. `SHOW GRANTS` não
+  mostrou privilégios globais.
+- `migrate:status` retornou `Migration table not found`, pois a base está vazia;
+  `migrate --force` não foi executado.
+- A sonda controlada confirmou InnoDB, FK, UNIQUE, índices e criação de
+  triggers; todas as tabelas/objetos da sonda foram removidos.
+- O servidor é MySQL 5.7.44. A migration
+  `2026_10_04_000009_enforce_mysql_legacy_enum_integrity.php` adiciona guards
+  por trigger porque MySQL 5.7 não aplica `CHECK` como MySQL 8.
 
 ## Artefatos preparados
 
@@ -74,13 +99,24 @@ valida a branch, testa a sintaxe do script, instala dependências sem `--dev`,
 faz boot/cache e confirma que não houve efeito de deploy. Ele não possui job SSH,
 segredo, migration real ou publicação.
 
-## Próximo passo bloqueado
+`.github/workflows/hostgator-deploy-gated.yml` está preparado, mas permanece
+inativo enquanto `vars.HOSTGATOR_DEPLOY_ENABLED` não for `true`. Ele exige
+branch fixa, SHA completo, ambiente `production`, secrets
+`HOSTGATOR_SSH_PRIVATE_KEY`/`HOSTGATOR_KNOWN_HOSTS`, host/usuário/caminho em
+variables, host key estrita e não usa autenticação por senha.
 
-O operador precisa disponibilizar uma chave pública de deploy específica no
-`authorized_keys` de `gisley77` e manter a chave privada somente no ambiente
-autorizado. Depois disso, a inspeção deve ser repetida com os comandos de leitura
-da Fase 1. Nenhuma senha, private key, `APP_KEY`, credencial MySQL, R2 ou OAuth
-deve ser enviada pelo chat.
+## Intervenções que ainda dependem do operador
 
-Até essa autenticação e a criação de um banco/staging autorizado, os estados
-HostGator, PHP web, MySQL, health e permissões permanecem `BLOCKED`.
+1. Criar/configurar no cPanel o domínio de staging ou apontar o Document Root
+   para `/home1/gisley77/repositories/mobiliaria-gisley-nunes/public` somente
+   quando a janela de publicação for aprovada; isso não foi alterado.
+2. Cadastrar no `.env` remoto os secrets reais do R2 e OAuth diretamente no
+   servidor. Não enviar esses valores pelo chat.
+3. Confirmar no provedor OAuth o redirect URI correspondente ao domínio de
+   staging e fornecer o client secret no `.env`.
+4. Cadastrar no GitHub Environment `production` os secrets
+   `HOSTGATOR_SSH_PRIVATE_KEY` e `HOSTGATOR_KNOWN_HOSTS`, além das variables
+   `HOSTGATOR_HOST`, `HOSTGATOR_PORT`, `HOSTGATOR_USER`, `DEPLOY_PATH`,
+   `HEALTH_URL`; manter `HOSTGATOR_DEPLOY_ENABLED` desligada até aprovação.
+5. Autorizar explicitamente a primeira execução de `migrate --force` na base
+   dedicada depois que a migration 000009 estiver no checkout remoto.

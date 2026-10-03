@@ -1,0 +1,83 @@
+name: HostGator deploy (gated)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch Laravel autorizada'
+        required: true
+        default: migration/laravel-backend-2026-10-02
+        type: string
+      sha:
+        description: 'SHA completo a publicar'
+        required: true
+        type: string
+      confirm:
+        description: 'Confirma a janela de deploy aprovada'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gisley-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.ref == 'migration/laravel-backend-2026-10-02' && inputs.confirm == 'ENABLE_HOSTGATOR_DEPLOY' && vars.HOSTGATOR_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      HOSTGATOR_HOST: ${{ vars.HOSTGATOR_HOST }}
+      HOSTGATOR_PORT: ${{ vars.HOSTGATOR_PORT }}
+      HOSTGATOR_USER: ${{ vars.HOSTGATOR_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      HOSTGATOR_SSH_PRIVATE_KEY: ${{ secrets.HOSTGATOR_SSH_PRIVATE_KEY }}
+      HOSTGATOR_KNOWN_HOSTS: ${{ secrets.HOSTGATOR_KNOWN_HOSTS }}
+      REQUESTED_REF: ${{ inputs.ref }}
+      DEPLOY_SHA: ${{ inputs.sha }}
+
+    steps:
+      - name: Validate immutable target
+        run: |
+          test "$REQUESTED_REF" = "migration/laravel-backend-2026-10-02"
+          test "$DEPLOY_SHA" = "$(git ls-remote https://github.com/${{ github.repository }}.git "refs/heads/$REQUESTED_REF" | awk '{print $1}')"
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$HOSTGATOR_HOST"
+          test -n "$HOSTGATOR_PORT"
+          test -n "$HOSTGATOR_USER"
+          test -n "$DEPLOY_PATH"
+          test -n "$HOSTGATOR_SSH_PRIVATE_KEY"
+          test -n "$HOSTGATOR_KNOWN_HOSTS"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install strict SSH material
+        env:
+          SSH_KEY_FILE: ${{ runner.temp }}/gisley-hostgator-deploy
+          KNOWN_HOSTS_FILE: ${{ runner.temp }}/gisley-hostgator-known-hosts
+        run: |
+          umask 077
+          printf '%s\n' "$HOSTGATOR_SSH_PRIVATE_KEY" > "$SSH_KEY_FILE"
+          printf '%s\n' "$HOSTGATOR_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          ssh-keygen -y -f "$SSH_KEY_FILE" >/dev/null
+          test -s "$KNOWN_HOSTS_FILE"
+
+      - name: Execute SHA deployment
+        env:
+          SSH_KEY_FILE: ${{ runner.temp }}/gisley-hostgator-deploy
+          KNOWN_HOSTS_FILE: ${{ runner.temp }}/gisley-hostgator-known-hosts
+        run: |
+          ssh \
+            -i "$SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
+            -p "$HOSTGATOR_PORT" \
+            "$HOSTGATOR_USER@$HOSTGATOR_HOST" \
+            "cd -- '$DEPLOY_PATH' && ALLOW_HOSTGATOR_DEPLOY=1 DEPLOY_BRANCH='$REQUESTED_REF' DEPLOY_SHA='$DEPLOY_SHA' PROJECT_ROOT='$DEPLOY_PATH' RUN_MIGRATIONS=0 HEALTH_URL='${{ vars.HEALTH_URL }}' scripts/deploy-hostgator.sh"
