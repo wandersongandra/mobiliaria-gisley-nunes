@@ -109,3 +109,15 @@ composer audit --no-interaction
 ```
 
 O CI executa esses gates em SQLite e roda novamente migrações e testes em MySQL 8.4.
+
+A suíte é hermética: `phpunit.xml` declara `DB_CONNECTION=sqlite` com `DB_DATABASE=:memory:` e os demais valores de ambiente necessários, então `composer run test` roda em qualquer checkout, sem MySQL e sem arquivo `.env`. Os `<env>` do PHPUnit usam `force="false"` (padrão), ou seja, variáveis já exportadas no ambiente vencem — é assim que o job MySQL do CI continua testando contra MySQL 8.4.
+
+Em máquinas sem o Composer no PATH, os mesmos gates podem ser executados diretamente:
+
+```bash
+vendor/bin/pint --test
+vendor/bin/phpstan analyse --no-progress
+vendor/bin/phpunit --testsuite=Feature
+```
+
+Não existe o comando `php artisan test` neste projeto, porque o `nunomaduro/collision` não é uma dependência.
