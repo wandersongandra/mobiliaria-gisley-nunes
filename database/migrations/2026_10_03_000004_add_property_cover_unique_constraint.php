@@ -18,9 +18,11 @@ return new class extends Migration
                 'GENERATED ALWAYS AS (CASE WHEN is_cover = 1 THEN property_id ELSE NULL END) VIRTUAL'
             );
         } else {
+            // Em MySQL a variante VIRTUAL mantém o índice único, mas evita a
+            // reconstrução da tabela que conflita com a FK de property_id.
             DB::statement(
                 'ALTER TABLE morada_property_photos ADD COLUMN cover_property_id CHAR(36) '.
-                'GENERATED ALWAYS AS (CASE WHEN is_cover = 1 THEN property_id ELSE NULL END) STORED'
+                'GENERATED ALWAYS AS (CASE WHEN is_cover = 1 THEN property_id ELSE NULL END) VIRTUAL'
             );
         }
 
