@@ -225,10 +225,10 @@ class R2Storage
             return null;
         }
 
-        $actualMime = strtolower((string) ($details['mime'] ?? ''));
+        $actualMime = strtolower($details['mime']);
         $expectedMime = strtolower(trim($contentType));
-        $width = (int) ($details[0] ?? 0);
-        $height = (int) ($details[1] ?? 0);
+        $width = $details[0];
+        $height = $details[1];
 
         if (! in_array($actualMime, ['image/jpeg', 'image/png', 'image/webp', 'image/avif'], true)
             || ! hash_equals($expectedMime, $actualMime)
