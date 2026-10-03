@@ -6,12 +6,15 @@ namespace App\Services;
 
 use Illuminate\Database\QueryException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class PropertyService
 {
+    private const PUBLIC_CATALOG_CACHE_KEY = 'public-property-catalog.v1';
+
     private const STATUSES = ['draft', 'published', 'archived'];
 
     private const PURPOSES = ['Comprar', 'Alugar'];
@@ -264,6 +267,7 @@ class PropertyService
                 throw $e;
             }
         });
+        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
 
         $property = $this->getProperty($propertyId);
         if (! $property) {
@@ -275,9 +279,15 @@ class PropertyService
 
     public function archiveProperty(string $id): bool
     {
-        return DB::table('morada_properties')
+        $updated = DB::table('morada_properties')
             ->where('id', $id)
             ->update(['status' => 'archived', 'is_featured' => 0, 'updated_at' => now()]) > 0;
+
+        if ($updated) {
+            Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+        }
+
+        return $updated;
     }
 
     public function listPhotos(string $propertyId): array
@@ -338,13 +348,14 @@ class PropertyService
 
             DB::table('morada_property_photos')->insert($photo + ['created_at' => now()]);
         });
+        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
 
         return $this->listPhotos($photo['property_id']);
     }
 
     public function removePhoto(string $photoId, bool $requireDraft = false): ?array
     {
-        return DB::transaction(function () use ($photoId, $requireDraft): ?array {
+        $removed = DB::transaction(function () use ($photoId, $requireDraft): ?array {
             $photo = DB::table('morada_property_photos')->where('id', $photoId)->first();
             if (! $photo) {
                 return null;
@@ -391,6 +402,12 @@ class PropertyService
 
             return (array) $photo;
         });
+
+        if ($removed !== null) {
+            Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+        }
+
+        return $removed;
     }
 
     public function reorderPhotos(string $propertyId, array $photoIds, bool $requireDraft = false): array
@@ -425,6 +442,7 @@ class PropertyService
                     ->update(['sort_order' => $index]);
             }
         });
+        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
 
         return $this->listPhotos($propertyId);
     }
@@ -461,6 +479,7 @@ class PropertyService
                 ->where('property_id', $property->id)
                 ->update(['is_cover' => 1]);
         });
+        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
 
         return $this->listPhotos($photo['property_id']);
     }
