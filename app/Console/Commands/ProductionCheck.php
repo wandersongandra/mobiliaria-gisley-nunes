@@ -16,6 +16,7 @@ class ProductionCheck extends Command
         $checks = [
             'APP_ENV is production' => config('app.env') === 'production',
             'APP_DEBUG is disabled' => config('app.debug') === false,
+            'PHP version is supported' => version_compare(PHP_VERSION, '8.2.0', '>='),
             'APP_KEY has a supported cipher length' => $this->hasValidAppKey(),
             'APP_URL and ADMIN_ORIGIN use HTTPS' => $this->usesHttps((string) config('app.url'))
                 && $this->usesHttps((string) config('app.admin_url')),
@@ -28,13 +29,14 @@ class ProductionCheck extends Command
                 && in_array(config('session.same_site'), ['lax', 'strict'], true),
             'session and cache drivers do not require a persistent worker' => in_array(config('session.driver'), ['file', 'database'], true)
                 && in_array(config('cache.default'), ['file', 'database'], true),
+            'queue driver does not require a persistent worker' => in_array(config('queue.default'), ['sync', 'database'], true),
             'R2 configuration is present' => $this->configured([
                 'services.r2.account_id', 'services.r2.bucket', 'services.r2.access_key_id', 'services.r2.secret_access_key',
             ]),
             'OAuth configuration is present' => $this->configured([
                 'services.manus_oauth.portal_url', 'services.manus_oauth.api_url', 'services.manus_oauth.project_id',
             ]),
-            'trusted proxy CIDRs are configured' => (array) config('gisley.network.trusted_proxies') !== [],
+            'trusted proxy CIDRs are configured' => $this->hasValidTrustedProxies(),
         ];
 
         $failed = false;
@@ -82,12 +84,46 @@ class ProductionCheck extends Command
 
     private function requiredExtensionsAvailable(): bool
     {
-        foreach (['ctype', 'fileinfo', 'json', 'mbstring', 'openssl', 'pdo', 'pdo_mysql'] as $extension) {
+        foreach (['ctype', 'curl', 'fileinfo', 'json', 'mbstring', 'openssl', 'pdo', 'pdo_mysql'] as $extension) {
             if (! extension_loaded($extension)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private function hasValidTrustedProxies(): bool
+    {
+        $proxies = config('gisley.network.trusted_proxies');
+        if (! is_array($proxies) || $proxies === []) {
+            return false;
+        }
+
+        foreach ($proxies as $proxy) {
+            if (! is_string($proxy) || ! $this->isValidIpOrCidr($proxy)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isValidIpOrCidr(string $value): bool
+    {
+        [$ip, $prefix] = array_pad(explode('/', trim($value), 2), 2, null);
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return false;
+        }
+
+        if ($prefix === null) {
+            return true;
+        }
+
+        if (! ctype_digit($prefix)) {
+            return false;
+        }
+
+        return (int) $prefix <= (str_contains($ip, ':') ? 128 : 32);
     }
 }

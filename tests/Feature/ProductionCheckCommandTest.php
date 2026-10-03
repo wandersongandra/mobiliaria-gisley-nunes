@@ -24,6 +24,7 @@ class ProductionCheckCommandTest extends TestCase
             'session.http_only' => true,
             'session.same_site' => 'lax',
             'cache.default' => 'file',
+            'queue.default' => 'sync',
             'services.r2.account_id' => 'account',
             'services.r2.bucket' => 'bucket',
             'services.r2.access_key_id' => 'key',
@@ -53,6 +54,19 @@ class ProductionCheckCommandTest extends TestCase
         $this->artisan('app:production-check')
             ->expectsOutputToContain('[FAIL] APP_ENV is production')
             ->expectsOutputToContain('[FAIL] APP_DEBUG is disabled')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_an_invalid_trusted_proxy_value(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'gisley.network.trusted_proxies' => ['*'],
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] trusted proxy CIDRs are configured')
             ->assertFailed();
     }
 }
