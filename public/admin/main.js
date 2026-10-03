@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
 let propertySearchTimer = 0;
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
@@ -23,6 +23,25 @@ function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (cha
 function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(value)) : 'agora'; }
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }
 
+function setButtonPending(button, pending, label = '') {
+  if (!button) return;
+  if (pending) {
+    button.dataset.originalHtml ||= button.innerHTML;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = label;
+    return;
+  }
+  if (button.dataset.originalHtml) button.innerHTML = button.dataset.originalHtml;
+  button.disabled = false;
+  button.removeAttribute('aria-busy');
+}
+
+function setFormPending(targetForm, pending, label = '') {
+  targetForm?.setAttribute('aria-busy', String(pending));
+  setButtonPending(targetForm?.querySelector('button[type="submit"]'), pending, label);
+}
+
 async function request(url, options = {}) {
   const headers = { Accept: 'application/json', ...(options.headers || {}) };
   const method = String(options.method || 'GET').toUpperCase();
@@ -32,7 +51,10 @@ async function request(url, options = {}) {
   }
   const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (response.status === 401) { showLogin(); throw new Error('AUTH_REQUIRED'); }
-  if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || 'REQUEST_FAILED'); }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || (response.status === 422 ? 'VALIDATION_FAILED' : 'REQUEST_FAILED'));
+  }
   return response.status === 204 ? null : response.json();
 }
 
@@ -145,6 +167,8 @@ function showDashboard() {
 }
 
 function renderProperties() {
+  document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
+  document.querySelectorAll('.property-filters input, .property-filters select').forEach((control) => { control.disabled = false; });
   const summary = state.propertySummary || { total: 0, active: 0, published: 0, draft: 0 };
   $('#metric-total').textContent = String(summary.active).padStart(2, '0');
   $('#metric-published').textContent = String(summary.published).padStart(2, '0');
@@ -292,7 +316,7 @@ async function saveProperty(event) {
   event.preventDefault();
 
   const button = $('#save-property');
-  button.disabled = true;
+  setButtonPending(button, true, 'Salvando…');
   toast('Salvando alterações…');
 
   const data = Object.fromEntries(new FormData(form));
@@ -333,21 +357,27 @@ async function saveProperty(event) {
     } else if (propertySaved) {
       await loadProperties();
       renderEditorPhotos();
-      toast(state.pendingFiles.length
-        ? 'Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.'
-        : data.status === 'published'
-          ? 'Imóvel salvo como rascunho. Confira a capa e tente publicar novamente.'
-          : 'Imóvel salvo, mas não foi possível concluir a atualização. Tente novamente.', 'error');
+      toast(['INVALID_IMAGE', 'INVALID_IMAGE_DIMENSIONS'].includes(error.message)
+        ? 'A imagem excede as dimensões permitidas. Escolha outra foto.'
+        : state.pendingFiles.length
+          ? 'Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.'
+          : data.status === 'published'
+            ? 'Imóvel salvo como rascunho. Confira a capa e tente publicar novamente.'
+            : 'Imóvel salvo, mas não foi possível concluir a atualização. Tente novamente.', 'error');
     } else {
       const message = error.message === 'SLUG_CONFLICT'
         ? 'Já existe um imóvel com esse endereço de URL.'
         : error.message === 'COVER_REQUIRED'
           ? 'Adicione uma foto de capa antes de publicar.'
-          : 'Não foi possível salvar. Confira os dados e tente novamente.';
+          : error.message === 'INVALID_PROPERTY_NUMBER'
+            ? 'Confira os valores numéricos e os limites dos campos.'
+            : error.message === 'INVALID_PROPERTY' || error.message === 'VALIDATION_FAILED'
+              ? 'Revise os campos obrigatórios e tente novamente.'
+              : 'Não foi possível salvar. Confira os dados e tente novamente.';
       toast(message, 'error');
     }
   } finally {
-    button.disabled = false;
+    setButtonPending(button, false);
   }
 }
 
@@ -357,7 +387,7 @@ async function archiveProperty() {
   const confirmed = window.confirm(`Arquivar "${state.editing.title}"? Ele deixará de aparecer no site público.`);
   if (!confirmed) return;
   const button = $('#archive-property');
-  if (button) button.disabled = true;
+  setButtonPending(button, true, 'Arquivando…');
   toast('Arquivando imóvel…');
   try {
     await request(`/api/admin/properties/${state.editing.id}`, { method: 'DELETE' });
@@ -366,7 +396,7 @@ async function archiveProperty() {
   } catch {
     toast('Não foi possível arquivar este imóvel.', 'error');
   } finally {
-    if (button) button.disabled = false;
+    setButtonPending(button, false);
   }
 }
 
@@ -402,7 +432,17 @@ async function uploadPendingFiles(propertyId) {
     const existingPhotoCount = state.editing?.photos?.length || 0;
     toast(`Enviando foto ${uploadedCount + 1}…`);
 
-    const dimensions = await imageDimensions(file);
+    let dimensions;
+    try {
+      dimensions = await imageDimensions(file);
+    } catch {
+      throw new Error('INVALID_IMAGE');
+    }
+    if (!Number.isInteger(dimensions.width) || !Number.isInteger(dimensions.height)
+      || dimensions.width < 1 || dimensions.height < 1
+      || dimensions.width > 20000 || dimensions.height > 20000) {
+      throw new Error('INVALID_IMAGE_DIMENSIONS');
+    }
     const presign = await request('/api/admin/uploads/presign', {
       method: 'POST',
       body: JSON.stringify({
@@ -443,31 +483,54 @@ async function uploadPendingFiles(propertyId) {
   clearPendingFiles();
 }
 
-async function removePhoto(id) { if (!state.editing) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
+async function removePhoto(id) {
+  if (!state.editing) return;
+  const button = document.querySelector(`[data-photo-remove="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, '…');
+  try {
+    await request(`/api/admin/photos/${id}`, { method: 'DELETE' });
+    const result = await request(`/api/admin/properties/${state.editing.id}`);
+    state.editing = result.property;
+    renderPhotos(state.editing.photos);
+  } catch {
+    toast('Não foi possível remover esta foto.', 'error');
+  } finally {
+    setButtonPending(button, false);
+  }
+}
 
 async function movePhoto(id, direction) {
   if (!state.editing) return;
-  const photos = [...state.editing.photos];
+  const previousPhotos = state.editing.photos;
+  const photos = [...previousPhotos];
   const index = photos.findIndex((photo) => photo.id === id);
   const target = index + direction;
   if (index < 0 || target < 0 || target >= photos.length) return;
+  const selector = direction < 0 ? 'data-photo-up' : 'data-photo-down';
+  const button = document.querySelector(`[${selector}="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, '…');
   [photos[index], photos[target]] = [photos[target], photos[index]];
-  state.editing.photos = photos;
-  renderPhotos(photos);
   try {
     const result = await request(`/api/admin/properties/${state.editing.id}/photos/order`, { method: 'PUT', body: JSON.stringify({ photoIds: photos.map((photo) => photo.id) }) });
     state.editing.photos = result.photos;
     renderPhotos(result.photos);
-  } catch { toast('Não foi possível reordenar.', 'error'); }
+  } catch {
+    toast('Não foi possível reordenar.', 'error');
+  } finally {
+    setButtonPending(button, false);
+  }
 }
 
 async function makeCover(id) {
   if (!state.editing) return;
+  const button = document.querySelector(`[data-photo-cover="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, '…');
   try {
     const result = await request(`/api/admin/photos/${id}/cover`, { method: 'PUT' });
     state.editing.photos = result.photos;
     renderPhotos(result.photos);
   } catch { toast('Não foi possível definir a capa.', 'error'); }
+  finally { setButtonPending(button, false); }
 }
 
 const siteForm = $('#site-settings-form');
@@ -478,6 +541,21 @@ let teamLoaded = false;
 let auditLoaded = false;
 
 function siteNotify(message, tone = 'success') { const status = $('#site-status'); status.textContent = message; status.dataset.tone = tone; }
+
+const instagramUrlInput = siteForm?.elements.instagramUrl;
+instagramUrlInput?.addEventListener('input', () => {
+  const value = instagramUrlInput.value.trim();
+  let valid = value === '';
+  if (value !== '') {
+    try {
+      const url = new URL(value);
+      valid = url.protocol === 'https:' && /(^|\.)instagram\.com$/i.test(url.hostname);
+    } catch {
+      valid = false;
+    }
+  }
+  instagramUrlInput.setCustomValidity(valid ? '' : 'Informe um endereço HTTPS válido do Instagram.');
+});
 
 function switchView(name) {
   document.querySelectorAll('.admin-view').forEach((view) => { view.hidden = view.id !== name; });
@@ -494,42 +572,69 @@ function renderTestimonials(items = []) {
 }
 
 async function loadSite() {
+  siteNotify('Carregando os dados do site…');
   try {
     const data = await request('/api/admin/site');
     const values = { whatsapp: data.site.whatsapp, phoneDisplay: data.site.phoneDisplay, email: data.site.email, address: data.site.address, crci: data.site.crci, area: data.site.area, instagramUrl: data.site.instagramUrl, instagramDisplay: data.site.instagramDisplay };
     for (const [key, value] of Object.entries(values)) { if (siteForm.elements[key]) siteForm.elements[key].value = value ?? ''; }
     renderTestimonials(data.testimonials);
-  } catch { siteNotify('Não foi possível carregar os dados do site.', 'error'); }
+    siteNotify('');
+  } catch {
+    siteLoaded = false;
+    siteNotify('Não foi possível carregar os dados do site. Tente novamente ao voltar a esta seção.', 'error');
+  }
 }
 
 async function saveSite(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(siteForm));
+  setFormPending(siteForm, true, 'Salvando…');
+  siteNotify('Salvando os dados do site…');
   try {
     await request('/api/admin/site', { method: 'PUT', body: JSON.stringify(data) });
     siteNotify('Dados do site salvos com sucesso.');
-  } catch { siteNotify('Não foi possível salvar. Tente novamente.', 'error'); }
+  } catch (error) {
+    siteNotify(error.message === 'INVALID_SITE_SETTINGS' || error.message === 'VALIDATION_FAILED'
+      ? 'Confira WhatsApp, e-mail, Instagram e limites dos campos.'
+      : 'Não foi possível salvar. Tente novamente.', 'error');
+  } finally {
+    setFormPending(siteForm, false);
+  }
 }
 
 async function addTestimonial(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(testimonialForm));
+  data.author = String(data.author || '').trim();
+  data.quote = String(data.quote || '').trim();
   if (!data.author || !data.quote) { siteNotify('Preencha nome e depoimento.', 'error'); return; }
+  setFormPending(testimonialForm, true, 'Adicionando…');
+  siteNotify('Adicionando depoimento…');
   try {
     const result = await request('/api/admin/testimonials', { method: 'POST', body: JSON.stringify({ author: data.author, quote: data.quote, location: data.location, year: data.year, sortOrder: 0 }) });
     renderTestimonials(result.testimonials);
     testimonialForm.reset();
     siteNotify('Depoimento adicionado.');
-  } catch { siteNotify('Não foi possível adicionar o depoimento.', 'error'); }
+  } catch (error) {
+    siteNotify(error.message === 'INVALID_TESTIMONIAL' || error.message === 'VALIDATION_FAILED'
+      ? 'Revise o nome, o depoimento e o ano informado.'
+      : 'Não foi possível adicionar o depoimento.', 'error');
+  } finally {
+    setFormPending(testimonialForm, false);
+  }
 }
 
 async function removeTestimonial(id) {
+  const button = document.querySelector(`[data-testimonial-remove="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, 'Removendo…');
+  siteNotify('Removendo depoimento…');
   try {
     await request(`/api/admin/testimonials/${id}`, { method: 'DELETE' });
     const data = await request('/api/admin/site');
     renderTestimonials(data.testimonials);
     siteNotify('Depoimento removido.');
   } catch { siteNotify('Não foi possível remover o depoimento.', 'error'); }
+  finally { setButtonPending(button, false); }
 }
 
 const auditLabels = {
@@ -564,6 +669,11 @@ function renderAudit() {
 
 async function loadAudit() {
   const status = $('#audit-status');
+  const button = $('#refresh-audit');
+  setButtonPending(button, true, 'Atualizando…');
+  if (status) { status.textContent = 'Carregando histórico…'; status.dataset.tone = ''; }
+  const list = $('#audit-list');
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando atividade…</div>';
   try {
     state.audit = (await request('/api/admin/audit?limit=100')).audit || [];
     renderAudit();
@@ -573,6 +683,8 @@ async function loadAudit() {
       status.textContent = 'Não foi possível carregar o histórico agora.';
       status.dataset.tone = 'error';
     }
+  } finally {
+    setButtonPending(button, false);
   }
 }
 
@@ -600,6 +712,7 @@ function renderTeam() {
   }).join('') : '<div class="empty-properties compact"><span>◎</span><h4>Nenhum acesso adicional.</h4><p>Adicione um corretor ou outro gestor para começar.</p></div>';
 
   list.querySelectorAll('[data-team-role]').forEach((button) => button.addEventListener('click', async () => {
+    setButtonPending(button, true, 'Salvando…');
     try {
       const email = button.dataset.teamRole;
       await request(`/api/admin/team/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify({ role: button.dataset.nextRole }) });
@@ -607,16 +720,21 @@ function renderTeam() {
       teamNotify('Permissão atualizada.');
     } catch (error) {
       teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser rebaixado.' : 'Não foi possível alterar a permissão.', 'error');
+    } finally {
+      setButtonPending(button, false);
     }
   }));
 
   list.querySelectorAll('[data-team-remove]').forEach((button) => button.addEventListener('click', async () => {
+    setButtonPending(button, true, 'Removendo…');
     try {
       await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamRemove)}`, { method: 'DELETE' });
       await loadTeam();
       teamNotify('Acesso removido.');
     } catch (error) {
       teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser removido.' : 'Não foi possível remover o acesso.', 'error');
+    } finally {
+      setButtonPending(button, false);
     }
   }));
 }
@@ -631,33 +749,40 @@ function renderTeamInvitations() {
   }).join('') : '<div class="empty-properties compact"><p>Nenhum convite pendente.</p></div>';
 
   list.querySelectorAll('[data-team-invite-revoke]').forEach((button) => button.addEventListener('click', async () => {
+    setButtonPending(button, true, 'Revogando…');
     try {
       await request(`/api/admin/team/invitations/${encodeURIComponent(button.dataset.teamInviteRevoke)}`, { method: 'DELETE' });
       await loadTeam();
       teamNotify('Convite revogado.');
     } catch {
       teamNotify('Não foi possível revogar este convite.', 'error');
+    } finally {
+      setButtonPending(button, false);
     }
   }));
 }
 
 async function loadTeam() {
+  const list = $('#team-list');
+  const invitations = $('#team-invitations');
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando acessos…</div>';
+  if (invitations) invitations.innerHTML = '<div class="empty-properties compact" role="status">Carregando convites…</div>';
   try {
     state.team = (await request('/api/admin/team')).team || [];
     state.invitations = (await request('/api/admin/team/invitations')).invitations || [];
     renderTeam();
     renderTeamInvitations();
   } catch {
-    const list = $('#team-list');
     if (list) list.innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar a equipe agora.</p></div>';
-    const invitations = $('#team-invitations');
-    if (invitations) invitations.innerHTML = '';
+    if (invitations) invitations.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os convites agora.</p></div>';
   }
 }
 
 async function createTeamInvitation(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(teamForm));
+  setFormPending(teamForm, true, 'Gerando…');
+  teamNotify('Gerando convite temporário…');
   try {
     const result = await request('/api/admin/team/invitations', { method: 'POST', body: JSON.stringify(data) });
     teamForm.reset();
@@ -683,6 +808,8 @@ async function createTeamInvitation(event) {
           : 'Não foi possível adicionar este acesso.',
       'error'
     );
+  } finally {
+    setFormPending(teamForm, false);
   }
 }
 
@@ -693,16 +820,27 @@ function ensureLeadsPanel() {
   const panel = document.createElement('section');
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><a class="outline-button lead-export" data-lead-export="csv" href="/api/admin/leads/export?format=csv">Exportar CSV</a><a class="outline-button lead-export" data-lead-export="json" href="/api/admin/leads/export?format=json">Exportar JSON</a></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
+  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><a class="outline-button lead-export" data-lead-export="csv" href="/api/admin/leads/export?format=csv">Exportar CSV</a><a class="outline-button lead-export" data-lead-export="json" href="/api/admin/leads/export?format=json">Exportar JSON</a></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
   metrics.insertAdjacentElement('afterend', panel);
   $('#lead-filters').addEventListener('submit', (event) => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
+    const dateFrom = String(values.get('date_from') || '');
+    const dateTo = String(values.get('date_to') || '');
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      const status = $('#lead-status');
+      status.textContent = 'A data inicial deve ser anterior ou igual à data final.';
+      status.dataset.tone = 'error';
+      return;
+    }
+    const status = $('#lead-status');
+    status.textContent = '';
+    status.dataset.tone = '';
     state.leadFilters = {
       ...state.leadFilters,
       status: String(values.get('status') || ''),
-      date_from: String(values.get('date_from') || ''),
-      date_to: String(values.get('date_to') || ''),
+      date_from: dateFrom,
+      date_to: dateTo,
       per_page: Number(values.get('per_page')) || 20,
       page: 1
     };
@@ -720,8 +858,11 @@ function ensureLeadsPanel() {
 function renderLeads() {
   const panel = ensureLeadsPanel();
   if (!panel) return;
+  panel.removeAttribute('aria-busy');
+  panel.querySelectorAll('#lead-filters button, #lead-filters input, #lead-filters select')
+    .forEach((control) => { control.disabled = false; });
   const list = $('#lead-list');
-  const newCount = state.leads.filter((lead) => lead.status === 'new').length;
+  const newCount = Number(state.leadSummary?.new || 0);
   $('#lead-total').textContent = `${newCount} ${newCount === 1 ? 'novo' : 'novos'}`;
   const accent = document.querySelector('.metric-accent');
   if (accent) accent.innerHTML = `<span class="metric-label">contatos novos</span><strong>${String(newCount).padStart(2, '0')}</strong><small>recebidos pelo site</small>`;
@@ -757,6 +898,7 @@ function renderLeads() {
     const confirmed = window.confirm(`Apagar permanentemente os dados de ${lead?.name || 'este contato'}? Esta ação não pode ser desfeita.`);
     if (!confirmed) return;
 
+    setButtonPending(button, true, 'Apagando…');
     try {
       await request(`/api/admin/leads/${button.dataset.leadDelete}`, { method: 'DELETE' });
       await loadLeads();
@@ -766,6 +908,7 @@ function renderLeads() {
         status.dataset.tone = 'success';
       }
     } catch {
+      setButtonPending(button, false);
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Não foi possível apagar os dados deste contato.';
@@ -777,7 +920,7 @@ function renderLeads() {
   list.querySelectorAll('[data-lead-save]').forEach((button) => button.addEventListener('click', async () => {
     const statusInput = list.querySelector(`[data-lead-status="${CSS.escape(button.dataset.leadSave)}"]`);
     if (!(statusInput instanceof HTMLSelectElement)) return;
-    button.disabled = true;
+    setButtonPending(button, true, 'Salvando…');
     try {
       await request(`/api/admin/leads/${button.dataset.leadSave}`, { method: 'PATCH', body: JSON.stringify({ status: statusInput.value }) });
       await loadLeads();
@@ -787,7 +930,7 @@ function renderLeads() {
         status.dataset.tone = 'success';
       }
     } catch {
-      button.disabled = false;
+      setButtonPending(button, false);
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Não foi possível atualizar este contato. Tente novamente.';
@@ -798,7 +941,11 @@ function renderLeads() {
 }
 
 async function loadLeads() {
-  const list = ensureLeadsPanel()?.querySelector('#lead-list');
+  const panel = ensureLeadsPanel();
+  const list = panel?.querySelector('#lead-list');
+  panel?.setAttribute('aria-busy', 'true');
+  panel?.querySelectorAll('[data-lead-page], #lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
+    .forEach((control) => { control.disabled = true; });
   if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando contatos…</div>';
   try {
     const params = new URLSearchParams();
@@ -808,15 +955,34 @@ async function loadLeads() {
     const result = await request(`/api/admin/leads?${params.toString()}`);
     state.leads = result.leads || [];
     state.leadPagination = result.pagination || null;
+    state.leadSummary = result.summary || { new: 0 };
     renderLeads();
-  } catch {
+  } catch (error) {
     ensureLeadsPanel();
     if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p></div>';
+    const status = $('#lead-status');
+    if (status) {
+      status.textContent = error.message === 'VALIDATION_FAILED'
+        ? 'Confira o intervalo de datas e os filtros.'
+        : 'Não foi possível carregar os contatos agora.';
+      status.dataset.tone = 'error';
+    }
+    if (panel) {
+      panel.removeAttribute('aria-busy');
+      const pagination = state.leadPagination;
+      panel.querySelector('[data-lead-page="previous"]').disabled = !pagination || pagination.current_page <= 1;
+      panel.querySelector('[data-lead-page="next"]').disabled = !pagination || pagination.current_page >= pagination.last_page;
+      panel.querySelectorAll('#lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
+        .forEach((control) => { control.disabled = false; });
+    }
   }
 }
 
 async function loadProperties() {
   const list = $('#property-list');
+  const controls = document.querySelectorAll('.property-filters input, .property-filters select, #property-page-previous, #property-page-next');
+  controls.forEach((control) => { control.disabled = true; });
+  document.querySelector('.properties-table-wrap')?.setAttribute('aria-busy', 'true');
   if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando imóveis…</div>';
   try {
     const params = new URLSearchParams();
@@ -834,6 +1000,16 @@ async function loadProperties() {
     renderProperties();
   } catch {
     if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora.</p></div>';
+    document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
+    controls.forEach((control) => {
+      if (control.matches('#property-page-previous')) {
+        control.disabled = !state.propertyPagination || state.propertyPagination.current_page <= 1;
+      } else if (control.matches('#property-page-next')) {
+        control.disabled = !state.propertyPagination || state.propertyPagination.current_page >= state.propertyPagination.last_page;
+      } else {
+        control.disabled = false;
+      }
+    });
   }
 }
 

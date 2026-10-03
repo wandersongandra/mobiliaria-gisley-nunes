@@ -72,3 +72,5 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 .logout-all-button{width:100%;margin-bottom:7px;padding:8px 10px;border:0;background:transparent;color:#7b898a;font-size:9px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .logout-all-button:hover:not(:disabled){color:#123c46}
 .logout-all-button:disabled,.logout-button:disabled{opacity:.55;cursor:not-allowed}
+
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:3px solid rgba(201,130,91,.7);outline-offset:2px}
