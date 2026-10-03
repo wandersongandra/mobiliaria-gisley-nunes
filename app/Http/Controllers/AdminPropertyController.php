@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\AdminRequestContext;
 use App\Services\AdminAccessService;
+use App\Services\CriticalAuditService;
 use App\Services\CrmService;
 use App\Services\PropertyService;
 use App\Services\R2Storage;
@@ -29,6 +30,7 @@ class AdminPropertyController extends Controller
         private readonly AdminAccessService $access,
         private readonly PropertyService $properties,
         private readonly CrmService $crm,
+        private readonly CriticalAuditService $criticalAudit,
         private readonly R2Storage $storage,
     ) {}
 
@@ -116,10 +118,12 @@ class AdminPropertyController extends Controller
     public function archive(Request $request, string $id)
     {
         $this->assertId($id);
-        if (! $this->properties->archiveProperty($id)) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-        $this->audit($this->admin($request), 'property.archive', 'property', $id);
+        $admin = $this->admin($request);
+        $this->criticalAudit->run($admin, 'property.archive', 'property', $id, function () use ($id): void {
+            if (! $this->properties->archiveProperty($id)) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+        });
 
         return response()->noContent();
     }
@@ -290,20 +294,18 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
         }
 
-        $removed = $this->properties->removePhoto(
-            $id,
-            ! $this->access->hasCapability($admin, 'property.publish')
-        );
-        if (! $removed) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
+        $removed = $this->criticalAudit->run($admin, 'photo.remove', 'photo', $id, function () use ($id, $admin): array {
+            return $this->properties->removePhoto(
+                $id,
+                ! $this->access->hasCapability($admin, 'property.publish')
+            ) ?? throw new RuntimeException('NOT_FOUND');
+        }, ['propertyId' => $property['id']]);
 
         try {
             $this->storage->delete((string) $removed['storage_path']);
         } catch (\Throwable $error) {
             report($error);
         }
-        $this->audit($admin, 'photo.remove', 'photo', $id, ['propertyId' => $removed['property_id']]);
 
         return response()->noContent();
     }

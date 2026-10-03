@@ -306,6 +306,7 @@ class CrmService
             'id' => (string) Str::uuid(),
             'actor_email' => $admin['email'] ?? 'system',
             'actor_open_id' => $admin['openId'] ?? null,
+            'actor_user_id' => $admin['userId'] ?? null,
             'action' => substr($action, 0, 80),
             'entity_type' => substr($entityType, 0, 60),
             'entity_id' => $entityId ? substr($entityId, 0, 191) : null,

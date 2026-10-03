@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\AdminRequestContext;
 use App\Services\AdminAccessService;
+use App\Services\CriticalAuditService;
 use App\Services\CrmService;
 use App\Support\Clock;
 use App\Support\Tokens;
@@ -21,6 +22,7 @@ class AdminCrmController extends Controller
     public function __construct(
         private readonly AdminAccessService $access,
         private readonly CrmService $crm,
+        private readonly CriticalAuditService $criticalAudit,
     ) {}
 
     public function panel()
@@ -41,21 +43,28 @@ class AdminCrmController extends Controller
 
     public function updateSite(Request $request): JsonResponse
     {
-        $site = $this->crm->saveSiteSettings($request->all());
-        $this->audit($this->admin($request), 'site.update', 'site', '1');
+        $admin = $this->admin($request);
+        $site = $this->criticalAudit->run(
+            $admin,
+            'site.update',
+            'site',
+            '1',
+            fn (): array => $this->crm->saveSiteSettings($request->all()),
+        );
 
         return response()->json(['site' => $site]);
     }
 
     public function createTestimonial(Request $request): JsonResponse
     {
-        $created = $this->crm->addTestimonial($request->all());
-        $this->audit(
-            $this->admin($request),
+        $admin = $this->admin($request);
+        $created = $this->criticalAudit->run(
+            $admin,
             'testimonial.create',
             'testimonial',
-            $created['id'],
-            ['author' => (string) $request->input('author', '')]
+            null,
+            fn (): array => $this->crm->addTestimonial($request->all()),
+            ['author' => (string) $request->input('author', '')],
         );
 
         return response()->json(['testimonials' => $created['testimonials']], 201);
@@ -64,10 +73,12 @@ class AdminCrmController extends Controller
     public function removeTestimonial(Request $request, string $id)
     {
         $this->assertId($id);
-        if (! $this->crm->removeTestimonial($id)) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-        $this->audit($this->admin($request), 'testimonial.remove', 'testimonial', $id);
+        $admin = $this->admin($request);
+        $this->criticalAudit->run($admin, 'testimonial.remove', 'testimonial', $id, function () use ($id): void {
+            if (! $this->crm->removeTestimonial($id)) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+        });
 
         return response()->noContent();
     }
@@ -262,16 +273,16 @@ class AdminCrmController extends Controller
 
         $token = Tokens::random(32);
         $expiresAtMs = Clock::nowMs() + CrmService::INVITATION_TTL_MS;
-        $this->crm->createInvitation([
-            'tokenHash' => hash('sha256', $token),
-            'email' => $email,
-            'name' => $name,
-            'role' => $role,
-            'invitedBy' => $admin['email'],
-            'expiresAtMs' => $expiresAtMs,
-        ]);
-
-        $this->audit($admin, 'team.invite', 'staff', $email, [
+        $this->criticalAudit->run($admin, 'team.invite', 'staff', $email, function () use ($token, $email, $name, $role, $admin, $expiresAtMs): void {
+            $this->crm->createInvitation([
+                'tokenHash' => hash('sha256', $token),
+                'email' => $email,
+                'name' => $name,
+                'role' => $role,
+                'invitedBy' => $admin['email'],
+                'expiresAtMs' => $expiresAtMs,
+            ]);
+        }, [
             'role' => $role,
             'expiresAtMs' => $expiresAtMs,
             'tokenStoredAsHash' => true,
@@ -296,14 +307,12 @@ class AdminCrmController extends Controller
     public function revokeInvitation(Request $request, string $email)
     {
         $email = $this->crm->email(rawurldecode($email));
-        $revoked = $this->crm->revokeInvitations($email);
-        if ($revoked < 1) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-
-        $this->audit($this->admin($request), 'team.invite.revoke', 'staff', $email, [
-            'invitationsRevoked' => $revoked,
-        ]);
+        $admin = $this->admin($request);
+        $this->criticalAudit->run($admin, 'team.invite.revoke', 'staff', $email, function () use ($email): void {
+            if ($this->crm->revokeInvitations($email) < 1) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+        });
 
         return response()->noContent();
     }
@@ -324,18 +333,10 @@ class AdminCrmController extends Controller
             throw new RuntimeException('INVALID_TEAM_MEMBER');
         }
 
-        $member = $this->crm->bindPairing(
-            hash('sha256', $code), $email, $name, $role, $admin['email']
-        );
-        if (! $member) {
-            return response()->json(['error' => 'INVALID_PAIRING_CODE'], 400);
-        }
-
-        $this->audit($admin, 'team.create', 'staff', $email, [
-            'role' => $member['role'],
-            'active' => (bool) $member['active'],
-            'openIdBound' => true,
-        ]);
+        $member = $this->criticalAudit->run($admin, 'team.create', 'staff', $email, function () use ($code, $email, $name, $role, $admin): array {
+            return $this->crm->bindPairing(hash('sha256', $code), $email, $name, $role, $admin['email'])
+                ?? throw new RuntimeException('INVALID_PAIRING_CODE');
+        }, ['openIdBound' => true]);
 
         return response()->json([
             'member' => $this->crm->staffView($member, $admin, $this->access),
@@ -396,24 +397,21 @@ class AdminCrmController extends Controller
             return response()->json(['error' => 'BOOTSTRAP_MANAGER_PROTECTED'], 400);
         }
 
-        $member = $this->crm->saveStaff([
-            'email' => $email,
-            'openId' => $targetOpenId,
-            'name' => $patch['name'] ?? $current['name'],
-            'role' => $isBootstrap ? 'manager' : ($patch['role'] ?? $current['role']),
-            'active' => $patch['active'] ?? (bool) $current['active'],
-            'invitedBy' => $current['invited_by'] ?: $admin['email'],
-        ]);
+        $member = $this->criticalAudit->run($admin, 'team.update', 'staff', $email, function () use ($email, $targetOpenId, $patch, $current, $isBootstrap, $admin): array {
+            $member = $this->crm->saveStaff([
+                'email' => $email,
+                'openId' => $targetOpenId,
+                'name' => $patch['name'] ?? $current['name'],
+                'role' => $isBootstrap ? 'manager' : ($patch['role'] ?? $current['role']),
+                'active' => $patch['active'] ?? (bool) $current['active'],
+                'invitedBy' => $current['invited_by'] ?: $admin['email'],
+            ]);
+            if ($targetOpenId !== '') {
+                $this->access->revokeAllForOpenId($targetOpenId);
+            }
 
-        if ($targetOpenId !== '') {
-            $this->access->revokeAll($targetOpenId);
-        }
-
-        $this->audit($admin, 'team.update', 'staff', $email, [
-            'role' => $member['role'],
-            'active' => (bool) $member['active'],
-            'sessionsRevoked' => true,
-        ]);
+            return $member;
+        }, ['sessionsRevoked' => true]);
 
         return response()->json([
             'member' => $this->crm->staffView($member, $admin, $this->access),
@@ -437,14 +435,14 @@ class AdminCrmController extends Controller
             return response()->json(['error' => 'BOOTSTRAP_MANAGER_PROTECTED'], 400);
         }
 
-        if (! $this->crm->removeStaff($email)) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-        if ($openId !== '') {
-            $this->access->revokeAll($openId);
-        }
-
-        $this->audit($admin, 'team.remove', 'staff', $email, ['sessionsRevoked' => true]);
+        $this->criticalAudit->run($admin, 'team.remove', 'staff', $email, function () use ($email, $openId): void {
+            if (! $this->crm->removeStaff($email)) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+            if ($openId !== '') {
+                $this->access->revokeAllForOpenId($openId);
+            }
+        }, ['sessionsRevoked' => true]);
 
         return response()->noContent();
     }

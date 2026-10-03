@@ -195,6 +195,16 @@ class AdminAccessService
             ->update(['revoked_at' => now()]);
     }
 
+    public function revokeAllForOpenId(string $openId): int
+    {
+        $userId = DB::table('morada_oauth_identities')
+            ->where('provider', (string) config('services.manus_oauth.provider', 'manus'))
+            ->where('provider_subject', $openId)
+            ->value('user_id');
+
+        return is_string($userId) && $userId !== '' ? $this->revokeAll($userId) : 0;
+    }
+
     public function trimSessions(string $userId, int $max): void
     {
         $max = max(1, min(10, $max));

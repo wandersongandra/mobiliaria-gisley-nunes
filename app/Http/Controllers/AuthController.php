@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\AdminAccessService;
+use App\Services\CriticalAuditService;
 use App\Services\CrmService;
 use App\Support\Clock;
 use App\Support\Tokens;
@@ -19,6 +20,7 @@ class AuthController extends Controller
     public function __construct(
         private readonly AdminAccessService $access,
         private readonly CrmService $crm,
+        private readonly CriticalAuditService $criticalAudit,
     ) {}
 
     public function login(Request $request): RedirectResponse|Response
@@ -213,10 +215,15 @@ class AuthController extends Controller
             return response()->json(['error' => 'AUTH_REQUIRED', 'localLoggedOut' => true], 401);
         }
 
-        $revoked = $this->access->revokeAll($admin['userId']);
+        $revoked = $this->criticalAudit->run(
+            $admin,
+            'auth.logout_all',
+            'admin_user',
+            (string) $admin['userId'],
+            fn (): int => $this->access->revokeAll($admin['userId']),
+        );
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        $this->auditAuthentication($admin, 'auth.logout_all', ['sessionsRevoked' => $revoked]);
 
         return response()->json(['ok' => true]);
     }
