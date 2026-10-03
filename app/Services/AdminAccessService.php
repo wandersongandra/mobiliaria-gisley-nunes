@@ -6,6 +6,7 @@ use App\Support\Clock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class AdminAccessService
 {
@@ -129,6 +130,12 @@ class AdminAccessService
             'role' => $bootstrap ? 'manager' : (((string) ($access->role ?? 'editor')) === 'manager' ? 'manager' : 'editor'),
             'bootstrap' => $bootstrap,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public function requireCurrent(Request $request): array
+    {
+        return $this->current($request) ?? throw new RuntimeException('AUTH_REQUIRED');
     }
 
     public function establish(Request $request, array $identity, string $role): array

@@ -215,7 +215,7 @@ class AuthController extends Controller
             return response()->json(['error' => 'AUTH_REQUIRED', 'localLoggedOut' => true], 401);
         }
 
-        $revoked = $this->criticalAudit->run(
+        $this->criticalAudit->run(
             $admin,
             'auth.logout_all',
             'admin_user',

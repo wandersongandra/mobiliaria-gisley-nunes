@@ -43,7 +43,7 @@ class AdminCrmController extends Controller
 
     public function updateSite(Request $request): JsonResponse
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $site = $this->criticalAudit->run(
             $admin,
             'site.update',
@@ -57,7 +57,7 @@ class AdminCrmController extends Controller
 
     public function createTestimonial(Request $request): JsonResponse
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $created = $this->criticalAudit->run(
             $admin,
             'testimonial.create',
@@ -73,7 +73,7 @@ class AdminCrmController extends Controller
     public function removeTestimonial(Request $request, string $id)
     {
         $this->assertId($id);
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $this->criticalAudit->run($admin, 'testimonial.remove', 'testimonial', $id, function () use ($id): void {
             if (! $this->crm->removeTestimonial($id)) {
                 throw new RuntimeException('NOT_FOUND');
@@ -245,7 +245,7 @@ class AdminCrmController extends Controller
 
     public function team(Request $request): JsonResponse
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
 
         return response()->json([
             'team' => array_map(
@@ -262,7 +262,7 @@ class AdminCrmController extends Controller
 
     public function createInvitation(Request $request): JsonResponse
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $email = $this->crm->email($request->input('email'), 'INVALID_INVITATION');
         $name = trim((string) $request->input('name', ''));
         $role = (string) $request->input('role', 'editor');
@@ -307,7 +307,7 @@ class AdminCrmController extends Controller
     public function revokeInvitation(Request $request, string $email)
     {
         $email = $this->crm->email(rawurldecode($email));
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $this->criticalAudit->run($admin, 'team.invite.revoke', 'staff', $email, function () use ($email): void {
             if ($this->crm->revokeInvitations($email) < 1) {
                 throw new RuntimeException('NOT_FOUND');
@@ -319,7 +319,7 @@ class AdminCrmController extends Controller
 
     public function createTeamMember(Request $request): JsonResponse
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $email = $this->crm->email($request->input('email'), 'INVALID_TEAM_MEMBER');
         $code = (string) $request->input('pairingCode', '');
         $name = trim((string) $request->input('name', ''));
@@ -345,7 +345,7 @@ class AdminCrmController extends Controller
 
     public function updateTeamMember(Request $request, string $email): JsonResponse
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $email = $this->crm->email(rawurldecode($email));
         $current = $this->crm->findStaffByEmail($email);
         if (! $current) {
@@ -420,7 +420,7 @@ class AdminCrmController extends Controller
 
     public function removeTeamMember(Request $request, string $email)
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $email = $this->crm->email(rawurldecode($email));
         $current = $this->crm->findStaffByEmail($email);
         if (! $current) {

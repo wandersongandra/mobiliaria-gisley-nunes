@@ -68,7 +68,7 @@ class AdminPropertyController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $manager = $this->access->hasCapability($admin, 'property.publish');
         if (! $manager && ! $this->draftOnlyRequest($request)) {
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
@@ -96,7 +96,7 @@ class AdminPropertyController extends Controller
     public function update(Request $request, string $id): JsonResponse
     {
         $this->assertId($id);
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $current = $this->properties->getProperty($id);
         if (! $current) {
             return response()->json(['error' => 'NOT_FOUND'], 404);
@@ -118,7 +118,7 @@ class AdminPropertyController extends Controller
     public function archive(Request $request, string $id)
     {
         $this->assertId($id);
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $this->criticalAudit->run($admin, 'property.archive', 'property', $id, function () use ($id): void {
             if (! $this->properties->archiveProperty($id)) {
                 throw new RuntimeException('NOT_FOUND');
@@ -280,7 +280,7 @@ class AdminPropertyController extends Controller
     public function removePhoto(Request $request, string $id)
     {
         $this->assertId($id);
-        $admin = $this->admin($request);
+        $admin = $this->access->requireCurrent($request);
         $photo = $this->properties->getPhoto($id);
         if (! $photo) {
             return response()->json(['error' => 'NOT_FOUND'], 404);

@@ -2,17 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Services\AdminAccessService;
 use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Tests\Concerns\CreatesAdminIdentity;
 use Tests\TestCase;
 
 class SecurityContractTest extends TestCase
 {
-    use RefreshDatabase;
     use CreatesAdminIdentity;
+    use RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -120,6 +123,25 @@ class SecurityContractTest extends TestCase
         $audit = DB::table('morada_audit_log')->where('action', 'auth.logout_all')->first();
         $this->assertNotNull($audit);
         $this->assertStringNotContainsString('admin_jti', (string) $audit->details);
+    }
+
+    public function test_critical_boundary_revalidates_a_session_after_logout_all(): void
+    {
+        $session = $this->createAdminSession('manager');
+        $record = DB::table('morada_admin_sessions')->where('jti', $session['admin_jti'])->first();
+        $this->assertNotNull($record);
+
+        $request = Request::create('/api/admin/team', 'POST');
+        $request->setLaravelSession($this->app['session']->driver());
+        $request->session()->put('admin_jti', $session['admin_jti']);
+        $access = app(AdminAccessService::class);
+        $this->assertNotNull($access->current($request));
+
+        $access->revokeAll((string) $record->user_id);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('AUTH_REQUIRED');
+        $access->requireCurrent($request);
     }
 
     private function propertyInput(string $title, array $overrides = []): array
