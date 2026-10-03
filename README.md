@@ -96,10 +96,11 @@ As fotos ficam no R2 e não estão dentro do dump MySQL; mantenha uma política 
 Depois do deploy, confirme que o domínio está atendendo Laravel pelo PHP-FPM configurado no cPanel:
 
 ```bash
-curl --fail --silent --show-error https://SEU_DOMINIO/_app/health | grep -Fx '{"status":"ok"}'
+curl --fail --silent --show-error https://SEU_DOMINIO/health/live | grep -Fx '{"status":"ok"}'
+curl --fail --silent --show-error https://SEU_DOMINIO/health/ready | grep -Fx '{"status":"ok"}'
 ```
 
-O endpoint deve responder HTTP 200 com `{"status":"ok"}`. A comparação do corpo evita tratar uma página estática de fallback como health check. Isso valida o roteamento HTTP pelo runtime Laravel/PHP-FPM; a conexão com o banco pode ser conferida separadamente com `php artisan migrate:status`. Não publique `phpinfo()`.
+Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. A comparação do corpo evita tratar uma página estática de fallback como health check. `live` confirma o runtime Laravel/PHP-FPM e `ready` confirma também a conexão de banco, sem expor detalhes internos. `/_app/health` continua como alias compatível. Não publique `phpinfo()`.
 
 ## Gates locais e CI
 
@@ -107,6 +108,7 @@ O endpoint deve responder HTTP 200 com `{"status":"ok"}`. A comparação do corp
 composer run format:check
 composer run analyse
 composer run test
+composer validate --strict
 composer audit --no-interaction
 ```
 

@@ -61,10 +61,11 @@ Use `.env.example` como referência, nunca como fonte de credenciais de produç�
 Após configurar o domínio com PHP-FPM, valide pelo próprio domínio:
 
 ```bash
-curl --fail --silent --show-error https://SEU_DOMINIO/_app/health | grep -Fx '{"status":"ok"}'
+curl --fail --silent --show-error https://SEU_DOMINIO/health/live | grep -Fx '{"status":"ok"}'
+curl --fail --silent --show-error https://SEU_DOMINIO/health/ready | grep -Fx '{"status":"ok"}'
 ```
 
-O endpoint deve responder HTTP 200 com `{"status":"ok"}`. Comparar o corpo evita considerar uma página estática de fallback como uma resposta válida. Isso verifica o caminho HTTP pelo Laravel em execução; use `php artisan migrate:status` para confirmar separadamente o acesso ao banco. Não exponha `phpinfo()`.
+Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. Comparar o corpo evita considerar uma página estática de fallback como uma resposta válida. `live` verifica o runtime Laravel e `ready` confirma também o banco, sem expor detalhes internos. `/_app/health` permanece como alias compatível. Não exponha `phpinfo()`.
 
 As instruções de backup e restauração do MySQL estão em `README.md`. Restaure primeiro em um banco vazio separado e valide antes de apontá-lo para o domínio. As fotos ficam no R2 e precisam de uma política independente de cópia/recuperação.
 
