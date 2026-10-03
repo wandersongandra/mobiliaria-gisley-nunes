@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 
 class AdminPropertyController extends Controller
@@ -28,14 +29,36 @@ class AdminPropertyController extends Controller
         private readonly R2Storage $storage,
     ) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'status' => ['sometimes', 'nullable', 'string', Rule::in(['draft', 'published', 'archived'])],
+            'per_page' => ['sometimes', 'integer', 'between:20,100'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+        ]);
+        $paginator = $this->properties->paginateAdminProperties([
+            'search' => trim((string) ($filters['search'] ?? '')),
+            'status' => $filters['status'] ?? null,
+            'per_page' => (int) ($filters['per_page'] ?? 20),
+            'page' => (int) ($filters['page'] ?? 1),
+        ]);
+
         return response()->json([
             'properties' => array_map(
                 fn (array $row): array => $this->properties->adminProperty($row),
-                $this->properties->listProperties()
+                $paginator->items()
             ),
-        ]);
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+            ],
+            'summary' => $this->properties->propertySummary(),
+        ])->header('Cache-Control', 'no-store');
     }
 
     public function store(Request $request): JsonResponse

@@ -5,6 +5,7 @@ namespace App\Services;
 // Escopo atual: Single-tenant. Não há isolamento por proprietário/imobiliária nesta versão.
 
 use Illuminate\Database\QueryException;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -35,6 +36,60 @@ class PropertyService
         }
 
         return $this->hydratePhotos($query->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function paginateAdminProperties(array $filters): LengthAwarePaginator
+    {
+        $query = DB::table('morada_properties as p')
+            ->leftJoin('morada_property_photos as ph', function ($join): void {
+                $join->on('ph.property_id', '=', 'p.id')->where('ph.is_cover', '=', 1);
+            })
+            ->select('p.*', DB::raw("COALESCE(ph.url, '') AS cover_url"));
+
+        if (isset($filters['status'])) {
+            $query->where('p.status', $filters['status']);
+        }
+
+        if (isset($filters['search']) && $filters['search'] !== '') {
+            $search = '%'.$filters['search'].'%';
+            $query->where(function ($query) use ($search): void {
+                $query->where('p.title', 'like', $search)
+                    ->orWhere('p.location', 'like', $search)
+                    ->orWhere('p.city', 'like', $search)
+                    ->orWhere('p.type', 'like', $search)
+                    ->orWhere('p.slug', 'like', $search);
+            });
+        }
+
+        $paginator = $query
+            ->orderByRaw("(p.status = 'archived') ASC")
+            ->orderByDesc('p.updated_at')
+            ->orderByDesc('p.id')
+            ->paginate($filters['per_page'], ['*'], 'page', $filters['page']);
+
+        $rows = $this->hydratePhotos(
+            $paginator->getCollection()->map(static fn ($row): array => (array) $row)->all()
+        );
+        $paginator->setCollection(collect($rows));
+
+        return $paginator;
+    }
+
+    public function propertySummary(): array
+    {
+        $counts = DB::table('morada_properties')
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw("SUM(CASE WHEN status <> 'archived' THEN 1 ELSE 0 END) AS active")
+            ->selectRaw("SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published")
+            ->selectRaw("SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft")
+            ->first();
+
+        return [
+            'total' => (int) ($counts->total ?? 0),
+            'active' => (int) ($counts->active ?? 0),
+            'published' => (int) ($counts->published ?? 0),
+            'draft' => (int) ($counts->draft ?? 0),
+        ];
     }
 
     public function getProperty(string $id): ?array

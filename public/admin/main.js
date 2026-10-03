@@ -11,7 +11,8 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], leads: [], leadPagination: null, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
+const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+let propertySearchTimer = 0;
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -39,6 +40,9 @@ function clearSensitiveState() {
   state.user = null;
   state.csrfToken = '';
   state.properties = [];
+  state.propertyPagination = null;
+  state.propertySummary = null;
+  state.propertyFilters = { search: '', status: '', page: 1, per_page: 20 };
   state.leads = [];
   state.leadPagination = null;
   state.leadFilters = { status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
@@ -46,7 +50,7 @@ function clearSensitiveState() {
   state.invitations = [];
   state.audit = [];
   state.editing = null;
-  state.search = '';
+  clearTimeout(propertySearchTimer);
   clearPendingFiles();
   if (dialog?.open) dialog.close();
   const propertyList = $('#property-list');
@@ -141,22 +145,34 @@ function showDashboard() {
 }
 
 function renderProperties() {
-  const published = state.properties.filter((item) => item.status === 'published').length;
-  const drafts = state.properties.filter((item) => item.status === 'draft').length;
-  const active = state.properties.filter((item) => item.status !== 'archived').length;
-  $('#metric-total').textContent = String(active).padStart(2, '0');
-  $('#metric-published').textContent = String(published).padStart(2, '0');
-  $('#metric-draft').textContent = String(drafts).padStart(2, '0');
-  const query = String(state.search || '').trim().toLowerCase();
-  const items = query ? state.properties.filter((item) => `${item.title} ${item.location} ${item.type}`.toLowerCase().includes(query)) : state.properties;
-  $('#side-count').textContent = state.properties.length;
+  const summary = state.propertySummary || { total: 0, active: 0, published: 0, draft: 0 };
+  $('#metric-total').textContent = String(summary.active).padStart(2, '0');
+  $('#metric-published').textContent = String(summary.published).padStart(2, '0');
+  $('#metric-draft').textContent = String(summary.draft).padStart(2, '0');
+  const query = String(state.propertyFilters.search || '').trim();
+  const statusFilter = state.propertyFilters.status;
+  const items = state.properties;
+  $('#side-count').textContent = summary.total;
+  $('#property-search').value = query;
+  $('#property-status-filter').value = statusFilter;
+  $('#property-per-page').value = String(state.propertyFilters.per_page);
   $('#property-list').innerHTML = items.length ? items.map((item) => {
     const canEdit = state.user?.role === 'manager' || item.status === 'draft';
     const action = canEdit
       ? `<button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button>`
       : '<span class="row-locked" title="Somente Gestor pode alterar imóvel publicado ou arquivado">Somente Gestor</span>';
     return `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span>${action}</article>`;
-  }).join('') : (query ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo de busca.</p></div>' : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>');
+  }).join('') : (summary.total > 0 && (query || statusFilter)
+    ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo ou status.</p></div>'
+    : summary.total > 0
+      ? '<div class="empty-properties" role="status">Carregando imóveis…</div>'
+      : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>');
+  const pagination = state.propertyPagination;
+  $('#property-page-summary').textContent = pagination?.total
+    ? `Exibindo ${pagination.from}–${pagination.to} de ${pagination.total}`
+    : 'Nenhum imóvel encontrado';
+  $('#property-page-previous').disabled = !pagination || pagination.current_page <= 1;
+  $('#property-page-next').disabled = !pagination || pagination.current_page >= pagination.last_page;
   document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => openEditor(state.properties.find((item) => item.id === button.dataset.edit))));
   $('[data-empty-new]')?.addEventListener('click', () => openEditor());
 }
@@ -309,15 +325,13 @@ async function saveProperty(event) {
       state.editing = published.property;
     }
 
-    state.properties = (await request('/api/admin/properties')).properties;
-    renderProperties();
+    await loadProperties();
     dialog.close();
   } catch (error) {
     if (error.message === 'AUTH_REQUIRED') {
       toast('Sua sessão expirou.', 'error');
     } else if (propertySaved) {
-      state.properties = (await request('/api/admin/properties').catch(() => ({ properties: state.properties }))).properties;
-      renderProperties();
+      await loadProperties();
       renderEditorPhotos();
       toast(state.pendingFiles.length
         ? 'Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.'
@@ -347,8 +361,7 @@ async function archiveProperty() {
   toast('Arquivando imóvel…');
   try {
     await request(`/api/admin/properties/${state.editing.id}`, { method: 'DELETE' });
-    state.properties = (await request('/api/admin/properties')).properties;
-    renderProperties();
+    await loadProperties();
     dialog.close();
   } catch {
     toast('Não foi possível arquivar este imóvel.', 'error');
@@ -802,6 +815,28 @@ async function loadLeads() {
   }
 }
 
+async function loadProperties() {
+  const list = $('#property-list');
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando imóveis…</div>';
+  try {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(state.propertyFilters)) {
+      if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
+    }
+    const result = await request(`/api/admin/properties?${params.toString()}`);
+    state.properties = result.properties || [];
+    state.propertyPagination = result.pagination || null;
+    state.propertySummary = result.summary || { total: 0, active: 0, published: 0, draft: 0 };
+    if (state.propertyPagination?.last_page > 0 && state.propertyFilters.page > state.propertyPagination.last_page) {
+      state.propertyFilters.page = state.propertyPagination.last_page;
+      return loadProperties();
+    }
+    renderProperties();
+  } catch {
+    if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora.</p></div>';
+  }
+}
+
 async function init() {
   try {
     const session = await request('/api/admin/session');
@@ -809,9 +844,7 @@ async function init() {
     if (!session.authenticated) return showLogin();
     state.user = session.user;
     showDashboard();
-    const [properties] = await Promise.all([request('/api/admin/properties'), loadLeads()]);
-    state.properties = properties.properties;
-    renderProperties();
+    await Promise.all([loadProperties(), loadLeads()]);
   } catch (error) {
     if (error.message !== 'AUTH_REQUIRED') showLogin();
   }
@@ -854,5 +887,28 @@ $('#copy-team-invite')?.addEventListener('click', async () => {
   }
 });
 $('#refresh-audit')?.addEventListener('click', loadAudit);
-$('#property-search')?.addEventListener('input', (event) => { state.search = event.target.value; renderProperties(); });
+$('#property-search')?.addEventListener('input', (event) => {
+  state.propertyFilters.search = event.target.value;
+  state.propertyFilters.page = 1;
+  clearTimeout(propertySearchTimer);
+  propertySearchTimer = setTimeout(() => { void loadProperties(); }, 250);
+});
+$('#property-status-filter')?.addEventListener('change', (event) => {
+  state.propertyFilters.status = event.target.value;
+  state.propertyFilters.page = 1;
+  void loadProperties();
+});
+$('#property-per-page')?.addEventListener('change', (event) => {
+  state.propertyFilters.per_page = Number(event.target.value) || 20;
+  state.propertyFilters.page = 1;
+  void loadProperties();
+});
+$('#property-page-previous')?.addEventListener('click', () => {
+  state.propertyFilters.page = Math.max(1, state.propertyFilters.page - 1);
+  void loadProperties();
+});
+$('#property-page-next')?.addEventListener('click', () => {
+  state.propertyFilters.page = Math.min(state.propertyPagination?.last_page || 1, state.propertyFilters.page + 1);
+  void loadProperties();
+});
 init();
