@@ -28,9 +28,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://images.unsplash.com" />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <script nonce="{{ cspNonce }}" type="application/ld+json">{!! $siteLd !!}</script>
-    @if(!empty($websiteLd))<script nonce="{{ cspNonce }}" type="application/ld+json">{!! $websiteLd !!}</script>@endif
-    @if(!empty($pageLd))<script nonce="{{ cspNonce }}" type="application/ld+json">{!! $pageLd !!}</script>@endif
+    <script nonce="{{ $cspNonce }}" type="application/ld+json">{!! $siteLd !!}</script>
+    @if(!empty($websiteLd))<script nonce="{{ $cspNonce }}" type="application/ld+json">{!! $websiteLd !!}</script>@endif
+    @if(!empty($pageLd))<script nonce="{{ $cspNonce }}" type="application/ld+json">{!! $pageLd !!}</script>@endif
     @if(!empty($assets['css']))<link rel="stylesheet" href="{{ $assets['css'] }}" />@endif
     <title>{{ $page['title'] }}</title>
   </head>
