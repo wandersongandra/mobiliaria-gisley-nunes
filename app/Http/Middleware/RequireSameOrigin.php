@@ -19,25 +19,45 @@ class RequireSameOrigin
             return response()->json(['error' => 'ORIGIN_REQUIRED'], 403);
         }
 
-        $sourceHost = parse_url($source, PHP_URL_HOST);
-        if (! is_string($sourceHost) || $sourceHost === '') {
+        $sourceOrigin = $this->canonicalOrigin($source);
+        if ($sourceOrigin === null) {
             return response()->json(['error' => 'INVALID_ORIGIN'], 403);
         }
 
-        $allowedHosts = array_values(array_unique(array_filter([
-            $request->getHost(),
-            parse_url((string) config('app.url'), PHP_URL_HOST),
-            parse_url((string) config('app.admin_url'), PHP_URL_HOST),
+        $allowedOrigins = array_values(array_unique(array_filter([
+            $this->canonicalOrigin((string) config('app.url')),
+            $this->canonicalOrigin((string) config('app.admin_url')),
         ])));
 
-        if (! in_array(strtolower($sourceHost), array_map('strtolower', $allowedHosts), true)) {
+        // O Host recebido pode ser influenciado por um proxy mal configurado. A
+        // lista de origens vem somente de configuração implantada e compara
+        // esquema, host e porta para não aceitar outro serviço no mesmo host.
+        if ($allowedOrigins === [] || ! in_array($sourceOrigin, $allowedOrigins, true)) {
             return response()->json(['error' => 'INVALID_ORIGIN'], 403);
         }
 
-        if (app()->environment('production') && strtolower((string) parse_url($source, PHP_URL_SCHEME)) !== 'https') {
+        if (app()->environment('production') && ! str_starts_with($sourceOrigin, 'https://')) {
             return response()->json(['error' => 'INVALID_ORIGIN'], 403);
         }
 
         return $next($request);
+    }
+
+    private function canonicalOrigin(string $value): ?string
+    {
+        $parts = parse_url($value);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return null;
+        }
+
+        $port = isset($parts['port']) ? (int) $parts['port'] : null;
+        if ($port !== null && $port > 0 && ! (($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80))) {
+            return $scheme.'://'.$host.':'.$port;
+        }
+
+        return $scheme.'://'.$host;
     }
 }

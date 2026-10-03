@@ -77,6 +77,23 @@ class SecurityContractTest extends TestCase
             ->assertOk();
     }
 
+    public function test_sensitive_write_rejects_the_same_host_on_an_unconfigured_port(): void
+    {
+        $this->app->instance('env', 'production');
+        $session = $this->createAdminSession('manager') + ['_token' => 'csrf-contract-token'];
+        $leadId = $this->createLead();
+
+        $this->withSession($session)
+            ->withHeaders([
+                'Host' => 'test.local',
+                'Origin' => 'https://test.local:8443',
+                'X-CSRF-TOKEN' => 'csrf-contract-token',
+            ])
+            ->patchJson('/api/admin/leads/'.$leadId, ['status' => 'em_contato'])
+            ->assertForbidden()
+            ->assertJson(['error' => 'INVALID_ORIGIN']);
+    }
+
     private function propertyInput(string $title, array $overrides = []): array
     {
         return array_merge([
