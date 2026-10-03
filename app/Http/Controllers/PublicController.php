@@ -9,7 +9,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class PublicController extends Controller
@@ -184,14 +183,12 @@ class PublicController extends Controller
 
     public function properties(): JsonResponse
     {
-        $properties = Cache::remember('public-property-catalog.v1', 60, fn (): array => array_map(
-            fn (array $row): array => $this->properties->publicProperty($row),
-            $this->properties->listProperties(true)
-        ));
-
         return response()->json([
-            'properties' => $properties,
-        ])->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+            'properties' => $this->properties->publicCatalog(),
+        ])->header(
+            'Cache-Control',
+            'public, max-age='.PropertyService::PUBLIC_CATALOG_TTL.', stale-while-revalidate=300'
+        );
     }
 
     public function property(string $slug): JsonResponse

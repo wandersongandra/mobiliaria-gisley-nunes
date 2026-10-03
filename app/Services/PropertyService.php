@@ -13,13 +13,33 @@ use RuntimeException;
 
 class PropertyService
 {
-    private const PUBLIC_CATALOG_CACHE_KEY = 'public-property-catalog.v1';
+    public const PUBLIC_CATALOG_CACHE_KEY = 'public-property-catalog.v1';
+
+    public const PUBLIC_CATALOG_TTL = 60;
 
     private const STATUSES = ['draft', 'published', 'archived'];
 
     private const PURPOSES = ['Comprar', 'Alugar'];
 
     private const TYPES = ['Casa', 'Apartamento', 'Cobertura', 'Terreno', 'Comercial', 'Lote'];
+
+    /**
+     * Catálogo público em cache. É o único ponto de leitura cacheada, de modo que
+     * as invalidações feitas pelos métodos de escrita abaixo nunca fiquem órfãs.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function publicCatalog(): array
+    {
+        return Cache::remember(
+            self::PUBLIC_CATALOG_CACHE_KEY,
+            self::PUBLIC_CATALOG_TTL,
+            fn (): array => array_map(
+                fn (array $row): array => $this->publicProperty($row),
+                $this->listProperties(true)
+            )
+        );
+    }
 
     public function listProperties(bool $publicOnly = false): array
     {

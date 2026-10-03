@@ -68,6 +68,27 @@ class PublicCatalogCacheTest extends TestCase
         $this->assertGreaterThan(0, $this->catalogQueryCount());
     }
 
+    public function test_public_properties_endpoint_populates_the_cache_key_owned_by_the_service(): void
+    {
+        config(['cache.default' => 'array']);
+        Cache::flush();
+
+        $this->assertFalse(Cache::has(PropertyService::PUBLIC_CATALOG_CACHE_KEY));
+
+        $response = $this->getJson('/api/properties');
+        $response->assertOk();
+
+        $this->assertTrue(
+            Cache::has(PropertyService::PUBLIC_CATALOG_CACHE_KEY),
+            'O endpoint /api/properties não preencheu a chave de cache que o PropertyService invalida nas escritas.'
+        );
+
+        $this->assertStringContainsString(
+            'max-age='.PropertyService::PUBLIC_CATALOG_TTL,
+            (string) $response->headers->get('Cache-Control')
+        );
+    }
+
     private function catalogQueryCount(): int
     {
         return collect(DB::getQueryLog())
