@@ -15,6 +15,7 @@
   },
   "require-dev": {
     "laravel/pint": "^1.18",
+    "mockery/mockery": "^1.6",
     "phpunit/phpunit": "^11.5"
   },
   "autoload": {
@@ -43,7 +44,7 @@
   "prefer-stable": true,
   "autoload-dev": {
     "psr-4": {
-      "Tests\\\\": "tests/"
+      "Tests\\": "tests/"
     }
   }
 }
