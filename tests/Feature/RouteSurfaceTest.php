@@ -100,6 +100,15 @@ class RouteSurfaceTest extends TestCase
         $this->assertSame([], $named, 'Rotas nomeadas foram adicionadas; atualize este teste de propósito.');
     }
 
+    public function test_local_storage_routes_are_not_registered(): void
+    {
+        $storageRoutes = collect(Route::getRoutes()->getRoutes())
+            ->filter(static fn ($route): bool => str_starts_with((string) $route->getName(), 'storage.'))
+            ->all();
+
+        $this->assertSame([], $storageRoutes);
+    }
+
     /**
      * @return list<string>
      */
