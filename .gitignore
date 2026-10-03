@@ -8,6 +8,7 @@ dist
 !.env.example
 coverage
 *.log
+error_log
 
 dist-preview/
 vendor/
