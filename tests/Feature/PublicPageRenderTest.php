@@ -58,6 +58,15 @@ class PublicPageRenderTest extends TestCase
         $response->assertSee('nonce="'.$nonce.'"', false);
     }
 
+    public function test_production_hsts_does_not_lock_unverified_subdomains_to_https(): void
+    {
+        $this->app->instance('env', 'production');
+
+        $this->get('/')
+            ->assertOk()
+            ->assertHeader('Strict-Transport-Security', 'max-age=31536000');
+    }
+
     public function test_published_property_page_renders_and_embeds_its_json_payload(): void
     {
         $property = $this->publishPropertyWithCover();

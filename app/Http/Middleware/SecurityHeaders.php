@@ -41,7 +41,8 @@ class SecurityHeaders
         }
 
         if (app()->environment('production')) {
-            $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+            // Não inclua subdomínios sem confirmar que todos eles usam HTTPS.
+            $response->headers->set('Strict-Transport-Security', 'max-age=31536000');
         }
 
         return $response;
