@@ -68,7 +68,7 @@ class AdminAccessService
         }
 
         $now = (int) floor(microtime(true) * 1000);
-        $idleTimeoutMs = max(15, min(240, (int) env('GISELY_ADMIN_IDLE_TIMEOUT_MINUTES', 60))) * 60 * 1000;
+        $idleTimeoutMs = max(15, min(240, (int) config('gisely.admin.idle_timeout_minutes', 60))) * 60 * 1000;
 
         $session = DB::table('morada_admin_sessions')
             ->where('jti', $jti)
@@ -82,6 +82,7 @@ class AdminAccessService
 
         if ((int) $session->last_seen_at_ms > 0 && ($now - (int) $session->last_seen_at_ms) > $idleTimeoutMs) {
             DB::table('morada_admin_sessions')->where('jti', $jti)->update(['revoked_at' => now()]);
+
             return null;
         }
 
@@ -149,7 +150,7 @@ class AdminAccessService
         $request->session()->put('admin_jti', $jti);
         $request->session()->put('admin_open_id', $identity['openId']);
 
-        $this->trimSessions($identity['openId'], (int) env('GISELY_MAX_ADMIN_SESSIONS', 3));
+        $this->trimSessions($identity['openId'], (int) config('gisely.admin.max_sessions', 3));
 
         return [
             'openId' => $identity['openId'],

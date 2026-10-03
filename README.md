@@ -30,16 +30,18 @@ php artisan serve
 
 O frontend público e o painel usam assets estáticos em `public/assets` e `public/admin`; Node.js não será necessário em produção.
 
-## Produção
+## Produção — HostGator / PHP-FPM
 
-Configure o Document Root para `public/` e então:
+O alvo oficial de hospedagem é HostGator com Laravel em PHP-FPM, MySQL e Document Root apontado para `public/`. Node.js e Docker não fazem parte do runtime de produção. Consulte o guia de migração antes de configurar o ambiente.
+
+Na hospedagem, instale as dependências de produção e prepare o cache:
 
 ```bash
-composer install --no-dev --optimize-autoloader
+composer install --no-dev --optimize-autoloader --no-interaction
 php artisan migrate --force
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 ```
 
-Veja `docs/laravel-hostgator-migration.md` para o procedimento de hospedagem.
+Configure também o cron do Laravel Scheduler descrito em `docs/laravel-hostgator-migration.md`; ele executa a limpeza periódica de uploads órfãos no R2.

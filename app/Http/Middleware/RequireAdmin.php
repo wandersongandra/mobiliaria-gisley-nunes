@@ -9,9 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class RequireAdmin
 {
-    public function __construct(private readonly AdminAccessService $access)
-    {
-    }
+    public function __construct(private readonly AdminAccessService $access) {}
 
     public function handle(Request $request, Closure $next): Response
     {

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -9,7 +10,9 @@ use RuntimeException;
 class CrmService
 {
     public const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
+
     public const PAIRING_TTL_MS = 15 * 60 * 1000;
+
     public const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
     private const DEFAULT_SITE = [
@@ -269,7 +272,7 @@ class CrmService
                     'updated_at' => now(),
                 ]
             );
-        } catch (\Illuminate\Database\QueryException $e) {
+        } catch (QueryException $e) {
             if ((int) ($e->errorInfo[1] ?? 0) === 1062) {
                 throw new RuntimeException('TEAM_MEMBER_EXISTS', previous: $e);
             }

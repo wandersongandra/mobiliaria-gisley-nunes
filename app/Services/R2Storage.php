@@ -101,6 +101,41 @@ class R2Storage
         return (string) $request->getUri();
     }
 
+    public function listPropertyObjects(?string $continuationToken = null): array
+    {
+        $params = [
+            'Bucket' => config('services.r2.bucket'),
+            'Prefix' => self::PREFIX,
+            'MaxKeys' => 1000,
+        ];
+        if ($continuationToken !== null) {
+            $params['ContinuationToken'] = $continuationToken;
+        }
+
+        $result = $this->client()->listObjectsV2($params);
+        $objects = [];
+        foreach ($result['Contents'] ?? [] as $object) {
+            $key = isset($object['Key']) ? $this->assertKey((string) $object['Key']) : '';
+            $lastModified = $object['LastModified'] ?? null;
+            if ($key !== '' && $lastModified instanceof \DateTimeInterface) {
+                $objects[] = [
+                    'key' => $key,
+                    'last_modified' => $lastModified,
+                ];
+            }
+        }
+
+        $nextToken = null;
+        if ((bool) ($result['IsTruncated'] ?? false)) {
+            $nextToken = $result['NextContinuationToken'] ?? null;
+            if (! is_string($nextToken) || $nextToken === '') {
+                throw new RuntimeException('STORAGE_PAGINATION_INVALID');
+            }
+        }
+
+        return ['objects' => $objects, 'next_token' => $nextToken];
+    }
+
     public function presignGet(string $path, int $seconds = 60): string
     {
         $key = $this->assertKey($path);
@@ -167,9 +202,9 @@ class R2Storage
 
         return match ($type) {
             'image/jpeg' => strlen($bytes) >= 3
-                && ord($bytes[0]) === 0xff
-                && ord($bytes[1]) === 0xd8
-                && ord($bytes[2]) === 0xff,
+                && ord($bytes[0]) === 0xFF
+                && ord($bytes[1]) === 0xD8
+                && ord($bytes[2]) === 0xFF,
             'image/png' => str_starts_with($bytes, "\x89PNG\r\n\x1a\n"),
             'image/webp' => strlen($bytes) >= 12
                 && substr($bytes, 0, 4) === 'RIFF'

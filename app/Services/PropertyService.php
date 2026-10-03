@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+// Escopo atual: Single-tenant. Não há isolamento por proprietário/imobiliária nesta versão.
+
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -9,7 +12,9 @@ use RuntimeException;
 class PropertyService
 {
     private const STATUSES = ['draft', 'published', 'archived'];
+
     private const PURPOSES = ['Comprar', 'Alugar'];
+
     private const TYPES = ['Casa', 'Apartamento', 'Cobertura', 'Terreno', 'Comercial', 'Lote'];
 
     public function listProperties(bool $publicOnly = false): array
@@ -18,7 +23,7 @@ class PropertyService
             ->leftJoin('morada_property_photos as ph', function ($join): void {
                 $join->on('ph.property_id', '=', 'p.id')->where('ph.is_cover', '=', 1);
             })
-            ->select('p.*', DB::raw("CASE WHEN p.price < 1500000 THEN 1 WHEN p.price <= 3000000 THEN 2 ELSE 3 END AS price_band"), DB::raw("COALESCE(ph.url, '') AS cover_url"));
+            ->select('p.*', DB::raw('CASE WHEN p.price < 1500000 THEN 1 WHEN p.price <= 3000000 THEN 2 ELSE 3 END AS price_band'), DB::raw("COALESCE(ph.url, '') AS cover_url"));
 
         if ($publicOnly) {
             $query->where('p.status', 'published')
@@ -188,7 +193,7 @@ class PropertyService
                         'created_at' => now(),
                     ]);
                 }
-            } catch (\Illuminate\Database\QueryException $e) {
+            } catch (QueryException $e) {
                 if ((int) ($e->errorInfo[1] ?? 0) === 1062) {
                     throw new RuntimeException('SLUG_CONFLICT', previous: $e);
                 }
@@ -227,6 +232,18 @@ class PropertyService
         $row = DB::table('morada_property_photos')->where('id', $photoId)->first();
 
         return $row ? (array) $row : null;
+    }
+
+    public function registeredStoragePaths(array $paths): array
+    {
+        if ($paths === []) {
+            return [];
+        }
+
+        return DB::table('morada_property_photos')
+            ->whereIn('storage_path', array_values(array_unique($paths)))
+            ->pluck('storage_path')
+            ->all();
     }
 
     public function addPhoto(array $photo, bool $requireDraft = false): array

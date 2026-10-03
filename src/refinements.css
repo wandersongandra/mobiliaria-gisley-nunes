@@ -722,6 +722,39 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
   .gallery-main img{transition:none}
 }
 
+/* Leitura e toque confortáveis nas áreas de busca e contato. */
+.eyebrow{font-size:10px}
+.desktop-nav{font-size:12px}
+.header-cta{font-size:11px}
+.hero-lead{font-size:16px}
+.hero-secondary-link{font-size:12px}
+.hero-meta span{font-size:10px}
+.text-link{font-size:11px}
+.image-caption{font-size:10px}
+.field span{font-size:11px;letter-spacing:.08em}
+.field select{min-height:44px;font-size:14px}
+.search-button{min-height:52px;font-size:13px}
+.listing-tag,.listing-location{font-size:11px}
+.listing-price{font-size:14px}
+.listing-meta{font-size:11px}
+.contact-form label{font-size:12px}
+.contact-form input,.contact-form select,.contact-form textarea{font-size:16px}
+.form-privacy{font-size:12px}
+.property-feature span,.gallery-thumb span{font-size:12px}
+.whatsapp-float{font-size:13px}
+
+@media(max-width:600px){
+  .hero-lead{font-size:15px}
+  .hero-meta span{font-size:11px}
+  .field{padding:12px 14px}
+  .field span{font-size:12px}
+  .field select{min-height:46px;font-size:15px}
+  .search-button{font-size:14px}
+  .listing-tag,.listing-location{font-size:12px}
+  .listing-meta{font-size:12px}
+  .form-privacy{font-size:12px}
+}
+
 .contact-honeypot{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important}
 
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}

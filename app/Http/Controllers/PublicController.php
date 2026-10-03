@@ -54,6 +54,7 @@ class PublicController extends Controller
                 ['@type' => 'ListItem', 'position' => 2, 'name' => 'Serviços'],
             ],
         ]);
+
         return view('servicos', $data);
     }
 
@@ -69,6 +70,7 @@ class PublicController extends Controller
             '/bairros'
         );
         $data['neighborhoods'] = $this->properties->neighborhoods($items);
+
         return view('bairros', $data);
     }
 
@@ -96,6 +98,7 @@ class PublicController extends Controller
             '/bairros/'.$neighborhood['slug']
         );
         $data['neighborhood'] = $neighborhood;
+
         return view('bairro', $data);
     }
 
@@ -181,6 +184,7 @@ class PublicController extends Controller
     public function properties(): JsonResponse
     {
         $rows = $this->properties->listProperties(true);
+
         return response()->json([
             'properties' => array_map(
                 fn (array $row): array => $this->properties->publicProperty($row),
@@ -192,7 +196,9 @@ class PublicController extends Controller
     public function property(string $slug): JsonResponse
     {
         $row = $this->properties->getPropertyBySlug($slug);
-        if (! $row) return response()->json(['error' => 'NOT_FOUND'], 404);
+        if (! $row) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
 
         return response()->json([
             'property' => $this->properties->publicProperty($row),
@@ -214,6 +220,7 @@ class PublicController extends Controller
         }
 
         $id = $this->crm->createContactLead($request->all());
+
         return response()->json(['ok' => true, 'id' => $id], 201);
     }
 
@@ -238,6 +245,7 @@ class PublicController extends Controller
             'Disallow: /_app/',
             'Sitemap: '.$this->origin().'/sitemap.xml',
         ]);
+
         return response($body, 200)->header('Content-Type', 'text/plain; charset=utf-8');
     }
 
@@ -248,31 +256,33 @@ class PublicController extends Controller
             $this->properties->listProperties(true)
         );
         $entries = [
-            ['path'=>'/','priority'=>'1.0','changefreq'=>'weekly'],
-            ['path'=>'/imoveis','priority'=>'0.9','changefreq'=>'daily'],
-            ['path'=>'/sobre','priority'=>'0.5','changefreq'=>'monthly'],
-            ['path'=>'/contato','priority'=>'0.5','changefreq'=>'monthly'],
-            ['path'=>'/servicos','priority'=>'0.7','changefreq'=>'monthly'],
-            ['path'=>'/bairros','priority'=>'0.7','changefreq'=>'weekly'],
-            ['path'=>'/privacidade','priority'=>'0.1','changefreq'=>'yearly'],
+            ['path' => '/', 'priority' => '1.0', 'changefreq' => 'weekly'],
+            ['path' => '/imoveis', 'priority' => '0.9', 'changefreq' => 'daily'],
+            ['path' => '/sobre', 'priority' => '0.5', 'changefreq' => 'monthly'],
+            ['path' => '/contato', 'priority' => '0.5', 'changefreq' => 'monthly'],
+            ['path' => '/servicos', 'priority' => '0.7', 'changefreq' => 'monthly'],
+            ['path' => '/bairros', 'priority' => '0.7', 'changefreq' => 'weekly'],
+            ['path' => '/privacidade', 'priority' => '0.1', 'changefreq' => 'yearly'],
         ];
 
         foreach ($this->properties->neighborhoods($properties) as $n) {
-            $entries[] = ['path'=>'/bairros/'.$n['slug'],'priority'=>'0.7','changefreq'=>'weekly'];
+            $entries[] = ['path' => '/bairros/'.$n['slug'], 'priority' => '0.7', 'changefreq' => 'weekly'];
         }
         foreach ($properties as $property) {
             $entries[] = [
-                'path'=>'/imoveis/'.$property['slug'],
-                'priority'=>'0.8',
-                'changefreq'=>'weekly',
-                'lastmod'=>$property['updated_at'] ? date('Y-m-d', strtotime((string) $property['updated_at'])) : null,
+                'path' => '/imoveis/'.$property['slug'],
+                'priority' => '0.8',
+                'changefreq' => 'weekly',
+                'lastmod' => $property['updated_at'] ? date('Y-m-d', strtotime((string) $property['updated_at'])) : null,
             ];
         }
 
         $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
         foreach ($entries as $entry) {
             $xml .= '  <url><loc>'.htmlspecialchars($this->origin().$entry['path'], ENT_XML1).'</loc>';
-            if (!empty($entry['lastmod'])) $xml .= '<lastmod>'.$entry['lastmod'].'</lastmod>';
+            if (! empty($entry['lastmod'])) {
+                $xml .= '<lastmod>'.$entry['lastmod'].'</lastmod>';
+            }
             $xml .= '<changefreq>'.$entry['changefreq'].'</changefreq><priority>'.$entry['priority']."</priority></url>\n";
         }
         $xml .= '</urlset>';
@@ -287,8 +297,8 @@ class PublicController extends Controller
             $this->properties->listProperties(true)
         );
         $lines = [
-            '# Gisley Nunes Imóveis','',
-            '> Imóveis para comprar e alugar em Belo Horizonte e região. Consulte o catálogo e entre em contato.','',
+            '# Gisley Nunes Imóveis', '',
+            '> Imóveis para comprar e alugar em Belo Horizonte e região. Consulte o catálogo e entre em contato.', '',
             '## Páginas',
             '- [Início]('.$this->origin().'/): apresentação e imóveis em destaque.',
             '- [Imóveis]('.$this->origin().'/imoveis): catálogo completo com filtros.',
@@ -296,7 +306,7 @@ class PublicController extends Controller
             '- [Contato]('.$this->origin().'/contato): canais de atendimento.',
             '- [Serviços]('.$this->origin().'/servicos): caminhos para comprar, alugar ou anunciar um imóvel.',
             '- [Bairros]('.$this->origin().'/bairros): imóveis agrupados por localização.',
-            '- [Privacidade]('.$this->origin().'/privacidade): política de privacidade.','','## Imóveis',
+            '- [Privacidade]('.$this->origin().'/privacidade): política de privacidade.', '', '## Imóveis',
         ];
         foreach ($this->properties->neighborhoods($properties) as $n) {
             $lines[] = '- Bairro '.$n['name'].': '.$n['count'].' imóveis. '.$this->origin().'/bairros/'.$n['slug'];
@@ -310,7 +320,9 @@ class PublicController extends Controller
 
     public function notFound(Request $request)
     {
-        if ($request->is('api/*')) return response()->json(['error'=>'NOT_FOUND'], 404);
+        if ($request->is('api/*')) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
 
         return response()->view('404', $this->pageData(
             'Página não encontrada | Gisley Nunes Imóveis',
@@ -329,28 +341,29 @@ class PublicController extends Controller
         string $robots = 'index,follow,max-image-preview:large',
     ): array {
         $site = $this->crm->getSiteInfo();
+
         return [
-            'assets'=>self::ASSETS,
-            'site'=>$site,
-            'testimonials'=>$this->crm->listTestimonials(),
-            'page'=>[
-                'title'=>$title,
-                'description'=>$description,
-                'canonical'=>$this->origin().$path,
-                'ogImage'=>$ogImage ?: $this->origin().'/images/gisley-nunes-imoveis-logo.jpeg',
-                'ogImageAlt'=>$title,
-                'ogType'=>$ogType,
-                'robots'=>$robots,
+            'assets' => self::ASSETS,
+            'site' => $site,
+            'testimonials' => $this->crm->listTestimonials(),
+            'page' => [
+                'title' => $title,
+                'description' => $description,
+                'canonical' => $this->origin().$path,
+                'ogImage' => $ogImage ?: $this->origin().'/images/gisley-nunes-imoveis-logo.jpeg',
+                'ogImageAlt' => $title,
+                'ogType' => $ogType,
+                'robots' => $robots,
             ],
-            'siteLd'=>$this->jsonLd([
-                '@context'=>'https://schema.org','@type'=>'RealEstateAgent',
-                'name'=>$site['name'],'url'=>$this->origin(),'email'=>$site['email'],
-                'telephone'=>$site['phoneDisplay'],'areaServed'=>$site['area'],
+            'siteLd' => $this->jsonLd([
+                '@context' => 'https://schema.org', '@type' => 'RealEstateAgent',
+                'name' => $site['name'], 'url' => $this->origin(), 'email' => $site['email'],
+                'telephone' => $site['phoneDisplay'], 'areaServed' => $site['area'],
             ]),
-            'websiteLd'=>$this->jsonLd([
-                '@context'=>'https://schema.org','@type'=>'WebSite','name'=>$site['name'],'url'=>$this->origin(),
+            'websiteLd' => $this->jsonLd([
+                '@context' => 'https://schema.org', '@type' => 'WebSite', 'name' => $site['name'], 'url' => $this->origin(),
             ]),
-            'pageLd'=>null,
+            'pageLd' => null,
         ];
     }
 
