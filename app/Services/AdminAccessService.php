@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Clock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -66,7 +67,7 @@ class AdminAccessService
             return null;
         }
 
-        $now = (int) floor(microtime(true) * 1000);
+        $now = Clock::nowMs();
         $idleTimeoutMs = max(15, min(240, (int) config('gisely.admin.idle_timeout_minutes', 60))) * 60 * 1000;
 
         $session = DB::table('morada_admin_sessions')
@@ -121,7 +122,7 @@ class AdminAccessService
 
     public function establish(Request $request, array $identity, string $role): array
     {
-        $now = (int) floor(microtime(true) * 1000);
+        $now = Clock::nowMs();
         $jti = (string) Str::uuid();
         $expiresAt = $now + self::SESSION_TTL_MS;
 

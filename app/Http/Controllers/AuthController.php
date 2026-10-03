@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Services\AdminAccessService;
 use App\Services\CrmService;
+use App\Support\Clock;
+use App\Support\Tokens;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,7 +35,7 @@ class AuthController extends Controller
             }
             $invitationHash = hash('sha256', $invite);
             $invitation = $this->crm->findInvitation($invitationHash);
-            $now = $this->nowMs();
+            $now = Clock::nowMs();
             if (
                 ! $invitation || $invitation['accepted_at'] || $invitation['revoked_at']
                 || (int) $invitation['expires_at_ms'] <= $now
@@ -44,11 +46,11 @@ class AuthController extends Controller
 
         $origin = $this->adminOrigin($request);
         $redirectUri = $origin.'/api/auth/callback';
-        $state = $this->randomToken(32);
+        $state = Tokens::random(32);
         $this->crm->createAuthChallenge(
             hash('sha256', $state),
             $redirectUri,
-            $this->nowMs() + CrmService::OAUTH_STATE_TTL_MS,
+            Clock::nowMs() + CrmService::OAUTH_STATE_TTL_MS,
             $invitationHash
         );
         $request->session()->put('oauth_state', $state);
@@ -132,12 +134,12 @@ class AuthController extends Controller
 
         $bootstrap = $this->access->isBootstrap($identity['openId']);
         if (! $bootstrap && ! $this->validStaffAccess($staff, $identity)) {
-            $pairingCode = $this->randomToken(12);
+            $pairingCode = Tokens::random(12);
             $this->crm->createPairing(
                 hash('sha256', $pairingCode),
                 $identity['openId'],
                 $identity['email'],
-                $this->nowMs() + CrmService::PAIRING_TTL_MS
+                Clock::nowMs() + CrmService::PAIRING_TTL_MS
             );
 
             return response(
@@ -271,15 +273,5 @@ class AuthController extends Controller
         $origin = rtrim((string) config('app.admin_url'), '/');
 
         return $origin !== '' ? $origin : $request->getSchemeAndHttpHost();
-    }
-
-    private function randomToken(int $bytes): string
-    {
-        return rtrim(strtr(base64_encode(random_bytes($bytes)), '+/', '-_'), '=');
-    }
-
-    private function nowMs(): int
-    {
-        return (int) floor(microtime(true) * 1000);
     }
 }

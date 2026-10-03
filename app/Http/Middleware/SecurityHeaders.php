@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Tokens;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
@@ -11,7 +12,7 @@ class SecurityHeaders
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $nonce = rtrim(strtr(base64_encode(random_bytes(18)), '+/', '-_'), '=');
+        $nonce = Tokens::random(18);
         View::share('cspNonce', $nonce);
 
         /** @var Response $response */

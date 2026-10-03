@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\AdminRequestContext;
 use App\Services\AdminAccessService;
 use App\Services\CrmService;
+use App\Support\Clock;
+use App\Support\Tokens;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -244,8 +246,8 @@ class AdminCrmController extends Controller
             throw new RuntimeException('INVALID_INVITATION');
         }
 
-        $token = $this->token(32);
-        $expiresAtMs = $this->nowMs() + CrmService::INVITATION_TTL_MS;
+        $token = Tokens::random(32);
+        $expiresAtMs = Clock::nowMs() + CrmService::INVITATION_TTL_MS;
         $this->crm->createInvitation([
             'tokenHash' => hash('sha256', $token),
             'email' => $email,
@@ -431,15 +433,5 @@ class AdminCrmController extends Controller
         $this->audit($admin, 'team.remove', 'staff', $email, ['sessionsRevoked' => true]);
 
         return response()->noContent();
-    }
-
-    private function token(int $bytes): string
-    {
-        return rtrim(strtr(base64_encode(random_bytes($bytes)), '+/', '-_'), '=');
-    }
-
-    private function nowMs(): int
-    {
-        return (int) floor(microtime(true) * 1000);
     }
 }

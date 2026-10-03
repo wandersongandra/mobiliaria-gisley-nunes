@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Clock;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -396,7 +397,7 @@ class CrmService
 
     public function listInvitations(): array
     {
-        $now = (int) floor(microtime(true) * 1000);
+        $now = Clock::nowMs();
 
         return DB::table('morada_staff_invitations')
             ->whereNull('accepted_at')
@@ -425,7 +426,7 @@ class CrmService
     public function acceptInvitation(string $tokenHash, string $openId, string $email): ?array
     {
         $email = strtolower($email);
-        $nowMs = (int) floor(microtime(true) * 1000);
+        $nowMs = Clock::nowMs();
 
         return DB::transaction(function () use ($tokenHash, $openId, $email, $nowMs): ?array {
             $invitation = DB::table('morada_staff_invitations')
@@ -501,7 +502,7 @@ class CrmService
     public function bindPairing(string $codeHash, string $email, string $name, string $role, string $invitedBy): ?array
     {
         $email = $this->email($email, 'INVALID_TEAM_MEMBER');
-        $nowMs = (int) floor(microtime(true) * 1000);
+        $nowMs = Clock::nowMs();
 
         return DB::transaction(function () use ($codeHash, $email, $name, $role, $invitedBy, $nowMs): ?array {
             $pairing = DB::table('morada_identity_pairings')
@@ -541,7 +542,7 @@ class CrmService
 
     public function consumeAuthChallenge(string $stateHash): ?array
     {
-        $nowMs = (int) floor(microtime(true) * 1000);
+        $nowMs = Clock::nowMs();
 
         return DB::transaction(function () use ($stateHash, $nowMs): ?array {
             $row = DB::table('morada_auth_challenges')
