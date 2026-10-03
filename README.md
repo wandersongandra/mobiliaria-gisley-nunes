@@ -63,6 +63,8 @@ Defina as variáveis no `.env` fora do Document Root. Não use os valores de exe
 
 Consulte `.env.example` para a lista completa. Após alterar variáveis, limpe e gere novamente o cache da configuração com `php artisan config:clear && php artisan config:cache`.
 
+> **Grafia das variáveis `GISELY_*`:** o arquivo de configuração chama-se `config/gisley.php` (grafia correta), mas as variáveis de ambiente mantêm de propósito a grafia antiga `GISELY_*`, porque já estão no `.env` implantado e nos workflows de CI. Renomeá-las faria os valores caírem silenciosamente para os defaults, sem nenhum erro. Para renomear de verdade é preciso alterar junto: `config/gisley.php`, `.env.example`, `phpunit.xml`, `.github/workflows/ci.yml`, `.github/workflows/laravel-ci.yml` e o `.env` de produção. O teste `test_renamed_config_file_still_reads_the_legacy_gisely_env_names` protege esse contrato.
+
 ## Cron na HostGator
 
 No cPanel, crie uma tarefa para executar o Scheduler a cada minuto. Substitua pelos caminhos absolutos do projeto e do PHP fornecidos pela HostGator:

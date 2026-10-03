@@ -14,17 +14,70 @@ class AdminAccessConfigurationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_bootstrap_user_ids_are_read_from_gisely_config(): void
+    public function test_bootstrap_user_ids_are_read_from_gisley_config(): void
     {
-        config(['gisely.admin.bootstrap_open_ids' => ['bootstrap-test-user']]);
+        config(['gisley.admin.bootstrap_open_ids' => ['bootstrap-test-user']]);
 
         $this->assertTrue(app(AdminAccessService::class)->isBootstrap('bootstrap-test-user'));
         $this->assertFalse(app(AdminAccessService::class)->isBootstrap('other-user'));
     }
 
-    public function test_idle_timeout_is_read_from_gisely_config(): void
+    public function test_renamed_config_file_still_reads_the_legacy_gisely_env_names(): void
     {
-        config(['gisely.admin.idle_timeout_minutes' => 15]);
+        // O arquivo passou de gisely.php para gisley.php, mas o .env de produção
+        // continua usando GISELY_*. Se alguém "corrigir" esses nomes aqui sem
+        // atualizar o deploy, os valores caem silenciosamente para os defaults.
+        $names = [
+            'GISELY_ADMIN_OPEN_IDS' => 'first-id, second-id',
+            'GISELY_ADMIN_IDLE_TIMEOUT_MINUTES' => '45',
+            'GISELY_MAX_ADMIN_SESSIONS' => '2',
+        ];
+
+        $previous = [];
+        foreach (array_keys($names) as $name) {
+            $previous[$name] = [
+                'getenv' => getenv($name),
+                'env' => $_ENV[$name] ?? null,
+                'server' => $_SERVER[$name] ?? null,
+            ];
+            putenv($name.'='.$names[$name]);
+            $_ENV[$name] = $names[$name];
+            $_SERVER[$name] = $names[$name];
+        }
+
+        try {
+            /** @var array{admin: array{bootstrap_open_ids: list<string>, idle_timeout_minutes: int, max_sessions: int}} $config */
+            $config = require base_path('config/gisley.php');
+
+            $this->assertSame(['first-id', 'second-id'], $config['admin']['bootstrap_open_ids']);
+            $this->assertSame(45, $config['admin']['idle_timeout_minutes']);
+            $this->assertSame(2, $config['admin']['max_sessions']);
+        } finally {
+            foreach ($previous as $name => $snapshot) {
+                if ($snapshot['getenv'] === false) {
+                    putenv($name);
+                } else {
+                    putenv($name.'='.$snapshot['getenv']);
+                }
+
+                if ($snapshot['env'] === null) {
+                    unset($_ENV[$name]);
+                } else {
+                    $_ENV[$name] = $snapshot['env'];
+                }
+
+                if ($snapshot['server'] === null) {
+                    unset($_SERVER[$name]);
+                } else {
+                    $_SERVER[$name] = $snapshot['server'];
+                }
+            }
+        }
+    }
+
+    public function test_idle_timeout_is_read_from_gisley_config(): void
+    {
+        config(['gisley.admin.idle_timeout_minutes' => 15]);
 
         $openId = 'staff-idle-test';
         $jti = (string) Str::uuid();
@@ -64,9 +117,9 @@ class AdminAccessConfigurationTest extends TestCase
         $this->assertNotNull(DB::table('morada_admin_sessions')->where('jti', $jti)->value('revoked_at'));
     }
 
-    public function test_maximum_admin_sessions_is_read_from_gisely_config(): void
+    public function test_maximum_admin_sessions_is_read_from_gisley_config(): void
     {
-        config(['gisely.admin.max_sessions' => 1]);
+        config(['gisley.admin.max_sessions' => 1]);
         $identity = [
             'openId' => 'staff-session-limit-test',
             'email' => 'editor@example.test',

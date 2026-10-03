@@ -39,7 +39,7 @@ class AdminAccessService
 
     public function bootstrapOpenIds(): array
     {
-        $openIds = config('gisely.admin.bootstrap_open_ids', []);
+        $openIds = config('gisley.admin.bootstrap_open_ids', []);
 
         return is_array($openIds) ? array_values(array_filter($openIds, 'is_string')) : [];
     }
@@ -68,7 +68,7 @@ class AdminAccessService
         }
 
         $now = Clock::nowMs();
-        $idleTimeoutMs = max(15, min(240, (int) config('gisely.admin.idle_timeout_minutes', 60))) * 60 * 1000;
+        $idleTimeoutMs = max(15, min(240, (int) config('gisley.admin.idle_timeout_minutes', 60))) * 60 * 1000;
 
         $session = DB::table('morada_admin_sessions')
             ->where('jti', $jti)
@@ -150,7 +150,7 @@ class AdminAccessService
         $request->session()->put('admin_jti', $jti);
         $request->session()->put('admin_open_id', $identity['openId']);
 
-        $this->trimSessions($identity['openId'], (int) config('gisely.admin.max_sessions', 3));
+        $this->trimSessions($identity['openId'], (int) config('gisley.admin.max_sessions', 3));
 
         return [
             'openId' => $identity['openId'],
