@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Services\PropertyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -46,6 +48,7 @@ class PublicCatalogPaginationTest extends TestCase
             'price' => 7000,
             'bedrooms' => 4,
         ]);
+        Cache::forget(PropertyService::PUBLIC_CATALOG_FACETS_CACHE_KEY);
 
         $this->getJson('/api/v2/properties?purpose=Alugar&type=Casa&location=Savassi%20%C2%B7%20Belo%20Horizonte&price_band=2&bedrooms=4%2B')
             ->assertOk()
