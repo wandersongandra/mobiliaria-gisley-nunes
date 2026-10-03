@@ -31,6 +31,7 @@ class ProductionCheckCommandTest extends TestCase
             'services.manus_oauth.portal_url' => 'https://oauth.example.test',
             'services.manus_oauth.api_url' => 'https://oauth-api.example.test',
             'services.manus_oauth.project_id' => 'project',
+            'gisley.network.trusted_proxies' => ['203.0.113.0/24'],
         ]);
 
         $this->artisan('app:production-check')

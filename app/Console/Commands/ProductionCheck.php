@@ -34,6 +34,7 @@ class ProductionCheck extends Command
             'OAuth configuration is present' => $this->configured([
                 'services.manus_oauth.portal_url', 'services.manus_oauth.api_url', 'services.manus_oauth.project_id',
             ]),
+            'trusted proxy CIDRs are configured' => (array) config('gisley.network.trusted_proxies') !== [],
         ];
 
         $failed = false;

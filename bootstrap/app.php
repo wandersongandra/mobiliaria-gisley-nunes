@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ConfigureTrustedProxies;
 use App\Http\Middleware\RequestContext;
 use App\Http\Middleware\RequireAdmin;
 use App\Http\Middleware\RequireCapability;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(ConfigureTrustedProxies::class);
         $middleware->append(RequestContext::class);
         $middleware->append(SecurityHeaders::class);
 
