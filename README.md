@@ -32,7 +32,7 @@ O frontend público e o painel usam assets estáticos em `public/assets` e `publ
 
 ## Produção — HostGator / PHP-FPM
 
-O alvo oficial de hospedagem é HostGator com Laravel em PHP-FPM, MySQL e Document Root apontado para `public/`. Node.js e Docker não fazem parte do runtime de produção. Consulte o guia de migração antes de configurar o ambiente.
+O alvo oficial de hospedagem é HostGator com Laravel em PHP-FPM, MySQL e Document Root apontado para `public/`. Node.js e Docker não fazem parte do runtime de produção. Consulte o guia de migração e o relatório [PHASE4-HOSTGATOR-RUNTIME.md](docs/PHASE4-HOSTGATOR-RUNTIME.md) antes de configurar o ambiente. O workflow manual `HostGator preparation preflight` prepara o pacote, mas não executa SSH ou deploy.
 
 Na hospedagem, instale as dependências de produção e prepare o cache:
 
