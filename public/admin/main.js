@@ -286,15 +286,28 @@ async function saveProperty(event) {
   data.status = data.published ? 'published' : 'draft';
 
   let propertySaved = false;
+  const publishAfterUpload = data.status === 'published'
+    && state.pendingFiles.length > 0
+    && !state.editing?.photos?.some((photo) => photo.is_cover);
   try {
+    const initialData = publishAfterUpload
+      ? { ...data, status: 'draft', published: false, featured: false }
+      : data;
     const result = await request(
       state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties',
-      { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(data) }
+      { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(initialData) }
     );
 
     state.editing = result.property;
     propertySaved = true;
     await uploadPendingFiles(result.property.id);
+    if (publishAfterUpload) {
+      const published = await request(`/api/admin/properties/${result.property.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+      state.editing = published.property;
+    }
 
     state.properties = (await request('/api/admin/properties')).properties;
     renderProperties();
@@ -306,9 +319,18 @@ async function saveProperty(event) {
       state.properties = (await request('/api/admin/properties').catch(() => ({ properties: state.properties }))).properties;
       renderProperties();
       renderEditorPhotos();
-      toast('Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.', 'error');
+      toast(state.pendingFiles.length
+        ? 'Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.'
+        : data.status === 'published'
+          ? 'Imóvel salvo como rascunho. Confira a capa e tente publicar novamente.'
+          : 'Imóvel salvo, mas não foi possível concluir a atualização. Tente novamente.', 'error');
     } else {
-      toast(error.message === 'SLUG_CONFLICT' ? 'Já existe um imóvel com esse endereço de URL.' : 'Não foi possível salvar. Tente novamente.', 'error');
+      const message = error.message === 'SLUG_CONFLICT'
+        ? 'Já existe um imóvel com esse endereço de URL.'
+        : error.message === 'COVER_REQUIRED'
+          ? 'Adicione uma foto de capa antes de publicar.'
+          : 'Não foi possível salvar. Confira os dados e tente novamente.';
+      toast(message, 'error');
     }
   } finally {
     button.disabled = false;
@@ -391,7 +413,7 @@ async function uploadPendingFiles(propertyId) {
         storagePath: presign.storagePath,
         altText: file.name.replace(/\.[^.]+$/, ''),
         sortOrder: existingPhotoCount,
-        isCover: existingPhotoCount === 0,
+        isCover: !state.editing?.photos?.some((photo) => photo.is_cover),
         contentType: file.type,
         size: file.size,
         width: dimensions.width,

@@ -177,8 +177,17 @@ class PropertyService
                 throw new RuntimeException('CAPABILITY_REQUIRED');
             }
 
-            $generated = Str::slug($data['title']);
-            $slug = substr($data['slug'] ?: ((string) ($existing->slug ?? '') ?: $generated ?: $propertyId), 0, 170);
+            if ($data['status'] === 'published'
+                && ! DB::table('morada_property_photos')
+                    ->where('property_id', $propertyId)
+                    ->where('is_cover', true)
+                    ->exists()) {
+                throw new RuntimeException('COVER_REQUIRED');
+            }
+
+            $generated = Str::slug($data['title']) ?: $propertyId;
+            $slug = substr($data['slug'] ?: ((string) ($existing->slug ?? '') ?: $generated), 0, 180);
+            $slug = $this->uniqueSlug($slug, $id, $id === null && $data['slug'] === '');
 
             $payload = $data;
             $payload['slug'] = $slug;
@@ -194,7 +203,7 @@ class PropertyService
                     ]);
                 }
             } catch (QueryException $e) {
-                if ((int) ($e->errorInfo[1] ?? 0) === 1062) {
+                if ($this->isSlugConflict($e)) {
                     throw new RuntimeException('SLUG_CONFLICT', previous: $e);
                 }
                 throw $e;
@@ -281,7 +290,7 @@ class PropertyService
     public function removePhoto(string $photoId, bool $requireDraft = false): ?array
     {
         return DB::transaction(function () use ($photoId, $requireDraft): ?array {
-            $photo = DB::table('morada_property_photos')->where('id', $photoId)->lockForUpdate()->first();
+            $photo = DB::table('morada_property_photos')->where('id', $photoId)->first();
             if (! $photo) {
                 return null;
             }
@@ -291,8 +300,25 @@ class PropertyService
                 return null;
             }
 
+            $photo = DB::table('morada_property_photos')
+                ->where('id', $photoId)
+                ->where('property_id', $property->id)
+                ->lockForUpdate()
+                ->first();
+            if (! $photo) {
+                return null;
+            }
+
             if ($requireDraft && (string) $property->status !== 'draft') {
                 throw new RuntimeException('CAPABILITY_REQUIRED');
+            }
+
+            if ((string) $property->status === 'published'
+                && (bool) $photo->is_cover
+                && DB::table('morada_property_photos')
+                    ->where('property_id', $photo->property_id)
+                    ->count() === 1) {
+                throw new RuntimeException('COVER_REQUIRED');
             }
 
             DB::table('morada_property_photos')->where('id', $photoId)->delete();
@@ -361,12 +387,24 @@ class PropertyService
                 throw new RuntimeException('NOT_FOUND');
             }
 
+            $selectedPhoto = DB::table('morada_property_photos')
+                ->where('id', $photoId)
+                ->where('property_id', $property->id)
+                ->lockForUpdate()
+                ->first();
+            if (! $selectedPhoto) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+
             if ($requireDraft && (string) $property->status !== 'draft') {
                 throw new RuntimeException('CAPABILITY_REQUIRED');
             }
 
             DB::table('morada_property_photos')->where('property_id', $photo['property_id'])->update(['is_cover' => 0]);
-            DB::table('morada_property_photos')->where('id', $photoId)->update(['is_cover' => 1]);
+            DB::table('morada_property_photos')
+                ->where('id', $photoId)
+                ->where('property_id', $property->id)
+                ->update(['is_cover' => 1]);
         });
 
         return $this->listPhotos($photo['property_id']);
@@ -509,6 +547,39 @@ class PropertyService
         }
 
         return substr($value, 0, 180);
+    }
+
+    private function uniqueSlug(string $slug, ?string $id, bool $generateSuffix): string
+    {
+        $query = DB::table('morada_properties')->where('slug', $slug);
+        if ($id !== null) {
+            $query->where('id', '!=', $id);
+        }
+        if (! $query->exists()) {
+            return $slug;
+        }
+        if (! $generateSuffix) {
+            throw new RuntimeException('SLUG_CONFLICT');
+        }
+
+        for ($suffix = 2; $suffix < 10_000; $suffix++) {
+            $tail = '-'.$suffix;
+            $candidate = rtrim(substr($slug, 0, 180 - strlen($tail)), '-').$tail;
+            if (! DB::table('morada_properties')->where('slug', $candidate)->exists()) {
+                return $candidate;
+            }
+        }
+
+        throw new RuntimeException('SLUG_CONFLICT');
+    }
+
+    private function isSlugConflict(QueryException $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'unique constraint failed: morada_properties.slug')
+            || str_contains($message, 'morada_properties_slug_unique')
+            || str_contains($message, "for key 'slug'");
     }
 
     private function text(mixed $value, int $max, bool $required): string

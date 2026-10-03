@@ -64,6 +64,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'INVITATION_EMAIL_MISMATCH',
                 'TEAM_MEMBER_EXISTS',
                 'SLUG_CONFLICT',
+                'COVER_REQUIRED',
                 'PHOTO_LIMIT_REACHED',
                 'CAPABILITY_REQUIRED',
                 'ASSET_NOT_UPLOADED',
@@ -80,6 +81,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'CAPABILITY_REQUIRED', 'MANAGER_REQUIRED' => 403,
                     'NOT_FOUND' => 404,
                     'SLUG_CONFLICT', 'PHOTO_LIMIT_REACHED', 'ASSET_ALREADY_REGISTERED', 'TEAM_MEMBER_EXISTS' => 409,
+                    'COVER_REQUIRED' => 422,
                     'STORAGE_NOT_CONFIGURED' => 503,
                     default => 400,
                 };
