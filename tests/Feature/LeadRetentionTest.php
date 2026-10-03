@@ -31,6 +31,7 @@ class LeadRetentionTest extends TestCase
                 'message' => 'Dados pessoais removidos conforme política de retenção.',
                 'property_path' => null,
             ]);
+            $this->assertNotNull(DB::table('morada_contact_leads')->where('id', $id)->value('anonymized_at'));
         }
 
         $this->assertDatabaseHas('morada_contact_leads', [
@@ -48,6 +49,10 @@ class LeadRetentionTest extends TestCase
             'status' => 'new',
             'name' => 'Cliente Teste',
         ]);
+
+        $this->artisan('gisley:anonymize-expired-leads')
+            ->expectsOutputToContain('Anonymized 0 expired lead(s).')
+            ->assertSuccessful();
     }
 
     private function createLead(string $status, mixed $updatedAt, mixed $createdAt = null): string
