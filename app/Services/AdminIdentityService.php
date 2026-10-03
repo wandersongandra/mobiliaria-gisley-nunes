@@ -23,7 +23,7 @@ class AdminIdentityService
         $email = strtolower(trim($identity['email']));
         $name = trim($identity['name']);
 
-        for ($attempt = 0; $attempt < 2; $attempt++) {
+        foreach ([0, 1] as $attempt) {
             try {
                 return DB::transaction(function () use ($provider, $subject, $email, $name): array {
                     $existing = DB::table('morada_oauth_identities')

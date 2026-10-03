@@ -396,7 +396,7 @@ class CrmService
             'created_at' => now(),
         ];
 
-        for ($attempt = 0; $attempt < 2; $attempt++) {
+        foreach ([0, 1] as $attempt) {
             try {
                 DB::transaction(function () use ($email, $payload): void {
                     DB::table('morada_staff_invitations')
@@ -420,6 +420,8 @@ class CrmService
                 }
             }
         }
+
+        throw new \LogicException('Invitation retry exhausted.');
     }
 
     public function listInvitations(): array

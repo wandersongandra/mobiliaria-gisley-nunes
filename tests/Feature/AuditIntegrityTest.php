@@ -8,7 +8,6 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Mockery;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -23,8 +22,13 @@ class AuditIntegrityTest extends TestCase
             'area' => 'Antes',
             'updated_at' => now(),
         ]);
-        $crm = Mockery::mock(CrmService::class);
-        $crm->shouldReceive('recordAudit')->once()->andThrow(new RuntimeException('audit unavailable'));
+        $crm = new class extends CrmService
+        {
+            public function recordAudit(array $admin, string $action, string $entityType, ?string $entityId = null, ?array $details = null): void
+            {
+                throw new RuntimeException('audit unavailable');
+            }
+        };
         $critical = new CriticalAuditService($crm);
 
         try {
