@@ -215,6 +215,35 @@ class CrmService
             ->update(['status' => $status, 'updated_at' => now()]) > 0;
     }
 
+    public function anonymizeExpiredLeads(): int
+    {
+        $cutoff = now()->subYears(2);
+        $anonymized = 0;
+
+        DB::table('morada_contact_leads')
+            ->select(['id', 'status', 'updated_at'])
+            ->whereIn('status', ['fechado', 'closed', 'perdido', 'lost'])
+            ->where('updated_at', '<', $cutoff)
+            ->orderBy('id')
+            ->chunkById(100, function ($leads) use (&$anonymized): void {
+                foreach ($leads as $lead) {
+                    $id = (string) $lead->id;
+                    $anonymized += DB::table('morada_contact_leads')
+                        ->where('id', $id)
+                        ->whereIn('status', ['fechado', 'closed', 'perdido', 'lost'])
+                        ->where('updated_at', $lead->updated_at)
+                        ->update([
+                            'name' => 'Contato anonimizado',
+                            'email' => 'anonimizado+'.$id.'@invalid.local',
+                            'message' => 'Dados pessoais removidos conforme política de retenção.',
+                            'property_path' => null,
+                        ]);
+                }
+            });
+
+        return $anonymized;
+    }
+
     private function leadQuery(array $filters): Builder
     {
         $query = DB::table('morada_contact_leads');

@@ -10,3 +10,7 @@ Artisan::command('gisley:status', function (): void {
 Schedule::command('gisley:cleanup-orphaned-property-uploads')
     ->dailyAt('03:00')
     ->withoutOverlapping();
+
+Schedule::command('gisley:anonymize-expired-leads')
+    ->dailyAt('03:30')
+    ->withoutOverlapping();
