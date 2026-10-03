@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class UploadLifecycleTest extends TestCase
@@ -47,6 +48,47 @@ class UploadLifecycleTest extends TestCase
 
         $this->assertSame(400, $response->status(), $response->content());
         $response->assertJson(['error' => 'INVALID_ASSET']);
+    }
+
+    #[DataProvider('invalidPhotoMetadata')]
+    public function test_photo_registration_rejects_invalid_mime_size_and_dimensions(array $overrides, string $error): void
+    {
+        config([
+            'app.url' => 'https://test.local',
+            'app.admin_url' => 'https://test.local',
+        ]);
+        $propertyId = $this->createDraftProperty();
+        $session = $this->createManagerSession();
+        $storage = Mockery::mock(R2Storage::class)->makePartial();
+        $storage->shouldNotReceive('metadata');
+        $this->app->instance(R2Storage::class, $storage);
+
+        $payload = array_merge([
+            'storagePath' => 'gisley/properties/'.$propertyId.'/photo.jpg',
+            'altText' => 'Foto do imóvel',
+            'contentType' => 'image/jpeg',
+            'size' => 1024,
+            'width' => 800,
+            'height' => 600,
+            'sortOrder' => 0,
+            'isCover' => false,
+        ], $overrides);
+
+        $this->withSession($session)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->postJson('/api/admin/properties/'.$propertyId.'/photos', $payload)
+            ->assertStatus(400)
+            ->assertJson(['error' => $error]);
+    }
+
+    public static function invalidPhotoMetadata(): array
+    {
+        return [
+            'unsupported mime' => [['contentType' => 'application/octet-stream'], 'INVALID_ASSET'],
+            'oversized file' => [['size' => 12 * 1024 * 1024 + 1], 'INVALID_FILE'],
+            'zero width' => [['width' => 0], 'INVALID_ASSET'],
+            'excessive height' => [['height' => 20001], 'INVALID_ASSET'],
+        ];
     }
 
     public function test_scheduled_cleanup_deletes_old_unregistered_objects_only(): void

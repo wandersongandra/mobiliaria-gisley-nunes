@@ -40,12 +40,37 @@ class OAuthIdentityTest extends TestCase
             ->assertSee('Código de vinculação temporário');
     }
 
+    #[DataProvider('invalidIdentityClaims')]
+    public function test_callback_rejects_malformed_identity_claims(array $claims): void
+    {
+        $this->fakeOAuthIdentity($claims);
+        $state = $this->beginLogin();
+
+        $this->get('/api/auth/callback?'.http_build_query([
+            'code' => 'valid-auth-code',
+            'state' => $state,
+        ]))
+            ->assertBadRequest()
+            ->assertSee('Não foi possível concluir o acesso.');
+
+        $this->assertDatabaseCount('morada_identity_pairings', 0);
+    }
+
     public static function unverifiedEmailClaims(): array
     {
         return [
             'claim ausente' => [[]],
             'claim nula' => [['emailVerified' => null]],
             'claim falsa' => [['emailVerified' => false]],
+            'claim não booleana' => [['emailVerified' => 'true']],
+        ];
+    }
+
+    public static function invalidIdentityClaims(): array
+    {
+        return [
+            'e-mail inválido' => [['email' => 'not-an-email', 'emailVerified' => true]],
+            'open id vazio' => [['openId' => '', 'emailVerified' => true]],
         ];
     }
 

@@ -27,6 +27,7 @@ class BackendContractTest extends TestCase
 
     public function test_contact_form_is_persisted_with_same_origin(): void
     {
+        config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
         $this->withHeader('Origin', 'http://localhost')
             ->postJson('/api/contact', [
                 'name' => 'Cliente Teste',
