@@ -74,3 +74,5 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 .logout-all-button:disabled,.logout-button:disabled{opacity:.55;cursor:not-allowed}
 
 :where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:3px solid rgba(201,130,91,.7);outline-offset:2px}
+@media(max-width:800px){.login-screen{grid-template-columns:minmax(0,1fr)}.login-panel{min-width:0;width:100%;padding:35px 28px}.login-panel h1{font-size:36px}.login-panel>p:not(.admin-kicker):not(.login-note){max-width:100%}.login-art{display:none}}
+@media(max-width:360px){.login-panel h1{font-size:32px}}
