@@ -8,8 +8,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: laravel-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  laravel:
+  mysql:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -44,6 +48,8 @@ jobs:
       DB_PASSWORD: integration-only
       SESSION_DRIVER: file
       CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      TRUSTED_PROXIES: 203.0.113.0/24
       GISELY_ADMIN_OPEN_IDS: test-bootstrap-open-id
       R2_ACCOUNT_ID: test-account
       R2_BUCKET: test-bucket
@@ -81,8 +87,8 @@ jobs:
       - name: Compile Blade views
         run: php artisan view:cache
 
-      - name: Database migrations
-        run: php artisan migrate --force
+      - name: Fresh MySQL schema
+        run: php artisan migrate:fresh --force
 
       - name: Application contract tests
         run: vendor/bin/phpunit --testsuite=Feature
@@ -94,3 +100,6 @@ jobs:
         run: |
           php artisan config:cache
           php artisan route:cache
+
+      - name: Migration rollback smoke check
+        run: php artisan migrate:rollback --step=1 --force
