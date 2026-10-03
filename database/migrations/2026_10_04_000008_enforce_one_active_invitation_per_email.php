@@ -44,7 +44,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement('DROP INDEX morada_staff_invitations_one_active_email');
+        if (DB::getDriverName() === 'sqlite') {
+            DB::statement('DROP INDEX morada_staff_invitations_one_active_email');
+        } else {
+            DB::statement('DROP INDEX morada_staff_invitations_one_active_email ON morada_staff_invitations');
+        }
 
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE morada_staff_invitations DROP COLUMN active_email');
