@@ -34,7 +34,7 @@ class DiscoveryController extends Controller
 
     public function sitemap(): Response
     {
-        $properties = $this->publicItems();
+        $properties = $this->properties->publicCatalog();
         $entries = [
             ['path' => '/', 'priority' => '1.0', 'changefreq' => 'weekly'],
             ['path' => '/imoveis', 'priority' => '0.9', 'changefreq' => 'daily'],
@@ -72,7 +72,7 @@ class DiscoveryController extends Controller
 
     public function llms(): Response
     {
-        $properties = $this->publicItems();
+        $properties = $this->properties->publicCatalog();
         $lines = [
             '# Gisley Nunes Imóveis', '',
             '> Imóveis para comprar e alugar em Belo Horizonte e região. Consulte o catálogo e entre em contato.', '',
@@ -93,16 +93,5 @@ class DiscoveryController extends Controller
         }
 
         return response(implode("\n", $lines), 200)->header('Content-Type', 'text/plain; charset=utf-8');
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function publicItems(): array
-    {
-        return array_map(
-            fn (array $row): array => $this->properties->publicProperty($row),
-            $this->properties->listProperties(true)
-        );
     }
 }

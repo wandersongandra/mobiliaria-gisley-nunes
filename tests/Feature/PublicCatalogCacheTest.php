@@ -89,6 +89,78 @@ class PublicCatalogCacheTest extends TestCase
         );
     }
 
+    public function test_ssr_and_discovery_routes_share_the_catalog_cache_and_see_writes(): void
+    {
+        config(['cache.default' => 'array']);
+        Cache::flush();
+        $service = app(PropertyService::class);
+        $property = $this->publishProperty($service, 'Casa dos Bairros');
+
+        // Aquece o cache pela rota JSON.
+        $this->getJson('/api/properties')->assertOk()->assertJsonCount(1, 'properties');
+
+        // As rotas SSR e de descoberta devem reaproveitar o mesmo cache, sem
+        // consultar morada_properties de novo.
+        foreach (['/bairros', '/bairros/lourdes', '/sitemap.xml', '/llms.txt'] as $path) {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->get($path)->assertOk();
+            $this->assertSame(
+                0,
+                $this->catalogQueryCount(),
+                "A rota {$path} consultou o catálogo em vez de usar o cache compartilhado."
+            );
+        }
+
+        // Uma escrita precisa invalidar o cache para as rotas HTML também.
+        $service->archiveProperty($property['id']);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->get('/bairros')->assertOk()->assertDontSee('Lourdes');
+        $this->assertGreaterThan(0, $this->catalogQueryCount());
+
+        $this->get('/sitemap.xml')->assertOk()->assertDontSee('/imoveis/casa-dos-bairros');
+        $this->get('/llms.txt')->assertOk()->assertDontSee('casa-dos-bairros');
+    }
+
+    /**
+     * @return array{id: string}
+     */
+    private function publishProperty(PropertyService $service, string $title): array
+    {
+        $payload = [
+            'title' => $title,
+            'location' => 'Lourdes · Belo Horizonte',
+            'city' => 'Belo Horizonte',
+            'purpose' => 'Comprar',
+            'type' => 'Casa',
+        ];
+
+        $draft = $service->saveProperty($payload + ['status' => 'draft']);
+
+        $photoId = (string) Str::uuid();
+        $service->addPhoto([
+            'id' => $photoId,
+            'property_id' => $draft['id'],
+            'storage_path' => 'gisley/properties/'.$draft['id'].'/'.$photoId.'.jpg',
+            'url' => 'https://media.example.test/'.$photoId.'.jpg',
+            'alt_text' => 'Fachada',
+            'sort_order' => 0,
+            'is_cover' => 1,
+            'storage_provider' => 'r2',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 1024,
+            'width' => 1200,
+            'height' => 800,
+            'uploaded_by' => 'manager@example.test',
+        ]);
+
+        $published = $service->saveProperty($payload + ['status' => 'published'], $draft['id']);
+
+        return ['id' => (string) $published['id']];
+    }
+
     private function catalogQueryCount(): int
     {
         return collect(DB::getQueryLog())

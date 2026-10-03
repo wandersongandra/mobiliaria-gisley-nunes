@@ -67,14 +67,14 @@ class PageController extends Controller
             'Explore bairros com imóveis publicados em Belo Horizonte e região. Encontre opções por localização e fale com a equipe.',
             '/bairros'
         );
-        $data['neighborhoods'] = $this->properties->neighborhoods($this->publicItems());
+        $data['neighborhoods'] = $this->properties->neighborhoods($this->properties->publicCatalog());
 
         return view('bairros', $data);
     }
 
     public function bairro(Request $request, string $slug)
     {
-        $neighborhood = collect($this->properties->neighborhoods($this->publicItems()))
+        $neighborhood = collect($this->properties->neighborhoods($this->properties->publicCatalog()))
             ->firstWhere('slug', Str::slug($slug));
 
         if (! $neighborhood) {
@@ -225,17 +225,6 @@ class PageController extends Controller
             ]),
             'pageLd' => null,
         ];
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function publicItems(): array
-    {
-        return array_map(
-            fn (array $row): array => $this->properties->publicProperty($row),
-            $this->properties->listProperties(true)
-        );
     }
 
     /**
