@@ -29,6 +29,7 @@ Route::get('/sitemap.xml', [DiscoveryController::class, 'sitemap']);
 Route::get('/llms.txt', [DiscoveryController::class, 'llms']);
 
 Route::get('/api/properties', [PublicApiController::class, 'properties']);
+Route::get('/api/v2/properties', [PublicApiController::class, 'propertiesV2']);
 Route::get('/api/properties/{slug}', [PublicApiController::class, 'property']);
 Route::get('/api/site', [PublicApiController::class, 'site']);
 Route::post('/api/contact', [PublicApiController::class, 'contact'])

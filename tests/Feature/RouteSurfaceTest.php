@@ -43,6 +43,7 @@ class RouteSurfaceTest extends TestCase
         'GET api/properties',
         'GET api/properties/{slug}',
         'GET api/site',
+        'GET api/v2/properties',
         'GET bairros',
         'GET bairros/{slug}',
         'GET contato',

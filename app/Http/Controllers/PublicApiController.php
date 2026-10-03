@@ -24,6 +24,33 @@ class PublicApiController extends Controller
         );
     }
 
+    public function propertiesV2(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'between:20,100'],
+        ]);
+        $paginator = $this->properties->paginatePublicProperties(
+            (int) ($filters['page'] ?? 1),
+            (int) ($filters['per_page'] ?? 20),
+        );
+
+        return response()->json([
+            'properties' => array_map(
+                fn (array $row): array => $this->properties->publicProperty($row),
+                $paginator->items(),
+            ),
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+            ],
+        ])->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    }
+
     public function property(string $slug): JsonResponse
     {
         $row = $this->properties->getPropertyBySlug($slug);

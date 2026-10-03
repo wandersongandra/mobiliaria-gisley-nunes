@@ -67,6 +67,29 @@ class PropertyService
         return $this->hydratePhotos($query->get()->map(fn ($row) => (array) $row)->all());
     }
 
+    public function paginatePublicProperties(int $page, int $perPage): LengthAwarePaginator
+    {
+        $query = DB::table('morada_properties as p')
+            ->leftJoin('morada_property_photos as ph', function ($join): void {
+                $join->on('ph.property_id', '=', 'p.id')->where('ph.is_cover', '=', 1);
+            })
+            ->where('p.status', 'published')
+            ->select('p.*', DB::raw("COALESCE(ph.url, '') AS cover_url"));
+
+        $paginator = $query
+            ->orderByDesc('p.is_featured')
+            ->orderByDesc('p.updated_at')
+            ->orderByDesc('p.id')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        $rows = $this->hydratePhotos(
+            $paginator->getCollection()->map(static fn ($row): array => (array) $row)->all()
+        );
+        $paginator->setCollection(collect($rows));
+
+        return $paginator;
+    }
+
     public function paginateAdminProperties(array $filters): LengthAwarePaginator
     {
         $query = DB::table('morada_properties as p')
