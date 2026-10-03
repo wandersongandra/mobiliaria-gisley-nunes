@@ -576,7 +576,7 @@ class PropertyService
         $groups = [];
 
         foreach ($publicProperties as $property) {
-            $name = trim(explode('·', (string) ($property['location'] ?? ''))[0] ?? '');
+            $name = trim(explode('·', (string) ($property['location'] ?? ''))[0]);
             if ($name === '') {
                 $name = trim((string) ($property['city'] ?? ''));
             }

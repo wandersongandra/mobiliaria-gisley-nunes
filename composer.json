@@ -14,6 +14,7 @@
     "aws/aws-sdk-php": "^3.0"
   },
   "require-dev": {
+    "larastan/larastan": "^3.0",
     "laravel/pint": "^1.18",
     "mockery/mockery": "^1.6",
     "phpunit/phpunit": "^11.5"
@@ -24,6 +25,9 @@
     }
   },
   "scripts": {
+    "analyse": "phpstan analyse --no-progress",
+    "format:check": "pint --test",
+    "test": "phpunit --testsuite=Feature",
     "post-autoload-dump": [
       "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
       "@php artisan package:discover --ansi"
