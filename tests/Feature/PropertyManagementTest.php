@@ -12,8 +12,8 @@ use Tests\TestCase;
 
 class PropertyManagementTest extends TestCase
 {
-    use RefreshDatabase;
     use CreatesAdminIdentity;
+    use RefreshDatabase;
 
     protected function setUp(): void
     {

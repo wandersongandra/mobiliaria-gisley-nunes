@@ -7,14 +7,14 @@ use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Tests\Concerns\CreatesAdminIdentity;
 use RuntimeException;
+use Tests\Concerns\CreatesAdminIdentity;
 use Tests\TestCase;
 
 class PropertyLifecycleTest extends TestCase
 {
-    use RefreshDatabase;
     use CreatesAdminIdentity;
+    use RefreshDatabase;
 
     public function test_property_slugs_are_generated_and_unique(): void
     {

@@ -13,8 +13,8 @@ use Tests\TestCase;
 
 class AdminAccessConfigurationTest extends TestCase
 {
-    use RefreshDatabase;
     use CreatesAdminIdentity;
+    use RefreshDatabase;
 
     public function test_bootstrap_user_ids_are_read_from_gisley_config(): void
     {

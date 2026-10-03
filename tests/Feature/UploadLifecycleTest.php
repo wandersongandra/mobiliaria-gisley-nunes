@@ -16,8 +16,8 @@ use Tests\TestCase;
 
 class UploadLifecycleTest extends TestCase
 {
-    use RefreshDatabase;
     use CreatesAdminIdentity;
+    use RefreshDatabase;
 
     public function test_photo_registration_rejects_actual_object_size_mismatch(): void
     {
