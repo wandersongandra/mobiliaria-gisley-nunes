@@ -32,6 +32,13 @@
   hospedado com credenciais reais e não foi executada localmente.
 - A API pública de catálogo preserva o contrato atual de lista completa;
   paginação pública requer mudança coordenada no consumidor JavaScript.
+- Auditorias de CRUD são gravadas após a mutação e seguem o comportamento de
+  melhor esforço do controller. Torná-las atômicas exige desenhar uma unidade de
+  trabalho por caso de uso para não transformar uma falha de log em repetição de
+  operação pelo cliente.
+- Sessões e usuários usam o mesmo `open_id`, mas não possuem foreign key entre
+  si para manter compatibilidade com o bootstrap OAuth. Criar essa FK requer
+  inspeção e correção de dados no MySQL hospedado antes da migration.
 - A aplicação é single-tenant; não há isolamento por imobiliária/proprietário.
 - Definir retenção legal e backup independente para trilha de auditoria exige
   decisão operacional.
