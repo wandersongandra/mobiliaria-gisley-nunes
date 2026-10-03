@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], leads: [], team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
+const state = { user: null, csrfToken: '', properties: [], leads: [], leadPagination: null, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -40,6 +40,8 @@ function clearSensitiveState() {
   state.csrfToken = '';
   state.properties = [];
   state.leads = [];
+  state.leadPagination = null;
+  state.leadFilters = { status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
   state.team = [];
   state.invitations = [];
   state.audit = [];
@@ -656,8 +658,27 @@ function ensureLeadsPanel() {
   const panel = document.createElement('section');
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">novos contatos</p><h3>Interesses recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><div id="lead-list" class="lead-list"></div>';
+  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><a class="outline-button lead-export" data-lead-export="csv" href="/api/admin/leads/export?format=csv">Exportar CSV</a><a class="outline-button lead-export" data-lead-export="json" href="/api/admin/leads/export?format=json">Exportar JSON</a></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
   metrics.insertAdjacentElement('afterend', panel);
+  $('#lead-filters').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    state.leadFilters = {
+      ...state.leadFilters,
+      status: String(values.get('status') || ''),
+      date_from: String(values.get('date_from') || ''),
+      date_to: String(values.get('date_to') || ''),
+      per_page: Number(values.get('per_page')) || 20,
+      page: 1
+    };
+    void loadLeads();
+  });
+  panel.querySelectorAll('[data-lead-page]').forEach((button) => button.addEventListener('click', () => {
+    const current = state.leadPagination?.current_page || 1;
+    const last = state.leadPagination?.last_page || 1;
+    state.leadFilters.page = button.dataset.leadPage === 'next' ? Math.min(last, current + 1) : Math.max(1, current - 1);
+    void loadLeads();
+  }));
   return panel;
 }
 
@@ -670,12 +691,31 @@ function renderLeads() {
   const accent = document.querySelector('.metric-accent');
   if (accent) accent.innerHTML = `<span class="metric-label">contatos novos</span><strong>${String(newCount).padStart(2, '0')}</strong><small>recebidos pelo site</small>`;
 
-  const items = state.leads.slice(0, 8);
+  const items = state.leads;
+  const filters = $('#lead-filters');
+  filters.elements.status.value = state.leadFilters.status;
+  filters.elements.date_from.value = state.leadFilters.date_from;
+  filters.elements.date_to.value = state.leadFilters.date_to;
+  filters.elements.per_page.value = String(state.leadFilters.per_page);
+  const exportParams = new URLSearchParams();
+  for (const key of ['status', 'date_from', 'date_to']) {
+    if (state.leadFilters[key]) exportParams.set(key, state.leadFilters[key]);
+  }
+  panel.querySelectorAll('[data-lead-export]').forEach((link) => {
+    const params = new URLSearchParams(exportParams);
+    params.set('format', link.dataset.leadExport);
+    link.href = `/api/admin/leads/export?${params.toString()}`;
+  });
+  const pagination = state.leadPagination;
+  $('#lead-page-summary').textContent = pagination?.total ? `Exibindo ${pagination.from}–${pagination.to} de ${pagination.total}` : 'Nenhum contato encontrado';
+  panel.querySelector('[data-lead-page="previous"]').disabled = !pagination || pagination.current_page <= 1;
+  panel.querySelector('[data-lead-page="next"]').disabled = !pagination || pagination.current_page >= pagination.last_page;
   list.innerHTML = items.length ? items.map((lead) => {
     const propertyLink = String(lead.property_path || '').startsWith('/imoveis/')
       ? `<a class="lead-property" href="${escapeHTML(lead.property_path)}" target="_blank" rel="noopener">Ver imóvel ↗</a>` : '';
-    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><button type="button" data-lead-status="contacted" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'contacted' ? 'disabled' : ''}>Contatado</button><button type="button" data-lead-status="closed" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'closed' ? 'disabled' : ''}>Concluir</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
-  }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato pendente.</h4><p>Os formulários enviados pelo site aparecerão aqui.</p></div>';
+    const statusOptions = [['new', 'Novo'], ['em_contato', 'Em contato'], ['fechado', 'Fechado'], ['perdido', 'Perdido']];
+    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><label class="lead-status-control"><span class="sr-only">Status de ${escapeHTML(lead.name)}</span><select data-lead-status="${escapeHTML(lead.id)}">${statusOptions.map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button type="button" data-lead-save="${escapeHTML(lead.id)}">Salvar status</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
+  }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato encontrado.</h4><p>Ajuste os filtros ou aguarde novos contatos pelo site.</p></div>';
 
   list.querySelectorAll('[data-lead-delete]').forEach((button) => button.addEventListener('click', async () => {
     const lead = state.leads.find((item) => item.id === button.dataset.leadDelete);
@@ -684,8 +724,7 @@ function renderLeads() {
 
     try {
       await request(`/api/admin/leads/${button.dataset.leadDelete}`, { method: 'DELETE' });
-      state.leads = state.leads.filter((item) => item.id !== button.dataset.leadDelete);
-      renderLeads();
+      await loadLeads();
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Dados pessoais apagados permanentemente.';
@@ -700,17 +739,20 @@ function renderLeads() {
     }
   }));
 
-  list.querySelectorAll('[data-lead-id]').forEach((button) => button.addEventListener('click', async () => {
+  list.querySelectorAll('[data-lead-save]').forEach((button) => button.addEventListener('click', async () => {
+    const statusInput = list.querySelector(`[data-lead-status="${CSS.escape(button.dataset.leadSave)}"]`);
+    if (!(statusInput instanceof HTMLSelectElement)) return;
+    button.disabled = true;
     try {
-      await request(`/api/admin/leads/${button.dataset.leadId}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.leadStatus }) });
-      state.leads = state.leads.map((lead) => lead.id === button.dataset.leadId ? { ...lead, status: button.dataset.leadStatus } : lead);
-      renderLeads();
+      await request(`/api/admin/leads/${button.dataset.leadSave}`, { method: 'PATCH', body: JSON.stringify({ status: statusInput.value }) });
+      await loadLeads();
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Contato atualizado.';
         status.dataset.tone = 'success';
       }
     } catch {
+      button.disabled = false;
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Não foi possível atualizar este contato. Tente novamente.';
@@ -721,12 +763,20 @@ function renderLeads() {
 }
 
 async function loadLeads() {
+  const list = ensureLeadsPanel()?.querySelector('#lead-list');
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando contatos…</div>';
   try {
-    state.leads = (await request('/api/admin/leads')).leads || [];
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(state.leadFilters)) {
+      if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
+    }
+    const result = await request(`/api/admin/leads?${params.toString()}`);
+    state.leads = result.leads || [];
+    state.leadPagination = result.pagination || null;
     renderLeads();
   } catch {
     ensureLeadsPanel();
-    if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar os contatos agora.</p></div>';
+    if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p></div>';
   }
 }
 

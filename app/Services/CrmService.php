@@ -2,13 +2,18 @@
 
 namespace App\Services;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class CrmService
 {
+    public const LEAD_STATUSES = ['new', 'em_contato', 'fechado', 'perdido'];
+
     public const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 
     public const PAIRING_TTL_MS = 15 * 60 * 1000;
@@ -177,27 +182,74 @@ class CrmService
         return $id;
     }
 
-    public function listLeads(int $limit = 100): array
+    public function paginateLeads(array $filters): LengthAwarePaginator
     {
-        $limit = max(1, min(250, $limit));
+        $paginator = $this->leadQuery($filters)->paginate(
+            $filters['per_page'],
+            ['*'],
+            'page',
+            $filters['page']
+        );
 
-        return DB::table('morada_contact_leads')
-            ->orderByDesc('created_at')
-            ->limit($limit)
+        $paginator->getCollection()->transform(fn ($row): array => $this->leadView((array) $row));
+
+        return $paginator;
+    }
+
+    public function exportLeads(array $filters): array
+    {
+        return $this->leadQuery($filters)
             ->get()
-            ->map(fn ($row) => (array) $row)
+            ->map(fn ($row): array => $this->leadView((array) $row))
             ->all();
     }
 
     public function updateLeadStatus(string $id, string $status): bool
     {
-        if (! in_array($status, ['new', 'contacted', 'qualified', 'closed'], true)) {
+        if (! in_array($status, self::LEAD_STATUSES, true)) {
             throw new RuntimeException('INVALID_LEAD_STATUS');
         }
 
         return DB::table('morada_contact_leads')
             ->where('id', $id)
             ->update(['status' => $status, 'updated_at' => now()]) > 0;
+    }
+
+    private function leadQuery(array $filters): Builder
+    {
+        $query = DB::table('morada_contact_leads');
+
+        if (isset($filters['status'])) {
+            $legacyStatuses = match ($filters['status']) {
+                'em_contato' => ['em_contato', 'contacted', 'qualified'],
+                'fechado' => ['fechado', 'closed'],
+                'perdido' => ['perdido', 'lost'],
+                default => [$filters['status']],
+            };
+            $query->whereIn('status', $legacyStatuses);
+        }
+
+        if (isset($filters['date_from'])) {
+            $query->where('created_at', '>=', $filters['date_from'].' 00:00:00');
+        }
+
+        if (isset($filters['date_to'])) {
+            $query->where('created_at', '<', Carbon::parse($filters['date_to'])->addDay()->toDateString().' 00:00:00');
+        }
+
+        return $query->orderByDesc('created_at')->orderByDesc('id');
+    }
+
+    private function leadView(array $lead): array
+    {
+        $lead['status'] = match ($lead['status']) {
+            'contacted', 'qualified' => 'em_contato',
+            'closed' => 'fechado',
+            'lost' => 'perdido',
+            default => $lead['status'],
+        };
+
+        return $lead;
     }
 
     public function deleteLead(string $id): bool

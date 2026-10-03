@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -33,6 +34,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (Throwable $e, Request $request): ?Response {
             if (! $request->is('api/*')) {
                 return null;
+            }
+
+            if ($e instanceof ValidationException) {
+                return response()->json([
+                    'message' => 'The given data was invalid.',
+                    'errors' => $e->errors(),
+                ], 422);
             }
 
             report($e);

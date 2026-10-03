@@ -6,7 +6,10 @@ use App\Services\AdminAccessService;
 use App\Services\CrmService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 
 class AdminCrmController extends Controller
@@ -65,21 +68,120 @@ class AdminCrmController extends Controller
         return response()->noContent();
     }
 
-    public function leads(): JsonResponse
+    public function leads(Request $request): JsonResponse
     {
-        return response()->json(['leads' => $this->crm->listLeads(100)]);
+        $filters = $this->leadFilters($request);
+        $paginator = $this->crm->paginateLeads($filters);
+
+        return response()->json([
+            'leads' => $paginator->items(),
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+            ],
+        ])->header('Cache-Control', 'no-store');
+    }
+
+    public function exportLeads(Request $request): JsonResponse|Response
+    {
+        $filters = $this->leadFilters($request, true);
+        $leads = $this->crm->exportLeads($filters);
+        $format = $filters['format'];
+
+        $this->audit($this->admin($request), 'lead.export', 'lead', null, [
+            'format' => $format,
+            'filters' => array_intersect_key($filters, array_flip(['status', 'date_from', 'date_to'])),
+            'count' => count($leads),
+        ]);
+
+        if ($format === 'json') {
+            return response()->json(['leads' => $leads])->header('Cache-Control', 'no-store');
+        }
+
+        $columns = ['id', 'name', 'email', 'interest', 'message', 'property_path', 'status', 'created_at', 'updated_at'];
+        $stream = fopen('php://temp', 'r+');
+        if ($stream === false) {
+            throw new RuntimeException('EXPORT_FAILED');
+        }
+        fputcsv($stream, $columns, ',', '"', '\\', "\r\n");
+        foreach ($leads as $lead) {
+            fputcsv($stream, array_map(fn (string $column): string => $this->csvCell($lead[$column] ?? ''), $columns), ',', '"', '\\', "\r\n");
+        }
+        rewind($stream);
+        $csv = "\xEF\xBB\xBF".stream_get_contents($stream);
+        fclose($stream);
+
+        return response($csv)
+            ->header('Content-Type', 'text/csv; charset=UTF-8')
+            ->header('Content-Disposition', 'attachment; filename="leads-'.now()->format('Y-m-d').'.csv"')
+            ->header('Cache-Control', 'no-store');
     }
 
     public function updateLead(Request $request, string $id): JsonResponse
     {
         $this->assertId($id);
-        $status = (string) $request->input('status', '');
+        $status = $request->validate([
+            'status' => ['required', 'string', Rule::in(CrmService::LEAD_STATUSES)],
+        ])['status'];
         if (! $this->crm->updateLeadStatus($id, $status)) {
             return response()->json(['error' => 'NOT_FOUND'], 404);
         }
         $this->audit($this->admin($request), 'lead.status', 'lead', $id, ['status' => $status]);
 
         return response()->json(['ok' => true]);
+    }
+
+    private function leadFilters(Request $request, bool $includeFormat = false): array
+    {
+        $rules = [
+            'status' => ['nullable', 'string', Rule::in(CrmService::LEAD_STATUSES)],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+        ];
+        if (! $includeFormat) {
+            $rules['per_page'] = ['sometimes', 'integer', 'between:20,100'];
+            $rules['page'] = ['sometimes', 'integer', 'min:1'];
+        } else {
+            $rules['format'] = ['sometimes', 'string', Rule::in(['csv', 'json'])];
+        }
+
+        $validator = Validator::make($request->query(), $rules);
+        $validator->after(static function ($validator): void {
+            $data = $validator->getData();
+            if (
+                is_string($data['date_from'] ?? null)
+                && is_string($data['date_to'] ?? null)
+                && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $data['date_from'])
+                && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $data['date_to'])
+                && $data['date_from'] > $data['date_to']
+            ) {
+                $validator->errors()->add('date_to', 'A data final deve ser igual ou posterior à data inicial.');
+            }
+        });
+        $validated = $validator->validate();
+
+        return [
+            'status' => $validated['status'] ?? null,
+            'date_from' => $validated['date_from'] ?? null,
+            'date_to' => $validated['date_to'] ?? null,
+            'per_page' => (int) ($validated['per_page'] ?? 20),
+            'page' => (int) ($validated['page'] ?? 1),
+            'format' => $validated['format'] ?? 'csv',
+        ];
+    }
+
+    private function csvCell(mixed $value): string
+    {
+        $cell = (string) $value;
+        if (preg_match('/^[\x00-\x20]*[=+\-@]/u', $cell) === 1) {
+            return "'".$cell;
+        }
+
+        return $cell;
     }
 
     public function deleteLead(Request $request, string $id)
@@ -356,7 +458,7 @@ class AdminCrmController extends Controller
 
     private function token(int $bytes): string
     {
-        return rtrim(strtr(base64_encode(random_bytes($bytes)),'+/','-_'),'=');
+        return rtrim(strtr(base64_encode(random_bytes($bytes)), '+/', '-_'), '=');
     }
 
     private function nowMs(): int
