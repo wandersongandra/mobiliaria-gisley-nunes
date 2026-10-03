@@ -2,20 +2,8 @@ name: Laravel CI
 
 on:
   push:
-    branches:
-      - migration/laravel-backend-2026-10-02
+    branches: ['**']
   pull_request:
-    paths:
-      - 'app/**'
-      - 'bootstrap/**'
-      - 'config/**'
-      - 'database/**'
-      - 'public/**'
-      - 'resources/**'
-      - 'routes/**'
-      - 'composer.json'
-      - 'composer.lock'
-      - '.github/workflows/laravel-ci.yml'
 
 permissions:
   contents: read
@@ -23,7 +11,7 @@ permissions:
 jobs:
   laravel:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
 
     services:
       mysql:

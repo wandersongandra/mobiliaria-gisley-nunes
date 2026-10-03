@@ -11,6 +11,11 @@ class BackendContractTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_laravel_runtime_health_route_returns_success(): void
+    {
+        $this->get('/_app/health')->assertOk();
+    }
+
     public function test_public_json_contracts_boot(): void
     {
         $this->getJson('/api/site')
