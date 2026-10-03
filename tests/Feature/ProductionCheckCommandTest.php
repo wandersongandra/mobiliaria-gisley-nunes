@@ -24,7 +24,6 @@ class ProductionCheckCommandTest extends TestCase
             'session.http_only' => true,
             'session.same_site' => 'lax',
             'cache.default' => 'file',
-            'queue.default' => 'sync',
             'services.r2.account_id' => 'account',
             'services.r2.bucket' => 'bucket',
             'services.r2.access_key_id' => 'key',
