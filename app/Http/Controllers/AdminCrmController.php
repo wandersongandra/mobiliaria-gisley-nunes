@@ -2,18 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AdminRequestContext;
 use App\Services\AdminAccessService;
 use App\Services\CrmService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
 class AdminCrmController extends Controller
 {
+    use AdminRequestContext;
+
     public function __construct(
         private readonly AdminAccessService $access,
         private readonly CrmService $crm,
@@ -429,34 +431,6 @@ class AdminCrmController extends Controller
         $this->audit($admin, 'team.remove', 'staff', $email, ['sessionsRevoked' => true]);
 
         return response()->noContent();
-    }
-
-    private function admin(Request $request): array
-    {
-        $admin = $request->attributes->get('admin');
-        if (! is_array($admin)) {
-            throw new RuntimeException('AUTH_REQUIRED');
-        }
-
-        return $admin;
-    }
-
-    private function audit(array $admin, string $action, string $type, ?string $id = null, ?array $details = null): void
-    {
-        try {
-            $this->crm->recordAudit($admin, $action, $type, $id, $details);
-        } catch (\Throwable $error) {
-            report($error);
-        }
-    }
-
-    private function assertId(string $id): string
-    {
-        if (! Str::isUuid($id)) {
-            throw new RuntimeException('NOT_FOUND');
-        }
-
-        return $id;
     }
 
     private function token(int $bytes): string

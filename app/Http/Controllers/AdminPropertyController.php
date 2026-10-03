@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AdminRequestContext;
 use App\Services\AdminAccessService;
 use App\Services\CrmService;
 use App\Services\PropertyService;
@@ -15,6 +16,8 @@ use RuntimeException;
 
 class AdminPropertyController extends Controller
 {
+    use AdminRequestContext;
+
     private const MIME_EXTENSIONS = [
         'image/jpeg' => ['jpg', 'jpeg'],
         'image/png' => ['png'],
@@ -375,25 +378,6 @@ class AdminPropertyController extends Controller
             && ($this->access->hasCapability($admin, 'property.publish') || (string) $property['status'] === 'draft');
     }
 
-    private function admin(Request $request): array
-    {
-        $admin = $request->attributes->get('admin');
-        if (! is_array($admin)) {
-            throw new RuntimeException('AUTH_REQUIRED');
-        }
-
-        return $admin;
-    }
-
-    private function audit(array $admin, string $action, string $type, ?string $id = null, ?array $details = null): void
-    {
-        try {
-            $this->crm->recordAudit($admin, $action, $type, $id, $details);
-        } catch (\Throwable $error) {
-            report($error);
-        }
-    }
-
     private function adminPhotos(array $photos): array
     {
         return array_map(fn (array $photo): array => [
@@ -421,14 +405,5 @@ class AdminPropertyController extends Controller
         }
 
         return $size;
-    }
-
-    private function assertId(string $id): string
-    {
-        if (! Str::isUuid($id)) {
-            throw new RuntimeException('NOT_FOUND');
-        }
-
-        return $id;
     }
 }
