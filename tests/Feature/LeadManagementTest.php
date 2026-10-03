@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,7 +22,10 @@ class LeadManagementTest extends TestCase
     {
         $session = $this->createAdminSession('manager');
         for ($index = 0; $index < 25; $index++) {
-            $this->createLead(['status' => $index === 0 ? 'contacted' : 'new']);
+            $this->createLead([
+                'status' => $index === 0 ? 'contacted' : 'new',
+                'created_at' => Carbon::parse('2026-01-01 00:00:00')->addSeconds($index)->toDateTimeString(),
+            ]);
         }
 
         $this->withSession($session)
@@ -31,7 +35,8 @@ class LeadManagementTest extends TestCase
             ->assertJsonPath('leads.19.status', 'new')
             ->assertJsonPath('pagination.per_page', 20)
             ->assertJsonPath('pagination.total', 25)
-            ->assertJsonPath('pagination.last_page', 2);
+            ->assertJsonPath('pagination.last_page', 2)
+            ->assertJsonPath('summary.new', 24);
 
         $this->withSession($session)
             ->getJson('/api/admin/leads?status=em_contato')

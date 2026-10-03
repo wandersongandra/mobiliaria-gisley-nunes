@@ -196,6 +196,11 @@ class CrmService
         return $paginator;
     }
 
+    public function countNewLeads(): int
+    {
+        return DB::table('morada_contact_leads')->where('status', 'new')->count();
+    }
+
     public function exportLeads(array $filters): array
     {
         return $this->leadQuery($filters)

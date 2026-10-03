@@ -83,6 +83,9 @@ class AdminCrmController extends Controller
                 'from' => $paginator->firstItem(),
                 'to' => $paginator->lastItem(),
             ],
+            'summary' => [
+                'new' => $this->crm->countNewLeads(),
+            ],
         ])->header('Cache-Control', 'no-store');
     }
 
