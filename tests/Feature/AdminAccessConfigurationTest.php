@@ -13,6 +13,14 @@ class AdminAccessConfigurationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_bootstrap_user_ids_are_read_from_gisely_config(): void
+    {
+        config(['gisely.admin.bootstrap_open_ids' => ['bootstrap-test-user']]);
+
+        $this->assertTrue(app(AdminAccessService::class)->isBootstrap('bootstrap-test-user'));
+        $this->assertFalse(app(AdminAccessService::class)->isBootstrap('other-user'));
+    }
+
     public function test_idle_timeout_is_read_from_gisely_config(): void
     {
         config(['gisely.admin.idle_timeout_minutes' => 15]);

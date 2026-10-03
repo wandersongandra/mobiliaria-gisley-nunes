@@ -38,10 +38,9 @@ class AdminAccessService
 
     public function bootstrapOpenIds(): array
     {
-        return array_values(array_filter(array_map(
-            static fn (string $value): string => trim($value),
-            explode(',', (string) env('GISELY_ADMIN_OPEN_IDS', ''))
-        )));
+        $openIds = config('gisely.admin.bootstrap_open_ids', []);
+
+        return is_array($openIds) ? array_values(array_filter($openIds, 'is_string')) : [];
     }
 
     public function isBootstrap(string $openId): bool
