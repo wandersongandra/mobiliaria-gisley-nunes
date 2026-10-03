@@ -28,6 +28,20 @@ class BackendContractTest extends TestCase
             ->assertHeaderContains('Cache-Control', 'no-store');
     }
 
+    public function test_every_response_exposes_a_safe_request_identifier(): void
+    {
+        $response = $this->withHeader('X-Request-ID', 'trace_0123456789abcdef')
+            ->getJson('/health/live')
+            ->assertOk();
+
+        $response->assertHeader('X-Request-ID', 'trace_0123456789abcdef');
+
+        $this->withHeader('X-Request-ID', 'short')
+            ->getJson('/health/live')
+            ->assertOk()
+            ->assertHeader('X-Request-ID');
+    }
+
     public function test_public_json_contracts_boot(): void
     {
         $this->getJson('/api/site')

@@ -1,6 +1,6 @@
 # Resposta a incidentes
 
-1. Preserve evidência: horário, request ID quando disponível, logs e IDs de
+1. Preserve evidência: horário, `X-Request-ID`, logs e IDs de
    auditoria. Não copie tokens, cookies ou segredos para tickets.
 2. Para perda ou suspeita de acesso administrativo, revogue a equipe afetada ou
    execute logout global; em seguida, revogue a credencial OAuth/R2 envolvida.

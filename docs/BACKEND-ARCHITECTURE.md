@@ -30,6 +30,9 @@ Não introduzir Eloquent apenas por convenção: ele não reduz o acoplamento at
 - Operação: `/health/live`, `/health/ready` e o alias compatível
   `/_app/health`.
 
+Cada resposta recebe `X-Request-ID`. Um identificador seguro enviado pelo
+cliente é preservado; qualquer outro é substituído e entra no contexto dos logs.
+
 ## Limites conhecidos
 
 `PropertyService` e `CrmService` concentram regras de domínio e acesso ao banco.
