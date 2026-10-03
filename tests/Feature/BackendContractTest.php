@@ -13,7 +13,10 @@ class BackendContractTest extends TestCase
 
     public function test_laravel_runtime_health_route_returns_success(): void
     {
-        $this->get('/_app/health')->assertOk();
+        $this->getJson('/_app/health')
+            ->assertOk()
+            ->assertExactJson(['status' => 'ok'])
+            ->assertHeaderContains('Cache-Control', 'no-store');
     }
 
     public function test_public_json_contracts_boot(): void

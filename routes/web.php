@@ -4,7 +4,12 @@ use App\Http\Controllers\AdminCrmController;
 use App\Http\Controllers\AdminPropertyController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PublicController;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/_app/health', static function (): JsonResponse {
+    return response()->json(['status' => 'ok'])->header('Cache-Control', 'no-store');
+});
 
 Route::get('/', [PublicController::class, 'home']);
 Route::get('/imoveis', [PublicController::class, 'imoveis']);
