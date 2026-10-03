@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Support\Clock;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -149,7 +150,7 @@ class LeadManagementTest extends TestCase
         $openId = 'lead-test-'.Str::uuid();
         $email = $role.'@example.test';
         $jti = (string) Str::uuid();
-        $now = (int) floor(microtime(true) * 1000);
+        $now = Clock::nowMs();
 
         DB::table('morada_admin_users')->insert([
             'open_id' => $openId,

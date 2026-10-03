@@ -148,11 +148,11 @@ class AdminPropertyController extends Controller
         if (! $this->canManageMedia($admin, $property)) {
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
         }
-        if (count($property['photos'] ?? []) >= 40) {
+        if (count($property['photos'] ?? []) >= PropertyService::MAX_PHOTOS) {
             return response()->json(['error' => 'PHOTO_LIMIT_REACHED'], 409);
         }
 
-        $storagePath = 'gisley/properties/'.$propertyId.'/'.Str::uuid().'-'.$this->storage->safeFileName($fileName);
+        $storagePath = R2Storage::PREFIX.$propertyId.'/'.Str::uuid().'-'.$this->storage->safeFileName($fileName);
 
         return response()->json([
             'uploadUrl' => $this->storage->presignPut($storagePath, $contentType),
@@ -174,7 +174,7 @@ class AdminPropertyController extends Controller
         if (! $this->canManageMedia($admin, $property)) {
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
         }
-        if (count($property['photos'] ?? []) >= 40) {
+        if (count($property['photos'] ?? []) >= PropertyService::MAX_PHOTOS) {
             return response()->json(['error' => 'PHOTO_LIMIT_REACHED'], 409);
         }
 
@@ -190,7 +190,7 @@ class AdminPropertyController extends Controller
         if (
             $storagePath === '' || strlen($storagePath) > 500 || mb_strlen($altText) > 255
             || $width <= 0 || $width > 20000 || $height <= 0 || $height > 20000
-            || $sortOrder < 0 || $sortOrder > 39 || ! isset(self::MIME_EXTENSIONS[$contentType])
+            || $sortOrder < 0 || $sortOrder >= PropertyService::MAX_PHOTOS || ! isset(self::MIME_EXTENSIONS[$contentType])
         ) {
             throw new RuntimeException('INVALID_ASSET');
         }

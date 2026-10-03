@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\PropertyService;
+use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -151,7 +152,7 @@ class PropertyLifecycleTest extends TestCase
         $openId = 'property-manager-'.Str::uuid();
         $jti = (string) Str::uuid();
         $email = 'manager-'.Str::uuid().'@example.test';
-        $now = (int) floor(microtime(true) * 1000);
+        $now = Clock::nowMs();
 
         DB::table('morada_admin_users')->insert([
             'open_id' => $openId,

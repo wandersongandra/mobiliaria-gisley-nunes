@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Services\PropertyService;
 use App\Services\R2Storage;
+use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\TestCase;
 
 class UploadLifecycleTest extends TestCase
@@ -88,7 +90,68 @@ class UploadLifecycleTest extends TestCase
             'oversized file' => [['size' => 12 * 1024 * 1024 + 1], 'INVALID_FILE'],
             'zero width' => [['width' => 0], 'INVALID_ASSET'],
             'excessive height' => [['height' => 20001], 'INVALID_ASSET'],
+            'sort order at limit' => [['sortOrder' => PropertyService::MAX_PHOTOS], 'INVALID_ASSET'],
+            'negative sort order' => [['sortOrder' => -1], 'INVALID_ASSET'],
         ];
+    }
+
+    public function test_photo_limit_accepts_the_last_slot_and_rejects_the_next_one(): void
+    {
+        $propertyId = $this->createDraftProperty();
+        $service = app(PropertyService::class);
+
+        // Preenche em lote até restar exatamente uma vaga: chamar addPhoto()
+        // 40 vezes custaria 40 transações e deixaria a suíte lenta.
+        $rows = [];
+        for ($sortOrder = 0; $sortOrder < PropertyService::MAX_PHOTOS - 1; $sortOrder++) {
+            $rows[] = $this->photoPayload($propertyId, $sortOrder) + ['created_at' => now()];
+        }
+        DB::table('morada_property_photos')->insert($rows);
+
+        // Última posição disponível: ainda deve ser aceita.
+        $service->addPhoto($this->photoPayload($propertyId, PropertyService::MAX_PHOTOS - 1));
+
+        $this->assertSame(
+            PropertyService::MAX_PHOTOS,
+            DB::table('morada_property_photos')->where('property_id', $propertyId)->count()
+        );
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('PHOTO_LIMIT_REACHED');
+
+        $service->addPhoto($this->photoPayload($propertyId, 0));
+    }
+
+    public function test_presign_builds_the_storage_path_from_the_storage_prefix(): void
+    {
+        config([
+            'app.url' => 'https://test.local',
+            'app.admin_url' => 'https://test.local',
+        ]);
+        $propertyId = $this->createDraftProperty();
+        $session = $this->createManagerSession();
+
+        $storage = Mockery::mock(R2Storage::class)->makePartial();
+        $storage->shouldReceive('safeFileName')->andReturnUsing(static fn (string $name): string => $name);
+        $storage->shouldReceive('presignPut')->once()->andReturn('https://r2.example.test/signed');
+        $storage->shouldReceive('assetUrl')->andReturnUsing(static fn (string $key): string => '/media/'.$key);
+        $this->app->instance(R2Storage::class, $storage);
+
+        $response = $this->withSession($session)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->postJson('/api/admin/uploads/presign', [
+                'propertyId' => $propertyId,
+                'fileName' => 'fachada.jpg',
+                'contentType' => 'image/jpeg',
+                'size' => 1024,
+            ]);
+
+        $response->assertOk();
+        $this->assertStringStartsWith(
+            R2Storage::PREFIX.$propertyId.'/',
+            (string) $response->json('storagePath'),
+            'O presign não montou o caminho a partir de R2Storage::PREFIX.'
+        );
     }
 
     public function test_scheduled_cleanup_deletes_old_unregistered_objects_only(): void
@@ -184,11 +247,35 @@ class UploadLifecycleTest extends TestCase
             'jti' => $jti,
             'open_id' => $openId,
             'email' => $email,
-            'expires_at_ms' => (int) (microtime(true) * 1000) + 3_600_000,
-            'last_seen_at_ms' => (int) (microtime(true) * 1000),
+            'expires_at_ms' => Clock::nowMs() + 3_600_000,
+            'last_seen_at_ms' => Clock::nowMs(),
             'created_at' => now(),
         ]);
 
         return ['admin_jti' => $jti, 'admin_open_id' => $openId];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function photoPayload(string $propertyId, int $sortOrder): array
+    {
+        $photoId = (string) Str::uuid();
+
+        return [
+            'id' => $photoId,
+            'property_id' => $propertyId,
+            'storage_path' => R2Storage::PREFIX.$propertyId.'/'.$photoId.'.jpg',
+            'url' => '/media/'.R2Storage::PREFIX.$propertyId.'/'.$photoId.'.jpg',
+            'alt_text' => 'Foto '.$sortOrder,
+            'sort_order' => $sortOrder,
+            'is_cover' => $sortOrder === 0,
+            'storage_provider' => 'r2',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 1024,
+            'width' => 800,
+            'height' => 600,
+            'uploaded_by' => 'manager@example.test',
+        ];
     }
 }

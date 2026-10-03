@@ -7,7 +7,11 @@ use RuntimeException;
 
 class R2Storage
 {
-    private const PREFIX = 'gisley/properties/';
+    /**
+     * Prefixo de todo objeto de imóvel no bucket. Pertence a esta classe porque
+     * é ela quem valida caminhos e confere posse em belongsToProperty().
+     */
+    public const PREFIX = 'gisley/properties/';
 
     private function configured(): bool
     {

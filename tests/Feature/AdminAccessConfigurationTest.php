@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\AdminAccessService;
+use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,7 @@ class AdminAccessConfigurationTest extends TestCase
 
         $openId = 'staff-idle-test';
         $jti = (string) Str::uuid();
-        $now = (int) floor(microtime(true) * 1000);
+        $now = Clock::nowMs();
 
         DB::table('morada_admin_users')->insert([
             'open_id' => $openId,

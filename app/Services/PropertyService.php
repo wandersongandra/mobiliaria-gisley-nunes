@@ -17,6 +17,12 @@ class PropertyService
 
     public const PUBLIC_CATALOG_TTL = 60;
 
+    /**
+     * Teto de fotos por imóvel. Também define o maior sort_order válido
+     * (MAX_PHOTOS - 1), já que a ordenação é zero-based.
+     */
+    public const MAX_PHOTOS = 40;
+
     private const STATUSES = ['draft', 'published', 'archived'];
 
     private const PURPOSES = ['Comprar', 'Alugar'];
@@ -352,7 +358,7 @@ class PropertyService
                 throw new RuntimeException('CAPABILITY_REQUIRED');
             }
 
-            if (DB::table('morada_property_photos')->where('property_id', $photo['property_id'])->count() >= 40) {
+            if (DB::table('morada_property_photos')->where('property_id', $photo['property_id'])->count() >= self::MAX_PHOTOS) {
                 throw new RuntimeException('PHOTO_LIMIT_REACHED');
             }
 

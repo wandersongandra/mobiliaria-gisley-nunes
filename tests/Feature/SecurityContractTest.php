@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -121,7 +122,7 @@ class SecurityContractTest extends TestCase
         $openId = $role.'-security-'.Str::uuid();
         $email = $role.'-'.Str::uuid().'@example.test';
         $jti = (string) Str::uuid();
-        $now = (int) floor(microtime(true) * 1000);
+        $now = Clock::nowMs();
 
         DB::table('morada_admin_users')->insert([
             'open_id' => $openId,
