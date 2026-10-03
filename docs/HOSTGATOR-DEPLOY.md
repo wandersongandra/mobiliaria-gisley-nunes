@@ -5,6 +5,10 @@
 - PHP 8.2 ou superior, extensões `pdo`, `pdo_mysql`, `curl`, `mbstring`,
   `openssl`, `fileinfo` e suporte a HTTPS.
 - MySQL InnoDB com usuário de menor privilégio necessário para a aplicação.
+- O usuário de deploy precisa poder criar os triggers de imutabilidade em
+  `morada_audit_log`. Se o MySQL usa binary log com
+  `log_bin_trust_function_creators=OFF`, solicite ao provedor a permissão ou a
+  configuração antes da migration; não remova os triggers para concluir o deploy.
 - Document Root apontando exclusivamente para `public/`.
 - SSH habilitado no plano e cron do cPanel disponível.
 

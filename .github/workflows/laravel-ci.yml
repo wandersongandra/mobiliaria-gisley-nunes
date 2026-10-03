@@ -68,6 +68,11 @@ jobs:
           composer --version
           php -m | grep -qi pdo_mysql
 
+      - name: Configure ephemeral MySQL trigger support
+        env:
+          MYSQL_PWD: root-integration-only
+        run: mysql --host=127.0.0.1 --port=3306 --user=root -e "SET GLOBAL log_bin_trust_function_creators = 1"
+
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 

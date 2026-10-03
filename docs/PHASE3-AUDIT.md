@@ -42,7 +42,8 @@ revogar é a operação administrativa prevista.
 - Pacote de produção: PASS em checkout limpo com `composer install --no-dev`,
   boot, rotas, caches e `app:production-check`, sem Node.
 - MySQL 8 real: job obrigatório adicionado ao CI; evidência remota ainda não
-  existe neste documento.
+  existe neste documento. O job configura a permissão de trigger somente no
+  container efêmero; a mesma pré-condição precisa ser confirmada na HostGator.
 - R2 real, OAuth real, Cloudflare/HostGator real: BLOCKED por ausência de
   ambiente de teste autorizado.
 
