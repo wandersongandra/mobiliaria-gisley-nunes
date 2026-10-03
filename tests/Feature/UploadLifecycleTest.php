@@ -172,6 +172,19 @@ class UploadLifecycleTest extends TestCase
         );
     }
 
+    public function test_image_inspection_rejects_an_image_with_excessive_pixel_area(): void
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);
+
+        $this->assertNotFalse($png);
+
+        // getimagesizefromstring() lê as dimensões do IHDR. O arquivo não
+        // precisa ser decodificado para que o limite de área seja testado.
+        $oversized = substr_replace($png, pack('N', 10_000).pack('N', 5_000), 16, 8);
+
+        $this->assertNull(R2Storage::imageInfoFromBytes($oversized, 'image/png'));
+    }
+
     public function test_presign_builds_the_storage_path_from_the_storage_prefix(): void
     {
         config([

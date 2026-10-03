@@ -13,6 +13,13 @@ class R2Storage
      */
     public const PREFIX = 'gisley/properties/';
 
+    /**
+     * Limita a alocação potencial do decoder ao conferir a área antes de a
+     * imagem ser persistida como mídia pública. O limite lateral isolado não
+     * protege contra arquivos com muitos pixels.
+     */
+    private const MAX_IMAGE_PIXELS = 40_000_000;
+
     private function configured(): bool
     {
         $config = config('services.r2');
@@ -232,7 +239,8 @@ class R2Storage
 
         if (! in_array($actualMime, ['image/jpeg', 'image/png', 'image/webp', 'image/avif'], true)
             || ! hash_equals($expectedMime, $actualMime)
-            || $width < 1 || $width > 20_000 || $height < 1 || $height > 20_000) {
+            || $width < 1 || $width > 20_000 || $height < 1 || $height > 20_000
+            || ($width * $height) > self::MAX_IMAGE_PIXELS) {
             return null;
         }
 
