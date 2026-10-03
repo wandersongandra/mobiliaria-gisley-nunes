@@ -141,8 +141,8 @@ class LeadManagementTest extends TestCase
             ->assertOk()
             ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
-        $this->assertStringContainsString("'=1+1", $csv->getContent());
-        $this->assertStringNotContainsString('Outro contato', $csv->getContent());
+        $this->assertStringContainsString("'=1+1", $csv->streamedContent());
+        $this->assertStringNotContainsString('Outro contato', $csv->streamedContent());
     }
 
     private function createAdminSession(string $role): array

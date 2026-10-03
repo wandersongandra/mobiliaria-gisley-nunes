@@ -202,12 +202,17 @@ class CrmService
         return DB::table('morada_contact_leads')->where('status', 'new')->count();
     }
 
-    public function exportLeads(array $filters): array
+    public function countExportLeads(array $filters): int
     {
-        return $this->leadQuery($filters)
-            ->get()
-            ->map(fn ($row): array => $this->leadView((array) $row))
-            ->all();
+        return $this->leadQuery($filters)->count();
+    }
+
+    /** @return \Generator<int, array<string, mixed>> */
+    public function exportLeadCursor(array $filters): \Generator
+    {
+        foreach ($this->leadQuery($filters)->cursor() as $lead) {
+            yield $this->leadView((array) $lead);
+        }
     }
 
     public function updateLeadStatus(string $id, string $status): bool

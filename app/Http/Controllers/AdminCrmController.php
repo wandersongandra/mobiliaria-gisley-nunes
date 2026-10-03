@@ -9,10 +9,10 @@ use App\Support\Clock;
 use App\Support\Tokens;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminCrmController extends Controller
 {
@@ -93,39 +93,53 @@ class AdminCrmController extends Controller
         ])->header('Cache-Control', 'no-store');
     }
 
-    public function exportLeads(Request $request): JsonResponse|Response
+    public function exportLeads(Request $request): StreamedResponse
     {
         $filters = $this->leadFilters($request, true);
-        $leads = $this->crm->exportLeads($filters);
         $format = $filters['format'];
+        $count = $this->crm->countExportLeads($filters);
 
         $this->audit($this->admin($request), 'lead.export', 'lead', null, [
             'format' => $format,
             'filters' => array_intersect_key($filters, array_flip(['status', 'date_from', 'date_to'])),
-            'count' => count($leads),
+            'count' => $count,
         ]);
 
         if ($format === 'json') {
-            return response()->json(['leads' => $leads])->header('Cache-Control', 'no-store');
+            return response()->stream(function () use ($filters): void {
+                echo '{"leads":[';
+                $first = true;
+                foreach ($this->crm->exportLeadCursor($filters) as $lead) {
+                    if (! $first) {
+                        echo ',';
+                    }
+                    echo json_encode($lead, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+                    $first = false;
+                }
+                echo ']}';
+            }, 200, [
+                'Content-Type' => 'application/json',
+                'Cache-Control' => 'no-store',
+            ]);
         }
 
         $columns = ['id', 'name', 'email', 'interest', 'message', 'property_path', 'status', 'created_at', 'updated_at'];
-        $stream = fopen('php://temp', 'r+');
-        if ($stream === false) {
-            throw new RuntimeException('EXPORT_FAILED');
-        }
-        fputcsv($stream, $columns, ',', '"', '\\', "\r\n");
-        foreach ($leads as $lead) {
-            fputcsv($stream, array_map(fn (string $column): string => $this->csvCell($lead[$column] ?? ''), $columns), ',', '"', '\\', "\r\n");
-        }
-        rewind($stream);
-        $csv = "\xEF\xBB\xBF".stream_get_contents($stream);
-        fclose($stream);
 
-        return response($csv)
-            ->header('Content-Type', 'text/csv; charset=UTF-8')
-            ->header('Content-Disposition', 'attachment; filename="leads-'.now()->format('Y-m-d').'.csv"')
-            ->header('Cache-Control', 'no-store');
+        return response()->streamDownload(function () use ($filters, $columns): void {
+            $output = fopen('php://output', 'w');
+            if ($output === false) {
+                throw new RuntimeException('EXPORT_FAILED');
+            }
+            echo "\xEF\xBB\xBF";
+            fputcsv($output, $columns, ',', '"', '\\', "\r\n");
+            foreach ($this->crm->exportLeadCursor($filters) as $lead) {
+                fputcsv($output, array_map(fn (string $column): string => $this->csvCell($lead[$column] ?? ''), $columns), ',', '"', '\\', "\r\n");
+            }
+            fclose($output);
+        }, 'leads-'.now()->format('Y-m-d').'.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
     public function updateLead(Request $request, string $id): JsonResponse
