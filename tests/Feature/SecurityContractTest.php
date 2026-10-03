@@ -94,6 +94,32 @@ class SecurityContractTest extends TestCase
             ->assertJson(['error' => 'INVALID_ORIGIN']);
     }
 
+    public function test_logout_and_logout_all_write_an_audit_event_without_exposing_session_ids(): void
+    {
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
+        $session = $this->createAdminSession('manager');
+
+        $this->withSession($session)->withHeaders($headers)
+            ->postJson('/api/auth/logout')
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        $this->assertDatabaseHas('morada_audit_log', [
+            'action' => 'auth.logout',
+            'entity_type' => 'admin_user',
+        ]);
+
+        $session = $this->createAdminSession('manager');
+        $this->withSession($session)->withHeaders($headers)
+            ->postJson('/api/auth/logout-all')
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        $audit = DB::table('morada_audit_log')->where('action', 'auth.logout_all')->first();
+        $this->assertNotNull($audit);
+        $this->assertStringNotContainsString('admin_jti', (string) $audit->details);
+    }
+
     private function propertyInput(string $title, array $overrides = []): array
     {
         return array_merge([

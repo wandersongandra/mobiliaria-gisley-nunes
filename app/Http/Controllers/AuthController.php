@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -164,7 +165,8 @@ class AuthController extends Controller
             ]);
         }
 
-        $this->access->establish($request, $identity, $role);
+        $admin = $this->access->establish($request, $identity, $role);
+        $this->auditAuthentication($admin, 'auth.login');
 
         return redirect()->to($origin.'/admin', 303);
     }
@@ -190,7 +192,11 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
+        $admin = $this->access->current($request);
         $this->access->revokeCurrent($request);
+        if ($admin) {
+            $this->auditAuthentication($admin, 'auth.logout');
+        }
 
         return response()->json(['ok' => true]);
     }
@@ -204,9 +210,10 @@ class AuthController extends Controller
             return response()->json(['error' => 'AUTH_REQUIRED', 'localLoggedOut' => true], 401);
         }
 
-        $this->access->revokeAll($admin['openId']);
+        $revoked = $this->access->revokeAll($admin['openId']);
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+        $this->auditAuthentication($admin, 'auth.logout_all', ['sessionsRevoked' => $revoked]);
 
         return response()->json(['ok' => true]);
     }
@@ -266,6 +273,25 @@ class AuthController extends Controller
         $bound = (string) ($staff['open_id'] ?? '');
 
         return $bound === '' || hash_equals($bound, $identity['openId']);
+    }
+
+    /**
+     * Falhas na trilha não podem desfazer uma revogação de sessão já aplicada.
+     * Elas ficam visíveis em log sem incluir tokens, cookie, e-mail ou openId.
+     *
+     * @param  array<string, mixed>  $admin
+     * @param  array<string, mixed>|null  $details
+     */
+    private function auditAuthentication(array $admin, string $action, ?array $details = null): void
+    {
+        try {
+            $this->crm->recordAudit($admin, $action, 'admin_user', (string) $admin['openId'], $details);
+        } catch (\Throwable $error) {
+            Log::warning('audit.authentication_write_failed', [
+                'action' => $action,
+                'exception' => $error::class,
+            ]);
+        }
     }
 
     private function adminOrigin(Request $request): string
