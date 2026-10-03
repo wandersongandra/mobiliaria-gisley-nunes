@@ -187,7 +187,14 @@ class R2Storage
         ]);
     }
 
-    public function looksLikeImage(string $path, string $contentType): bool
+    /**
+     * Lê a imagem armazenada para validar o formato e as dimensões reais. Os
+     * valores declarados pelo navegador nunca são persistidos sem esta prova.
+     * O controller chama metadata() antes deste método e limita o objeto a 12 MB.
+     *
+     * @return array{width: int, height: int, mime: string}|null
+     */
+    public function imageInfo(string $path, string $contentType): ?array
     {
         $key = $this->assertKey($path);
 
@@ -195,28 +202,40 @@ class R2Storage
             $result = $this->client()->getObject([
                 'Bucket' => config('services.r2.bucket'),
                 'Key' => $key,
-                'Range' => 'bytes=0-31',
             ]);
             $bytes = (string) $result['Body'];
         } catch (\Throwable) {
-            return false;
+            return null;
         }
 
-        $type = strtolower($contentType);
+        return self::imageInfoFromBytes($bytes, $contentType);
+    }
 
-        return match ($type) {
-            'image/jpeg' => strlen($bytes) >= 3
-                && ord($bytes[0]) === 0xFF
-                && ord($bytes[1]) === 0xD8
-                && ord($bytes[2]) === 0xFF,
-            'image/png' => str_starts_with($bytes, "\x89PNG\r\n\x1a\n"),
-            'image/webp' => strlen($bytes) >= 12
-                && substr($bytes, 0, 4) === 'RIFF'
-                && substr($bytes, 8, 4) === 'WEBP',
-            'image/avif' => strlen($bytes) >= 16
-                && substr($bytes, 4, 4) === 'ftyp'
-                && (str_contains(substr($bytes, 8, 24), 'avif') || str_contains(substr($bytes, 8, 24), 'avis')),
-            default => false,
-        };
+    /**
+     * @return array{width: int, height: int, mime: string}|null
+     */
+    public static function imageInfoFromBytes(string $bytes, string $contentType): ?array
+    {
+        if ($bytes === '' || strlen($bytes) > 12 * 1024 * 1024) {
+            return null;
+        }
+
+        $details = @getimagesizefromstring($bytes);
+        if ($details === false) {
+            return null;
+        }
+
+        $actualMime = strtolower((string) ($details['mime'] ?? ''));
+        $expectedMime = strtolower(trim($contentType));
+        $width = (int) ($details[0] ?? 0);
+        $height = (int) ($details[1] ?? 0);
+
+        if (! in_array($actualMime, ['image/jpeg', 'image/png', 'image/webp', 'image/avif'], true)
+            || ! hash_equals($expectedMime, $actualMime)
+            || $width < 1 || $width > 20_000 || $height < 1 || $height > 20_000) {
+            return null;
+        }
+
+        return ['width' => $width, 'height' => $height, 'mime' => $actualMime];
     }
 }

@@ -206,14 +206,18 @@ class AdminPropertyController extends Controller
             throw new RuntimeException('ASSET_NOT_UPLOADED');
         }
 
-        $invalid = (
+        $invalidMetadata = (
             ! is_int($metadata['size'])
             || $metadata['size'] !== $size
             || $metadata['size'] > 12 * 1024 * 1024
         ) || (
             ! is_string($metadata['contentType'])
             || strtolower($metadata['contentType']) !== $contentType
-        ) || ! $this->storage->looksLikeImage($storagePath, $contentType);
+        );
+        $image = $invalidMetadata ? null : $this->storage->imageInfo($storagePath, $contentType);
+        $invalid = $invalidMetadata || $image === null
+            || $image['width'] !== $width
+            || $image['height'] !== $height;
 
         if ($invalid) {
             try {
@@ -236,8 +240,8 @@ class AdminPropertyController extends Controller
                 'storage_provider' => 'r2',
                 'mime_type' => $contentType,
                 'file_size' => $size,
-                'width' => $width,
-                'height' => $height,
+                'width' => $image['width'],
+                'height' => $image['height'],
                 'uploaded_by' => $admin['email'],
             ], ! $this->access->hasCapability($admin, 'property.publish'));
         } catch (\Throwable $error) {

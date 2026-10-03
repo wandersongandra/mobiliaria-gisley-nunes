@@ -31,7 +31,7 @@ class UploadLifecycleTest extends TestCase
             'size' => 12 * 1024 * 1024 + 1,
             'contentType' => 'image/jpeg',
         ]);
-        $storage->shouldNotReceive('looksLikeImage');
+        $storage->shouldNotReceive('imageInfo');
         $storage->shouldReceive('delete')->once();
         $this->app->instance(R2Storage::class, $storage);
 
@@ -120,6 +120,56 @@ class UploadLifecycleTest extends TestCase
         $this->expectExceptionMessage('PHOTO_LIMIT_REACHED');
 
         $service->addPhoto($this->photoPayload($propertyId, 0));
+    }
+
+    public function test_photo_registration_rejects_dimensions_that_do_not_match_the_object(): void
+    {
+        config([
+            'app.url' => 'https://test.local',
+            'app.admin_url' => 'https://test.local',
+        ]);
+        $propertyId = $this->createDraftProperty();
+        $session = $this->createManagerSession();
+        $storage = Mockery::mock(R2Storage::class)->makePartial();
+        $storage->shouldReceive('metadata')->once()->andReturn([
+            'exists' => true,
+            'size' => 1024,
+            'contentType' => 'image/jpeg',
+        ]);
+        $storage->shouldReceive('imageInfo')->once()->andReturn([
+            'width' => 1200,
+            'height' => 800,
+            'mime' => 'image/jpeg',
+        ]);
+        $storage->shouldReceive('delete')->once();
+        $this->app->instance(R2Storage::class, $storage);
+
+        $this->withSession($session)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->postJson('/api/admin/properties/'.$propertyId.'/photos', [
+                'storagePath' => 'gisley/properties/'.$propertyId.'/photo.jpg',
+                'altText' => 'Foto do imóvel',
+                'contentType' => 'image/jpeg',
+                'size' => 1024,
+                'width' => 800,
+                'height' => 600,
+                'sortOrder' => 0,
+                'isCover' => false,
+            ])
+            ->assertStatus(400)
+            ->assertJson(['error' => 'INVALID_ASSET']);
+    }
+
+    public function test_image_inspection_rejects_a_renamed_payload(): void
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);
+
+        $this->assertNotFalse($png);
+        $this->assertNull(R2Storage::imageInfoFromBytes($png, 'image/jpeg'));
+        $this->assertSame(
+            ['width' => 1, 'height' => 1, 'mime' => 'image/png'],
+            R2Storage::imageInfoFromBytes($png, 'image/png')
+        );
     }
 
     public function test_presign_builds_the_storage_path_from_the_storage_prefix(): void
