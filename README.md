@@ -102,6 +102,12 @@ curl --fail --silent --show-error https://SEU_DOMINIO/health/ready | grep -Fx '{
 
 Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. A comparação do corpo evita tratar uma página estática de fallback como health check. `live` confirma o runtime Laravel/PHP-FPM e `ready` confirma também a conexão de banco, sem expor detalhes internos. `/_app/health` continua como alias compatível. Não publique `phpinfo()`.
 
+## Mudanças de Rotas
+
+- `GET /health/live`: confirma que o processo Laravel iniciou.
+- `GET /health/ready`: confirma que o runtime e o banco estão disponíveis.
+- `GET /_app/health`: alias compatível de liveness para o monitoramento anterior.
+
 ## Gates locais e CI
 
 ```bash

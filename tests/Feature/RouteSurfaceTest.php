@@ -46,6 +46,8 @@ class RouteSurfaceTest extends TestCase
         'GET bairros',
         'GET bairros/{slug}',
         'GET contato',
+        'GET health/live',
+        'GET health/ready',
         'GET imoveis',
         'GET imoveis/{slug}',
         'GET llms.txt',
