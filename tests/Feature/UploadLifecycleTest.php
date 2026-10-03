@@ -11,11 +11,13 @@ use Illuminate\Support\Str;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
+use Tests\Concerns\CreatesAdminIdentity;
 use Tests\TestCase;
 
 class UploadLifecycleTest extends TestCase
 {
     use RefreshDatabase;
+    use CreatesAdminIdentity;
 
     public function test_photo_registration_rejects_actual_object_size_mismatch(): void
     {
@@ -296,6 +298,7 @@ class UploadLifecycleTest extends TestCase
             'created_at' => now(),
             'last_login_at' => now(),
         ]);
+        $identity = $this->attachAdminIdentity($openId, $email, 'Gestor de teste');
         DB::table('morada_staff_access')->insert([
             'email' => $email,
             'open_id' => $openId,
@@ -308,6 +311,8 @@ class UploadLifecycleTest extends TestCase
         ]);
         DB::table('morada_admin_sessions')->insert([
             'jti' => $jti,
+            'user_id' => $identity['user_id'],
+            'oauth_identity_id' => $identity['identity_id'],
             'open_id' => $openId,
             'email' => $email,
             'expires_at_ms' => Clock::nowMs() + 3_600_000,

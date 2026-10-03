@@ -8,11 +8,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\CreatesAdminIdentity;
 use Tests\TestCase;
 
 class AdminAccessConfigurationTest extends TestCase
 {
     use RefreshDatabase;
+    use CreatesAdminIdentity;
 
     public function test_bootstrap_user_ids_are_read_from_gisley_config(): void
     {
@@ -90,6 +92,7 @@ class AdminAccessConfigurationTest extends TestCase
             'created_at' => now(),
             'last_login_at' => now(),
         ]);
+        $identity = $this->attachAdminIdentity($openId, 'editor@example.test', 'Editor Teste');
         DB::table('morada_staff_access')->insert([
             'email' => 'editor@example.test',
             'open_id' => $openId,
@@ -102,6 +105,8 @@ class AdminAccessConfigurationTest extends TestCase
         ]);
         DB::table('morada_admin_sessions')->insert([
             'jti' => $jti,
+            'user_id' => $identity['user_id'],
+            'oauth_identity_id' => $identity['identity_id'],
             'open_id' => $openId,
             'email' => 'editor@example.test',
             'expires_at_ms' => $now + 60 * 60 * 1000,

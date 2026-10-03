@@ -7,11 +7,13 @@ use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\CreatesAdminIdentity;
 use Tests\TestCase;
 
 class PropertyManagementTest extends TestCase
 {
     use RefreshDatabase;
+    use CreatesAdminIdentity;
 
     protected function setUp(): void
     {
@@ -99,6 +101,7 @@ class PropertyManagementTest extends TestCase
             'created_at' => now(),
             'last_login_at' => now(),
         ]);
+        $identity = $this->attachAdminIdentity($openId, $email, 'Gestora de teste');
         DB::table('morada_staff_access')->insert([
             'email' => $email,
             'open_id' => $openId,
@@ -111,6 +114,8 @@ class PropertyManagementTest extends TestCase
         ]);
         DB::table('morada_admin_sessions')->insert([
             'jti' => $jti,
+            'user_id' => $identity['user_id'],
+            'oauth_identity_id' => $identity['identity_id'],
             'open_id' => $openId,
             'email' => $email,
             'expires_at_ms' => $now + 3_600_000,

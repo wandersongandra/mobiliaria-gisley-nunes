@@ -37,6 +37,8 @@ class AdminAccessService
         ],
     ];
 
+    public function __construct(private readonly AdminIdentityService $identities) {}
+
     public function bootstrapOpenIds(): array
     {
         $openIds = config('gisley.admin.bootstrap_open_ids', []);
@@ -61,9 +63,8 @@ class AdminAccessService
     public function current(Request $request): ?array
     {
         $jti = (string) $request->session()->get('admin_jti', '');
-        $openId = (string) $request->session()->get('admin_open_id', '');
 
-        if ($jti === '' || $openId === '') {
+        if ($jti === '') {
             return null;
         }
 
@@ -80,14 +81,25 @@ class AdminAccessService
             return null;
         }
 
+        $userId = (string) ($session->user_id ?? '');
+        $identityId = (string) ($session->oauth_identity_id ?? '');
+        if ($userId === '' || $identityId === '') {
+            return null;
+        }
+
         if ((int) $session->last_seen_at_ms > 0 && ($now - (int) $session->last_seen_at_ms) > $idleTimeoutMs) {
             DB::table('morada_admin_sessions')->where('jti', $jti)->update(['revoked_at' => now()]);
 
             return null;
         }
 
-        $user = DB::table('morada_admin_users')->where('open_id', $openId)->first();
-        if (! $user || (string) $session->open_id !== $openId) {
+        $user = DB::table('morada_users')->where('id', $userId)->whereNull('blocked_at')->first();
+        $identity = DB::table('morada_oauth_identities')
+            ->where('id', $identityId)
+            ->where('user_id', $userId)
+            ->first();
+        $openId = (string) ($identity->provider_subject ?? '');
+        if (! $user || ! $identity || ! hash_equals($openId, (string) $session->open_id)) {
             return null;
         }
 
@@ -96,9 +108,6 @@ class AdminAccessService
 
         if (! $bootstrap) {
             if (! $access || ! (bool) $access->active) {
-                return null;
-            }
-            if (strtolower((string) $access->email) !== strtolower((string) $user->email)) {
                 return null;
             }
         }
@@ -113,6 +122,8 @@ class AdminAccessService
 
         return [
             'openId' => $openId,
+            'userId' => $userId,
+            'identityId' => $identityId,
             'email' => strtolower((string) $user->email),
             'name' => (string) $user->name,
             'role' => $bootstrap ? 'manager' : (((string) ($access->role ?? 'editor')) === 'manager' ? 'manager' : 'editor'),
@@ -122,24 +133,22 @@ class AdminAccessService
 
     public function establish(Request $request, array $identity, string $role): array
     {
+        $identity += [
+            'provider' => (string) config('services.manus_oauth.provider', 'manus'),
+            'providerSubject' => (string) ($identity['openId'] ?? ''),
+        ];
+        $resolved = $this->identities->resolve($identity);
         $now = Clock::nowMs();
         $jti = (string) Str::uuid();
         $expiresAt = $now + self::SESSION_TTL_MS;
 
-        DB::transaction(function () use ($identity, $jti, $expiresAt, $now): void {
-            DB::table('morada_admin_users')->updateOrInsert(
-                ['open_id' => $identity['openId']],
-                [
-                    'email' => strtolower($identity['email']),
-                    'name' => $identity['name'],
-                    'last_login_at' => now(),
-                ]
-            );
-
+        DB::transaction(function () use ($resolved, $jti, $expiresAt, $now): void {
             DB::table('morada_admin_sessions')->insert([
                 'jti' => $jti,
-                'open_id' => $identity['openId'],
-                'email' => strtolower($identity['email']),
+                'user_id' => $resolved['userId'],
+                'oauth_identity_id' => $resolved['identityId'],
+                'open_id' => $resolved['openId'],
+                'email' => $resolved['email'],
                 'expires_at_ms' => $expiresAt,
                 'last_seen_at_ms' => $now,
                 'created_at' => now(),
@@ -148,14 +157,16 @@ class AdminAccessService
 
         $request->session()->migrate(true);
         $request->session()->put('admin_jti', $jti);
-        $request->session()->put('admin_open_id', $identity['openId']);
+        $request->session()->put('admin_user_id', $resolved['userId']);
 
-        $this->trimSessions($identity['openId'], (int) config('gisley.admin.max_sessions', 3));
+        $this->trimSessions($resolved['userId'], (int) config('gisley.admin.max_sessions', 3));
 
         return [
-            'openId' => $identity['openId'],
-            'email' => strtolower($identity['email']),
-            'name' => $identity['name'],
+            'openId' => $resolved['openId'],
+            'userId' => $resolved['userId'],
+            'identityId' => $resolved['identityId'],
+            'email' => $resolved['email'],
+            'name' => $resolved['name'],
             'role' => $role === 'manager' ? 'manager' : 'editor',
         ];
     }
@@ -163,7 +174,7 @@ class AdminAccessService
     public function revokeCurrent(Request $request): void
     {
         $jti = (string) $request->session()->pull('admin_jti', '');
-        $request->session()->forget('admin_open_id');
+        $request->session()->forget('admin_user_id');
 
         if ($jti !== '') {
             DB::table('morada_admin_sessions')
@@ -176,20 +187,20 @@ class AdminAccessService
         $request->session()->regenerateToken();
     }
 
-    public function revokeAll(string $openId): int
+    public function revokeAll(string $userId): int
     {
         return DB::table('morada_admin_sessions')
-            ->where('open_id', $openId)
+            ->where('user_id', $userId)
             ->whereNull('revoked_at')
             ->update(['revoked_at' => now()]);
     }
 
-    public function trimSessions(string $openId, int $max): void
+    public function trimSessions(string $userId, int $max): void
     {
         $max = max(1, min(10, $max));
 
         $active = DB::table('morada_admin_sessions')
-            ->where('open_id', $openId)
+            ->where('user_id', $userId)
             ->whereNull('revoked_at')
             ->orderByDesc('created_at')
             ->pluck('jti')
@@ -205,6 +216,6 @@ class AdminAccessService
 
     public function clearBrowserSession(Request $request): void
     {
-        $request->session()->forget(['admin_jti', 'admin_open_id']);
+        $request->session()->forget(['admin_jti', 'admin_user_id']);
     }
 }

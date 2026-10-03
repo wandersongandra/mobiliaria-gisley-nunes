@@ -165,7 +165,10 @@ class AuthController extends Controller
             ]);
         }
 
-        $admin = $this->access->establish($request, $identity, $role);
+        $admin = $this->access->establish($request, $identity + [
+            'provider' => (string) config('services.manus_oauth.provider', 'manus'),
+            'providerSubject' => $identity['openId'],
+        ], $role);
         $this->auditAuthentication($admin, 'auth.login');
 
         return redirect()->to($origin.'/admin', 303);
@@ -210,7 +213,7 @@ class AuthController extends Controller
             return response()->json(['error' => 'AUTH_REQUIRED', 'localLoggedOut' => true], 401);
         }
 
-        $revoked = $this->access->revokeAll($admin['openId']);
+        $revoked = $this->access->revokeAll($admin['userId']);
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         $this->auditAuthentication($admin, 'auth.logout_all', ['sessionsRevoked' => $revoked]);
@@ -267,12 +270,14 @@ class AuthController extends Controller
         if (! $staff || ! (bool) ($staff['active'] ?? false)) {
             return false;
         }
-        if (strtolower((string) ($staff['email'] ?? '')) !== strtolower($identity['email'])) {
-            return false;
-        }
         $bound = (string) ($staff['open_id'] ?? '');
 
-        return $bound === '' || hash_equals($bound, $identity['openId']);
+        // Depois que o gestor vinculou o subject imutável, uma troca de email
+        // confirmada pelo provedor atualiza o perfil mas não perde a conta.
+        // Antes do vínculo, email continua sendo a prova do convite/pairing.
+        return $bound !== ''
+            ? hash_equals($bound, $identity['openId'])
+            : strtolower((string) ($staff['email'] ?? '')) === strtolower($identity['email']);
     }
 
     /**

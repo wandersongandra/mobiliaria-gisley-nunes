@@ -2,6 +2,7 @@
 
 return [
     'manus_oauth' => [
+        'provider' => env('MANUS_OAUTH_PROVIDER', 'manus'),
         'portal_url' => env('MANUS_OAUTH_PORTAL_URL'),
         'api_url' => env('MANUS_OAUTH_API_URL'),
         'project_id' => env('MANUS_PROJECT_ID'),

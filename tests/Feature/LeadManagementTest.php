@@ -7,11 +7,13 @@ use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\CreatesAdminIdentity;
 use Tests\TestCase;
 
 class LeadManagementTest extends TestCase
 {
     use RefreshDatabase;
+    use CreatesAdminIdentity;
 
     protected function setUp(): void
     {
@@ -159,6 +161,7 @@ class LeadManagementTest extends TestCase
             'created_at' => now(),
             'last_login_at' => now(),
         ]);
+        $identity = $this->attachAdminIdentity($openId, $email, ucfirst($role).' test user');
         DB::table('morada_staff_access')->insert([
             'email' => $email,
             'open_id' => $openId,
@@ -171,6 +174,8 @@ class LeadManagementTest extends TestCase
         ]);
         DB::table('morada_admin_sessions')->insert([
             'jti' => $jti,
+            'user_id' => $identity['user_id'],
+            'oauth_identity_id' => $identity['identity_id'],
             'open_id' => $openId,
             'email' => $email,
             'expires_at_ms' => $now + 3_600_000,

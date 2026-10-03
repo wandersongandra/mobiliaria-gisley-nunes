@@ -7,12 +7,14 @@ use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\CreatesAdminIdentity;
 use RuntimeException;
 use Tests\TestCase;
 
 class PropertyLifecycleTest extends TestCase
 {
     use RefreshDatabase;
+    use CreatesAdminIdentity;
 
     public function test_property_slugs_are_generated_and_unique(): void
     {
@@ -161,6 +163,7 @@ class PropertyLifecycleTest extends TestCase
             'created_at' => now(),
             'last_login_at' => now(),
         ]);
+        $identity = $this->attachAdminIdentity($openId, $email, 'Gestor de teste');
         DB::table('morada_staff_access')->insert([
             'email' => $email,
             'open_id' => $openId,
@@ -173,6 +176,8 @@ class PropertyLifecycleTest extends TestCase
         ]);
         DB::table('morada_admin_sessions')->insert([
             'jti' => $jti,
+            'user_id' => $identity['user_id'],
+            'oauth_identity_id' => $identity['identity_id'],
             'open_id' => $openId,
             'email' => $email,
             'expires_at_ms' => $now + 3_600_000,
