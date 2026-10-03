@@ -6,6 +6,7 @@ use App\Services\CrmService;
 use App\Services\PropertyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class PublicApiController extends Controller
 {
@@ -18,10 +19,11 @@ class PublicApiController extends Controller
     {
         return response()->json([
             'properties' => $this->properties->publicCatalog(),
-        ])->header(
-            'Cache-Control',
-            'public, max-age='.PropertyService::PUBLIC_CATALOG_TTL.', stale-while-revalidate=300'
-        );
+        ])->withHeaders([
+            'Cache-Control' => 'public, max-age='.PropertyService::PUBLIC_CATALOG_TTL.', stale-while-revalidate=300',
+            'Deprecation' => 'true',
+            'Link' => '</api/v2/properties>; rel="successor-version"',
+        ]);
     }
 
     public function propertiesV2(Request $request): JsonResponse
@@ -29,10 +31,16 @@ class PublicApiController extends Controller
         $filters = $request->validate([
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'between:20,100'],
+            'purpose' => ['sometimes', Rule::in(['Comprar', 'Alugar'])],
+            'location' => ['sometimes', 'string', 'max:180'],
+            'type' => ['sometimes', Rule::in(['Casa', 'Apartamento', 'Cobertura', 'Terreno', 'Comercial', 'Lote'])],
+            'price_band' => ['sometimes', 'integer', 'between:1,3'],
+            'bedrooms' => ['sometimes', Rule::in(['1', '2', '3', '4+'])],
         ]);
         $paginator = $this->properties->paginatePublicProperties(
             (int) ($filters['page'] ?? 1),
             (int) ($filters['per_page'] ?? 20),
+            $filters,
         );
 
         return response()->json([
@@ -48,6 +56,7 @@ class PublicApiController extends Controller
                 'from' => $paginator->firstItem(),
                 'to' => $paginator->lastItem(),
             ],
+            'facets' => $this->properties->publicCatalogFacets(),
         ])->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     }
 

@@ -975,3 +975,5 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
   .search-form::after{transition:none!important}
   .button:active{transform:none}
 }
+
+.catalog-pagination{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:42px;color:var(--muted);font-size:11px}.catalog-pagination button{border:1px solid var(--line);background:transparent;color:var(--ink);padding:9px 15px;font-weight:700}.catalog-pagination button:disabled{opacity:.45;cursor:not-allowed}.catalog-pagination button:not(:disabled):hover{border-color:var(--ink);background:var(--ink);color:#fff}

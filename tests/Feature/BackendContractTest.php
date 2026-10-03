@@ -53,6 +53,8 @@ class BackendContractTest extends TestCase
 
         $this->getJson('/api/properties')
             ->assertOk()
+            ->assertHeader('Deprecation', 'true')
+            ->assertHeaderContains('Link', '/api/v2/properties')
             ->assertJsonStructure(['properties']);
     }
 

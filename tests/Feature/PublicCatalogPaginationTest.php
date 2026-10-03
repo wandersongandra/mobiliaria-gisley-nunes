@@ -36,6 +36,26 @@ class PublicCatalogPaginationTest extends TestCase
             ->assertJsonPath('pagination.total', 0);
     }
 
+    public function test_v2_catalog_filters_in_the_database_and_returns_safe_facets(): void
+    {
+        $this->insertPublishedProperties(3);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-2')->update([
+            'purpose' => 'Alugar',
+            'type' => 'Casa',
+            'location' => 'Savassi · Belo Horizonte',
+            'price' => 7000,
+            'bedrooms' => 4,
+        ]);
+
+        $this->getJson('/api/v2/properties?purpose=Alugar&type=Casa&location=Savassi%20%C2%B7%20Belo%20Horizonte&price_band=2&bedrooms=4%2B')
+            ->assertOk()
+            ->assertJsonCount(1, 'properties')
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('properties.0.slug', 'imovel-de-catalogo-2')
+            ->assertJsonFragment(['locations' => ['Lourdes · Belo Horizonte', 'Savassi · Belo Horizonte']])
+            ->assertJsonFragment(['types' => ['Apartamento', 'Casa']]);
+    }
+
     public function test_v2_catalog_keeps_query_count_bounded_with_ten_thousand_properties(): void
     {
         $this->insertPublishedProperties(10_000);
@@ -50,7 +70,7 @@ class PublicCatalogPaginationTest extends TestCase
             ->filter(static fn (array $query): bool => str_contains($query['query'], 'morada_propert'))
             ->count();
 
-        $this->assertLessThanOrEqual(3, $propertyQueries, 'A paginação pública executou consultas por imóvel.');
+        $this->assertLessThanOrEqual(5, $propertyQueries, 'A paginação pública executou consultas por imóvel.');
     }
 
     private function insertPublishedProperties(int $count): void

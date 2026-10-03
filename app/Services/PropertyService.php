@@ -4,6 +4,7 @@ namespace App\Services;
 
 // Escopo atual: Single-tenant. Não há isolamento por proprietário/imobiliária nesta versão.
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
@@ -14,6 +15,8 @@ use RuntimeException;
 class PropertyService
 {
     public const PUBLIC_CATALOG_CACHE_KEY = 'public-property-catalog.v1';
+
+    public const PUBLIC_CATALOG_FACETS_CACHE_KEY = 'public-property-catalog.facets.v2';
 
     public const PUBLIC_CATALOG_TTL = 60;
 
@@ -67,7 +70,8 @@ class PropertyService
         return $this->hydratePhotos($query->get()->map(fn ($row) => (array) $row)->all());
     }
 
-    public function paginatePublicProperties(int $page, int $perPage): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginatePublicProperties(int $page, int $perPage, array $filters = []): LengthAwarePaginator
     {
         $query = DB::table('morada_properties as p')
             ->leftJoin('morada_property_photos as ph', function ($join): void {
@@ -75,6 +79,27 @@ class PropertyService
             })
             ->where('p.status', 'published')
             ->select('p.*', DB::raw("COALESCE(ph.url, '') AS cover_url"));
+
+        if (isset($filters['purpose'])) {
+            $query->where('p.purpose', $filters['purpose']);
+        }
+
+        if (isset($filters['location'])) {
+            $query->where('p.location', $filters['location']);
+        }
+
+        if (isset($filters['type'])) {
+            $query->where('p.type', $filters['type']);
+        }
+
+        if (isset($filters['bedrooms'])) {
+            $bedrooms = (string) $filters['bedrooms'];
+            $query->where('p.bedrooms', $bedrooms === '4+' ? '>=' : '=', (int) rtrim($bedrooms, '+'));
+        }
+
+        if (isset($filters['price_band'])) {
+            $this->applyPublicPriceBand($query, (int) $filters['price_band'], (string) ($filters['purpose'] ?? 'Comprar'));
+        }
 
         $paginator = $query
             ->orderByDesc('p.is_featured')
@@ -88,6 +113,32 @@ class PropertyService
         $paginator->setCollection(collect($rows));
 
         return $paginator;
+    }
+
+    /** @return array{locations: list<string>, types: list<string>} */
+    public function publicCatalogFacets(): array
+    {
+        return Cache::remember(
+            self::PUBLIC_CATALOG_FACETS_CACHE_KEY,
+            self::PUBLIC_CATALOG_TTL,
+            fn (): array => [
+                'locations' => DB::table('morada_properties')
+                    ->where('status', 'published')
+                    ->where('location', '<>', '')
+                    ->distinct()
+                    ->orderBy('location')
+                    ->pluck('location')
+                    ->map(static fn ($value): string => (string) $value)
+                    ->all(),
+                'types' => DB::table('morada_properties')
+                    ->where('status', 'published')
+                    ->distinct()
+                    ->orderBy('type')
+                    ->pluck('type')
+                    ->map(static fn ($value): string => (string) $value)
+                    ->all(),
+            ],
+        );
     }
 
     public function paginateAdminProperties(array $filters): LengthAwarePaginator
@@ -204,6 +255,31 @@ class PropertyService
         return $rows;
     }
 
+    private function applyPublicPriceBand(Builder $query, int $band, string $purpose): void
+    {
+        $limits = $purpose === 'Alugar' ? [5000, 10000] : [1500000, 3000000];
+
+        if ($band === 1) {
+            $query->where('p.price', '<=', $limits[0]);
+
+            return;
+        }
+
+        if ($band === 2) {
+            $query->whereBetween('p.price', [$limits[0], $limits[1]]);
+
+            return;
+        }
+
+        $query->where('p.price', '>', $limits[1]);
+    }
+
+    private function invalidatePublicCatalog(): void
+    {
+        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+        Cache::forget(self::PUBLIC_CATALOG_FACETS_CACHE_KEY);
+    }
+
     public function normalizeInput(array $input): array
     {
         $allowed = [
@@ -316,7 +392,7 @@ class PropertyService
                 throw $e;
             }
         });
-        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+        $this->invalidatePublicCatalog();
 
         $property = $this->getProperty($propertyId);
         if (! $property) {
@@ -333,7 +409,7 @@ class PropertyService
             ->update(['status' => 'archived', 'is_featured' => 0, 'updated_at' => now()]) > 0;
 
         if ($updated) {
-            Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+            $this->invalidatePublicCatalog();
         }
 
         return $updated;
@@ -397,7 +473,7 @@ class PropertyService
 
             DB::table('morada_property_photos')->insert($photo + ['created_at' => now()]);
         });
-        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+        $this->invalidatePublicCatalog();
 
         return $this->listPhotos($photo['property_id']);
     }
@@ -453,7 +529,7 @@ class PropertyService
         });
 
         if ($removed !== null) {
-            Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+            $this->invalidatePublicCatalog();
         }
 
         return $removed;
@@ -491,7 +567,7 @@ class PropertyService
                     ->update(['sort_order' => $index]);
             }
         });
-        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+        $this->invalidatePublicCatalog();
 
         return $this->listPhotos($propertyId);
     }
@@ -528,7 +604,7 @@ class PropertyService
                 ->where('property_id', $property->id)
                 ->update(['is_cover' => 1]);
         });
-        Cache::forget(self::PUBLIC_CATALOG_CACHE_KEY);
+        $this->invalidatePublicCatalog();
 
         return $this->listPhotos($photo['property_id']);
     }
