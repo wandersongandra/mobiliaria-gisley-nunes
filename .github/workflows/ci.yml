@@ -119,14 +119,14 @@ jobs:
           && node --check server/routes.js && node --check admin/main.js
           && node --check src/main.js && node --check public/admin/main.js
 
-      - name: Frontend tests
-        run: pnpm test
-
       - name: Build frontend assets
         run: pnpm build
 
       - name: Build Cloudflare design preview
         run: pnpm build:preview
+
+      - name: Frontend tests
+        run: pnpm test
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

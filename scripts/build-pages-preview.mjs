@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
@@ -54,8 +54,16 @@ async function render(template, destination, locals) {
 await rm(outDir, { recursive: true, force: true });
 await build({
   configFile: path.join(root, 'vite.config.js'),
+  // The Laravel public root contains the PHP entry point and admin shell.
+  publicDir: false,
   build: { outDir, emptyOutDir: true }
 });
+const imageDir = path.join(outDir, 'images');
+await mkdir(imageDir, { recursive: true });
+await copyFile(
+  path.join(root, 'public', 'images', 'gisley-nunes-imoveis-logo.jpeg'),
+  path.join(imageDir, 'gisley-nunes-imoveis-logo.jpeg')
+);
 
 const manifest = JSON.parse(await readFile(path.join(outDir, '.vite', 'manifest.json'), 'utf8'));
 const entry = manifest['src/main.js'];
