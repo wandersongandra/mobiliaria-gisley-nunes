@@ -4,15 +4,15 @@ use App\Http\Controllers\AdminCrmController;
 use App\Http\Controllers\AdminPropertyController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DiscoveryController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PublicApiController;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/_app/health', static function (): JsonResponse {
-    return response()->json(['status' => 'ok'])->header('Cache-Control', 'no-store');
-});
+Route::get('/_app/health', [HealthController::class, 'live']);
+Route::get('/health/live', [HealthController::class, 'live']);
+Route::get('/health/ready', [HealthController::class, 'ready']);
 
 Route::get('/', [PageController::class, 'home']);
 Route::get('/imoveis', [PageController::class, 'imoveis']);

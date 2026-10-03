@@ -11,9 +11,18 @@ class BackendContractTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_laravel_runtime_health_route_returns_success(): void
+    public function test_laravel_runtime_liveness_and_readiness_routes_return_success(): void
     {
         $this->getJson('/_app/health')
+            ->assertOk()
+            ->assertExactJson(['status' => 'ok'])
+            ->assertHeaderContains('Cache-Control', 'no-store');
+
+        $this->getJson('/health/live')
+            ->assertOk()
+            ->assertExactJson(['status' => 'ok']);
+
+        $this->getJson('/health/ready')
             ->assertOk()
             ->assertExactJson(['status' => 'ok'])
             ->assertHeaderContains('Cache-Control', 'no-store');
