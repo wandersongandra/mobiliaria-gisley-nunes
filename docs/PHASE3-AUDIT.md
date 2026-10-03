@@ -33,15 +33,19 @@ revogar é a operação administrativa prevista.
 
 ## Estado dos gates nesta etapa
 
-- Composer, PHPUnit, Pint, PHPStan, cache Laravel e secret scan: reexecutar no
-  fechamento da fase.
-- Pacote de produção: instalação limpa sem `--dev` e boot/caches verificadas
-  localmente com configuração fictícia, sem Node.
+- `composer validate --strict`: PASS.
+- `composer audit`: PASS, sem advisories.
+- PHPUnit: PASS, 107 testes e 573 assertions.
+- Pint: PASS.
+- PHPStan/Larastan: PASS.
+- PHP syntax, secret scan, build do frontend e caches Laravel: PASS.
+- Pacote de produção: PASS em checkout limpo com `composer install --no-dev`,
+  boot, rotas, caches e `app:production-check`, sem Node.
 - MySQL 8 real: job obrigatório adicionado ao CI; evidência remota ainda não
   existe neste documento.
 - R2 real, OAuth real, Cloudflare/HostGator real: BLOCKED por ausência de
   ambiente de teste autorizado.
 
 **BACKEND SECURITY GATE: FAIL** até a execução MySQL remota e as validações
-externas críticas documentadas.  
+externas críticas documentadas.
 **BACKEND PRODUCTION READINESS: FAIL** até MySQL, R2, OAuth e HostGator reais.
