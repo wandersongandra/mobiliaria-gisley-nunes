@@ -2,23 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ResolvesPublicOrigin;
 use App\Services\CrmService;
 use App\Services\PropertyService;
-use App\Services\R2Storage;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 
-class PublicController extends Controller
+/**
+ * Todas as páginas HTML públicas (SSR por causa de SEO) e o fallback 404, que
+ * responde HTML fora de /api/* e JSON dentro dele.
+ */
+class PageController extends Controller
 {
+    use ResolvesPublicOrigin;
+
     private const ASSETS = ['css' => '/assets/main.css', 'js' => '/assets/main.js'];
 
     public function __construct(
         private readonly PropertyService $properties,
         private readonly CrmService $crm,
-        private readonly R2Storage $storage,
     ) {}
 
     public function home(Request $request)
@@ -60,27 +62,19 @@ class PublicController extends Controller
 
     public function bairros(Request $request)
     {
-        $items = array_map(
-            fn (array $row): array => $this->properties->publicProperty($row),
-            $this->properties->listProperties(true)
-        );
         $data = $this->pageData(
             'Bairros com imóveis em Belo Horizonte | Gisley Nunes',
             'Explore bairros com imóveis publicados em Belo Horizonte e região. Encontre opções por localização e fale com a equipe.',
             '/bairros'
         );
-        $data['neighborhoods'] = $this->properties->neighborhoods($items);
+        $data['neighborhoods'] = $this->properties->neighborhoods($this->publicItems());
 
         return view('bairros', $data);
     }
 
     public function bairro(Request $request, string $slug)
     {
-        $items = array_map(
-            fn (array $row): array => $this->properties->publicProperty($row),
-            $this->properties->listProperties(true)
-        );
-        $neighborhood = collect($this->properties->neighborhoods($items))
+        $neighborhood = collect($this->properties->neighborhoods($this->publicItems()))
             ->firstWhere('slug', Str::slug($slug));
 
         if (! $neighborhood) {
@@ -181,141 +175,6 @@ class PublicController extends Controller
         return view('imovel', $data);
     }
 
-    public function properties(): JsonResponse
-    {
-        return response()->json([
-            'properties' => $this->properties->publicCatalog(),
-        ])->header(
-            'Cache-Control',
-            'public, max-age='.PropertyService::PUBLIC_CATALOG_TTL.', stale-while-revalidate=300'
-        );
-    }
-
-    public function property(string $slug): JsonResponse
-    {
-        $row = $this->properties->getPropertyBySlug($slug);
-        if (! $row) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-
-        return response()->json([
-            'property' => $this->properties->publicProperty($row),
-        ])->header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-    }
-
-    public function site(): JsonResponse
-    {
-        return response()->json([
-            'site' => $this->crm->getSiteInfo(),
-            'testimonials' => $this->crm->listTestimonials(),
-        ])->header('Cache-Control', 'public, max-age=300, stale-while-revalidate=900');
-    }
-
-    public function contact(Request $request): JsonResponse
-    {
-        if (trim((string) $request->input('website', '')) !== '') {
-            return response()->json(['ok' => true], 201);
-        }
-
-        $id = $this->crm->createContactLead($request->all());
-
-        return response()->json(['ok' => true, 'id' => $id], 201);
-    }
-
-    public function media(string $path): RedirectResponse|JsonResponse
-    {
-        $key = rawurldecode($path);
-        if (! $this->properties->findPublishedPhotoByStoragePath($key)) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-
-        return redirect()->away($this->storage->presignGet($key), 307)
-            ->header('Cache-Control', 'no-store');
-    }
-
-    public function robots(): Response
-    {
-        $body = implode("\n", [
-            'User-agent: *',
-            'Allow: /',
-            'Disallow: /api/',
-            'Disallow: /admin',
-            'Disallow: /_app/',
-            'Sitemap: '.$this->origin().'/sitemap.xml',
-        ]);
-
-        return response($body, 200)->header('Content-Type', 'text/plain; charset=utf-8');
-    }
-
-    public function sitemap(): Response
-    {
-        $properties = array_map(
-            fn (array $row): array => $this->properties->publicProperty($row),
-            $this->properties->listProperties(true)
-        );
-        $entries = [
-            ['path' => '/', 'priority' => '1.0', 'changefreq' => 'weekly'],
-            ['path' => '/imoveis', 'priority' => '0.9', 'changefreq' => 'daily'],
-            ['path' => '/sobre', 'priority' => '0.5', 'changefreq' => 'monthly'],
-            ['path' => '/contato', 'priority' => '0.5', 'changefreq' => 'monthly'],
-            ['path' => '/servicos', 'priority' => '0.7', 'changefreq' => 'monthly'],
-            ['path' => '/bairros', 'priority' => '0.7', 'changefreq' => 'weekly'],
-            ['path' => '/privacidade', 'priority' => '0.1', 'changefreq' => 'yearly'],
-        ];
-
-        foreach ($this->properties->neighborhoods($properties) as $n) {
-            $entries[] = ['path' => '/bairros/'.$n['slug'], 'priority' => '0.7', 'changefreq' => 'weekly'];
-        }
-        foreach ($properties as $property) {
-            $entries[] = [
-                'path' => '/imoveis/'.$property['slug'],
-                'priority' => '0.8',
-                'changefreq' => 'weekly',
-                'lastmod' => $property['updated_at'] ? date('Y-m-d', strtotime((string) $property['updated_at'])) : null,
-            ];
-        }
-
-        $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
-        foreach ($entries as $entry) {
-            $xml .= '  <url><loc>'.htmlspecialchars($this->origin().$entry['path'], ENT_XML1).'</loc>';
-            if (! empty($entry['lastmod'])) {
-                $xml .= '<lastmod>'.$entry['lastmod'].'</lastmod>';
-            }
-            $xml .= '<changefreq>'.$entry['changefreq'].'</changefreq><priority>'.$entry['priority']."</priority></url>\n";
-        }
-        $xml .= '</urlset>';
-
-        return response($xml, 200)->header('Content-Type', 'application/xml; charset=utf-8');
-    }
-
-    public function llms(): Response
-    {
-        $properties = array_map(
-            fn (array $row): array => $this->properties->publicProperty($row),
-            $this->properties->listProperties(true)
-        );
-        $lines = [
-            '# Gisley Nunes Imóveis', '',
-            '> Imóveis para comprar e alugar em Belo Horizonte e região. Consulte o catálogo e entre em contato.', '',
-            '## Páginas',
-            '- [Início]('.$this->origin().'/): apresentação e imóveis em destaque.',
-            '- [Imóveis]('.$this->origin().'/imoveis): catálogo completo com filtros.',
-            '- [Sobre]('.$this->origin().'/sobre): história e valores.',
-            '- [Contato]('.$this->origin().'/contato): canais de atendimento.',
-            '- [Serviços]('.$this->origin().'/servicos): caminhos para comprar, alugar ou anunciar um imóvel.',
-            '- [Bairros]('.$this->origin().'/bairros): imóveis agrupados por localização.',
-            '- [Privacidade]('.$this->origin().'/privacidade): política de privacidade.', '', '## Imóveis',
-        ];
-        foreach ($this->properties->neighborhoods($properties) as $n) {
-            $lines[] = '- Bairro '.$n['name'].': '.$n['count'].' imóveis. '.$this->origin().'/bairros/'.$n['slug'];
-        }
-        foreach ($properties as $p) {
-            $lines[] = '- '.$p['title'].': '.$p['location'].', '.($p['price_label'] ?: 'consulte').'. '.$this->origin().'/imoveis/'.$p['slug'];
-        }
-
-        return response(implode("\n", $lines), 200)->header('Content-Type', 'text/plain; charset=utf-8');
-    }
-
     public function notFound(Request $request)
     {
         if ($request->is('api/*')) {
@@ -330,6 +189,9 @@ class PublicController extends Controller
         ), 404);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function pageData(
         string $title,
         string $description,
@@ -365,11 +227,20 @@ class PublicController extends Controller
         ];
     }
 
-    private function origin(): string
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function publicItems(): array
     {
-        return rtrim((string) config('app.url'), '/');
+        return array_map(
+            fn (array $row): array => $this->properties->publicProperty($row),
+            $this->properties->listProperties(true)
+        );
     }
 
+    /**
+     * @param  array<string, mixed>  $value
+     */
     private function jsonLd(array $value): string
     {
         return json_encode(

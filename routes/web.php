@@ -3,7 +3,10 @@
 use App\Http\Controllers\AdminCrmController;
 use App\Http\Controllers\AdminPropertyController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\PublicController;
+use App\Http\Controllers\DiscoveryController;
+use App\Http\Controllers\MediaController;
+use App\Http\Controllers\PageController;
+use App\Http\Controllers\PublicApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -11,27 +14,27 @@ Route::get('/_app/health', static function (): JsonResponse {
     return response()->json(['status' => 'ok'])->header('Cache-Control', 'no-store');
 });
 
-Route::get('/', [PublicController::class, 'home']);
-Route::get('/imoveis', [PublicController::class, 'imoveis']);
-Route::get('/servicos', [PublicController::class, 'servicos']);
-Route::get('/bairros', [PublicController::class, 'bairros']);
-Route::get('/bairros/{slug}', [PublicController::class, 'bairro']);
-Route::get('/sobre', [PublicController::class, 'sobre']);
-Route::get('/contato', [PublicController::class, 'contato']);
-Route::get('/privacidade', [PublicController::class, 'privacidade']);
-Route::get('/imoveis/{slug}', [PublicController::class, 'imovel']);
+Route::get('/', [PageController::class, 'home']);
+Route::get('/imoveis', [PageController::class, 'imoveis']);
+Route::get('/servicos', [PageController::class, 'servicos']);
+Route::get('/bairros', [PageController::class, 'bairros']);
+Route::get('/bairros/{slug}', [PageController::class, 'bairro']);
+Route::get('/sobre', [PageController::class, 'sobre']);
+Route::get('/contato', [PageController::class, 'contato']);
+Route::get('/privacidade', [PageController::class, 'privacidade']);
+Route::get('/imoveis/{slug}', [PageController::class, 'imovel']);
 
-Route::get('/robots.txt', [PublicController::class, 'robots']);
-Route::get('/sitemap.xml', [PublicController::class, 'sitemap']);
-Route::get('/llms.txt', [PublicController::class, 'llms']);
+Route::get('/robots.txt', [DiscoveryController::class, 'robots']);
+Route::get('/sitemap.xml', [DiscoveryController::class, 'sitemap']);
+Route::get('/llms.txt', [DiscoveryController::class, 'llms']);
 
-Route::get('/api/properties', [PublicController::class, 'properties']);
-Route::get('/api/properties/{slug}', [PublicController::class, 'property']);
-Route::get('/api/site', [PublicController::class, 'site']);
-Route::post('/api/contact', [PublicController::class, 'contact'])
+Route::get('/api/properties', [PublicApiController::class, 'properties']);
+Route::get('/api/properties/{slug}', [PublicApiController::class, 'property']);
+Route::get('/api/site', [PublicApiController::class, 'site']);
+Route::post('/api/contact', [PublicApiController::class, 'contact'])
     ->middleware(['same-origin', 'throttle:contact']);
 
-Route::get('/media/{path}', [PublicController::class, 'media'])->where('path', '.*');
+Route::get('/media/{path}', [MediaController::class, 'media'])->where('path', '.*');
 
 Route::get('/admin', [AdminCrmController::class, 'panel']);
 
@@ -111,4 +114,4 @@ Route::prefix('api/admin')
             ->middleware(['capability:team.manage', 'throttle:destructive']);
     });
 
-Route::fallback([PublicController::class, 'notFound']);
+Route::fallback([PageController::class, 'notFound']);
