@@ -485,6 +485,7 @@ async function uploadPendingFiles(propertyId) {
 
 async function removePhoto(id) {
   if (!state.editing) return;
+  if (!window.confirm('Remover esta foto? Esta ação não pode ser desfeita.')) return;
   const button = document.querySelector(`[data-photo-remove="${CSS.escape(id)}"]`);
   setButtonPending(button, true, '…');
   try {
@@ -625,6 +626,7 @@ async function addTestimonial(event) {
 }
 
 async function removeTestimonial(id) {
+  if (!window.confirm('Remover este depoimento? Esta ação não pode ser desfeita.')) return;
   const button = document.querySelector(`[data-testimonial-remove="${CSS.escape(id)}"]`);
   setButtonPending(button, true, 'Removendo…');
   siteNotify('Removendo depoimento…');
@@ -712,6 +714,8 @@ function renderTeam() {
   }).join('') : '<div class="empty-properties compact"><span>◎</span><h4>Nenhum acesso adicional.</h4><p>Adicione um corretor ou outro gestor para começar.</p></div>';
 
   list.querySelectorAll('[data-team-role]').forEach((button) => button.addEventListener('click', async () => {
+    const nextRole = button.dataset.nextRole === 'manager' ? 'gestor' : 'editor';
+    if (!window.confirm(`Tornar este membro ${nextRole}?`)) return;
     setButtonPending(button, true, 'Salvando…');
     try {
       const email = button.dataset.teamRole;
@@ -726,6 +730,7 @@ function renderTeam() {
   }));
 
   list.querySelectorAll('[data-team-remove]').forEach((button) => button.addEventListener('click', async () => {
+    if (!window.confirm('Remover este acesso da equipe? A pessoa deixará de entrar no painel.')) return;
     setButtonPending(button, true, 'Removendo…');
     try {
       await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamRemove)}`, { method: 'DELETE' });
@@ -749,6 +754,7 @@ function renderTeamInvitations() {
   }).join('') : '<div class="empty-properties compact"><p>Nenhum convite pendente.</p></div>';
 
   list.querySelectorAll('[data-team-invite-revoke]').forEach((button) => button.addEventListener('click', async () => {
+    if (!window.confirm('Revogar este convite? O link deixará de funcionar.')) return;
     setButtonPending(button, true, 'Revogando…');
     try {
       await request(`/api/admin/team/invitations/${encodeURIComponent(button.dataset.teamInviteRevoke)}`, { method: 'DELETE' });

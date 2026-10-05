@@ -406,7 +406,7 @@ async function uploadPendingFiles(propertyId) {
   clearPendingFiles();
 }
 
-async function removePhoto(id) { if (!state.editing) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
+async function removePhoto(id) { if (!state.editing || !window.confirm('Remover esta foto? Esta ação não pode ser desfeita.')) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
 
 async function movePhoto(id, direction) {
   if (!state.editing) return;
@@ -487,6 +487,7 @@ async function addTestimonial(event) {
 }
 
 async function removeTestimonial(id) {
+  if (!window.confirm('Remover este depoimento? Esta ação não pode ser desfeita.')) return;
   try {
     await request(`/api/admin/testimonials/${id}`, { method: 'DELETE' });
     const data = await request('/api/admin/site');
@@ -563,6 +564,8 @@ function renderTeam() {
   }).join('') : '<div class="empty-properties compact"><span>◎</span><h4>Nenhum acesso adicional.</h4><p>Adicione um corretor ou outro gestor para começar.</p></div>';
 
   list.querySelectorAll('[data-team-role]').forEach((button) => button.addEventListener('click', async () => {
+    const nextRole = button.dataset.nextRole === 'manager' ? 'gestor' : 'editor';
+    if (!window.confirm(`Tornar este membro ${nextRole}?`)) return;
     try {
       const email = button.dataset.teamRole;
       await request(`/api/admin/team/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify({ role: button.dataset.nextRole }) });
@@ -574,6 +577,7 @@ function renderTeam() {
   }));
 
   list.querySelectorAll('[data-team-remove]').forEach((button) => button.addEventListener('click', async () => {
+    if (!window.confirm('Remover este acesso da equipe? A pessoa deixará de entrar no painel.')) return;
     try {
       await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamRemove)}`, { method: 'DELETE' });
       await loadTeam();
@@ -594,6 +598,7 @@ function renderTeamInvitations() {
   }).join('') : '<div class="empty-properties compact"><p>Nenhum convite pendente.</p></div>';
 
   list.querySelectorAll('[data-team-invite-revoke]').forEach((button) => button.addEventListener('click', async () => {
+    if (!window.confirm('Revogar este convite? O link deixará de funcionar.')) return;
     try {
       await request(`/api/admin/team/invitations/${encodeURIComponent(button.dataset.teamInviteRevoke)}`, { method: 'DELETE' });
       await loadTeam();
