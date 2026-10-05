@@ -111,10 +111,10 @@ variables, host key estrita e não usa autenticação por senha.
 
 ## Intervenções que ainda dependem do operador
 
-1. Alterar no DNS autoritativo os registros de `gisleynunesimoveis.com.br`,
-   `www` e `painel` para o IP HTTP HostGator `192.185.176.183`. O endpoint SSH
-   `192.185.213.23` não deve ser usado como A record sem confirmação do
-   provedor.
+1. Os testes independentes de origem HTTP, usando `curl --resolve` com Host
+   header/SNI corretos, confirmaram `192.185.213.23` como o IP HTTP da
+   aplicação. O IP histórico `192.185.176.183` está superseded e não deve ser
+   usado em DNS.
 2. Cadastrar no `.env` remoto os secrets reais do R2 e OAuth diretamente no
    servidor. Não enviar esses valores pelo chat.
 3. Confirmar no provedor OAuth o redirect URI
@@ -147,9 +147,9 @@ dedicada `gisley77_gisley_nunes` por SSH:
   `painel.gisleynunesimoveis.com.br` como subdomínio, ambos no `public/` do
   checkout. O módulo UAPI `AddonDomain` não está disponível, mas o `cpapi2`
   legado executou a configuração corretamente.
-- O DNS público ainda resolve `gisleynunesimoveis.com.br` e `www` para
-  `89.116.224.14`; a saída HTTP pública da HostGator foi confirmada em
-  `192.185.176.183`, enquanto `192.185.213.23` permanece o endpoint SSH.
+- O relatório histórico acima foi superseded: a origem HTTP correta é
+  `192.185.213.23`, confirmada por `curl --resolve` e pelo health check Laravel.
+  Não reutilizar `192.185.176.183`.
 - As variables e secrets SSH do deploy foram cadastrados no repositório GitHub;
   `HOSTGATOR_DEPLOY_ENABLED` permanece `false`.
 
