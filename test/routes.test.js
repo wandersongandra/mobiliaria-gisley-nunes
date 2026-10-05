@@ -39,6 +39,18 @@ test('rotas públicas essenciais respondem com contrato esperado', async () => {
     assert.ok(Array.isArray(catalogBody.properties));
     assert.ok(catalogBody.properties.length >= 1);
 
+    const catalogV2 = await fetch(`${origin}/api/v2/properties?purpose=Comprar&bedrooms=3&per_page=20`);
+    assert.equal(catalogV2.status, 200);
+    const catalogV2Body = await catalogV2.json();
+    assert.ok(Array.isArray(catalogV2Body.properties));
+    assert.equal(catalogV2Body.pagination.current_page, 1);
+    assert.ok(Array.isArray(catalogV2Body.facets.locations));
+    assert.ok(catalogV2Body.properties.every((property) => property.purpose === 'Comprar' && property.bedrooms === 3));
+
+    const invalidCatalogV2 = await fetch(`${origin}/api/v2/properties?per_page=19`);
+    assert.equal(invalidCatalogV2.status, 422);
+    assert.deepEqual(await invalidCatalogV2.json(), { error: 'VALIDATION_FAILED' });
+
     const missing = await fetch(`${origin}/api/properties/imovel-inexistente`);
     assert.equal(missing.status, 404);
     assert.deepEqual(await missing.json(), { error: 'NOT_FOUND' });

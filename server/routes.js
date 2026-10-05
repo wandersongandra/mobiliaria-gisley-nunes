@@ -34,6 +34,7 @@ import {
   updateContactLeadStatus
 } from './db.js';
 import { configuredAdminOrigin, hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
+import { catalogFacets, filterCatalogProperties, paginateCatalog } from './catalog.js';
 import { STAFF_INVITATION_TTL_MS, authCookieNames, callback, clearSessionCookie, currentAdmin, hashInvitationToken, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
@@ -63,6 +64,7 @@ import {
 } from './storage.js';
 import {
   normalizeAuditQuery,
+  normalizeCatalogQuery,
   normalizeContactLead,
   normalizeEmailAddress,
   normalizeLeadStatusRequest,
@@ -198,6 +200,24 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       res.json({ properties });
     } catch (error) {
       next(error);
+    }
+  });
+
+  app.get('/api/v2/properties', async (req, res, next) => {
+    try {
+      const query = normalizeCatalogQuery(req.query || {});
+      const allProperties = await listProperties({ publicOnly: true });
+      const filtered = filterCatalogProperties(allProperties, query);
+      const { items, pagination } = paginateCatalog(filtered, query);
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+      return res.json({
+        properties: publicProperties(items),
+        pagination,
+        facets: catalogFacets(allProperties)
+      });
+    } catch (error) {
+      if (error?.message === 'INVALID_CATALOG_QUERY') return res.status(422).json({ error: 'VALIDATION_FAILED' });
+      return next(error);
     }
   });
 

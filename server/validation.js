@@ -10,6 +10,8 @@ const LEAD_INTERESTS = new Set([
 const LEAD_STATUSES = new Set(['new', 'contacted', 'closed']);
 const TEAM_ROLES = new Set(['editor', 'manager']);
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+const CATALOG_PRICE_BANDS = new Set(['1', '2', '3']);
+const CATALOG_BEDROOMS = new Set(['1', '2', '3', '4+']);
 
 function ensureObject(value, error = 'INVALID_INPUT') {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(error);
@@ -100,6 +102,33 @@ export function normalizePropertySlug(value) {
   const slug = text(value, 170, { required: true, error: 'INVALID_SLUG' });
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error('INVALID_SLUG');
   return slug;
+}
+
+export function normalizeCatalogQuery(input = {}) {
+  input = ensureObject(input, 'INVALID_CATALOG_QUERY');
+  ensureKeys(input, new Set(['page', 'per_page', 'purpose', 'location', 'type', 'price_band', 'bedrooms']), 'INVALID_CATALOG_QUERY');
+
+  const page = numberField(input.page, 100000, { integer: true, error: 'INVALID_CATALOG_QUERY' }) || 1;
+  const perPage = numberField(input.per_page, 100, { integer: true, error: 'INVALID_CATALOG_QUERY' }) || 20;
+  if (page < 1 || perPage < 20) throw new Error('INVALID_CATALOG_QUERY');
+
+  const purpose = input.purpose === undefined || input.purpose === 'all'
+    ? ''
+    : enumField(input.purpose, PURPOSES, { error: 'INVALID_CATALOG_QUERY' });
+  const location = input.location === undefined || input.location === 'all'
+    ? ''
+    : text(input.location, 180, { error: 'INVALID_CATALOG_QUERY' });
+  const type = input.type === undefined || input.type === 'all'
+    ? ''
+    : enumField(input.type, PROPERTY_TYPES, { error: 'INVALID_CATALOG_QUERY' });
+  const priceBand = input.price_band === undefined || input.price_band === 'all'
+    ? 0
+    : Number(enumField(input.price_band, CATALOG_PRICE_BANDS, { error: 'INVALID_CATALOG_QUERY' }));
+  const bedrooms = input.bedrooms === undefined || input.bedrooms === 'all'
+    ? ''
+    : enumField(input.bedrooms, CATALOG_BEDROOMS, { error: 'INVALID_CATALOG_QUERY' });
+
+  return { page, perPage, purpose, location, type, priceBand, bedrooms };
 }
 
 export function normalizePropertyInput(input = {}) {

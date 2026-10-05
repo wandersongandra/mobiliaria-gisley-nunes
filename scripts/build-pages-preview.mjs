@@ -260,6 +260,23 @@ await render('404.ejs', '404.html', {
 
 await mkdir(path.join(outDir, 'api', 'properties'), { recursive: true });
 await writeFile(path.join(outDir, 'api', 'properties', 'index.html'), JSON.stringify({ properties }), 'utf8');
+const previewFacets = {
+  locations: [...new Set(properties.map((property) => property.location).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+  types: [...new Set(properties.map((property) => property.type).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+};
+await mkdir(path.join(outDir, 'api', 'v2', 'properties'), { recursive: true });
+await writeFile(path.join(outDir, 'api', 'v2', 'properties', 'index.html'), JSON.stringify({
+  properties,
+  pagination: {
+    current_page: 1,
+    per_page: properties.length || 20,
+    last_page: 1,
+    total: properties.length,
+    from: properties.length ? 1 : null,
+    to: properties.length || null
+  },
+  facets: previewFacets
+}), 'utf8');
 await mkdir(path.join(outDir, 'api', 'site'), { recursive: true });
 await writeFile(path.join(outDir, 'api', 'site', 'index.html'), JSON.stringify({ site }), 'utf8');
 
