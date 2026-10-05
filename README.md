@@ -34,6 +34,24 @@ O frontend público e o painel usam assets estáticos em `public/assets` e `publ
 
 O alvo oficial de hospedagem é HostGator com Laravel em PHP-FPM, MySQL e Document Root apontado para `public/`. Node.js e Docker não fazem parte do runtime de produção. Consulte o guia de migração e o relatório [PHASE4-HOSTGATOR-RUNTIME.md](docs/PHASE4-HOSTGATOR-RUNTIME.md) antes de configurar o ambiente. O workflow manual `HostGator preparation preflight` prepara o pacote, mas não executa SSH ou deploy.
 
+## Build do frontend e painel
+
+As fontes canônicas são `src/` para o frontend público, `admin/` para o painel
+e `resources/views/` para Blade. Os arquivos em `public/assets` e
+`public/admin` são artefatos gerados para o runtime Laravel; não os edite
+manualmente.
+
+```text
+pnpm install --frozen-lockfile
+pnpm build
+pnpm test:source
+pnpm build:preview
+pnpm test
+```
+
+Consulte [`docs/FRONTEND-SOURCE-OF-TRUTH.md`](docs/FRONTEND-SOURCE-OF-TRUTH.md)
+para a matriz de runtime, build e legado.
+
 Na hospedagem, instale as dependências de produção e prepare o cache:
 
 ```bash

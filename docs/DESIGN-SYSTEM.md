@@ -8,6 +8,11 @@ e Fraunces + Manrope para contraste entre títulos e texto funcional. A
 hierarquia privilegia espaço, fotografia e tipografia; não usa neon,
 glassmorphism ou gradientes decorativos como linguagem principal.
 
+Os tokens de cobre e texto auxiliar usam variantes distintas para superfícies
+claras e escuras. A combinação foi verificada com axe-core nas páginas
+representativas; não usar novamente o cobre claro original como texto pequeno
+em fundo creme/areia.
+
 ## Componentes recorrentes
 
 - `.shell` define a largura de leitura e mantém margens responsivas;

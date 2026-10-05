@@ -2,21 +2,21 @@
 
 ## Contrato de produção
 
-O runtime Laravel serve os artefatos versionados em `public/assets` e
-`public/admin`. `src/`, `admin/` e `server/` continuam no repositório para o
-build/preview Vite, testes Node e compatibilidade da migração; Node não é
-necessário para o runtime PHP na HostGator.
+O runtime Laravel serve os artefatos gerados em `public/assets` e
+`public/admin`. As fontes canônicas são `src/` para o frontend público,
+`admin/` para o painel e `resources/views/` para os templates Blade. Node não é
+necessário para o runtime PHP na HostGator, mas é necessário no build e no
+preview.
 
-Essa separação é intencional, mas cria risco de drift entre fonte de preview e
-artefato ativo. Qualquer mudança de interface pública ou painel precisa
-atualizar o artefato em `public/`, executar `node --check` nos dois lados
-quando aplicável e validar build/preview. Não remover essas pastas sem provar
-que o fluxo de preview e os consumidores foram migrados.
+`pnpm build` é o único fluxo autorizado para atualizar os artefatos públicos.
+`pnpm test:source` bloqueia drift byte a byte entre as fontes do painel, o
+manifesto Vite e os arquivos servidos pelo Laravel. A matriz completa está em
+[`FRONTEND-SOURCE-OF-TRUTH.md`](FRONTEND-SOURCE-OF-TRUTH.md).
 
 ## Superfícies ativas
 
-- páginas públicas Blade + `public/assets/main.js`/`main.css`;
-- painel em `public/admin/index.html`, `main.js` e CSS;
+- páginas públicas Blade + `public/assets/main.js`/`main.css` gerados de `src/`;
+- painel em `public/admin/index.html`, `main.js` e CSS gerados de `admin/`;
 - API pública v2 para catálogo, com estado de filtros/paginação na URL;
 - admin com sessão server-side, CSRF, same-origin, capabilities e estados de
   carregamento/erro.
@@ -29,3 +29,6 @@ que o fluxo de preview e os consumidores foram migrados.
 - evitar dependência de `localStorage` para identidade ou sessão;
 - manter ações destrutivas com confirmação e feedback de erro;
 - não substituir validação server-side por validação de navegador.
+- não editar `public/assets` ou `public/admin` manualmente;
+- validar `pnpm build`, `pnpm test:source` e `pnpm build:preview` antes de
+  commitar mudanças de frontend.
