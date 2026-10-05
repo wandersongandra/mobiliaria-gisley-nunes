@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\AdminCrmController;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
@@ -111,7 +112,7 @@ class RouteSurfaceTest extends TestCase
 
     public function test_lead_export_has_a_dedicated_rate_limit(): void
     {
-        $route = Route::getRoutes()->getByAction(\App\Http\Controllers\AdminCrmController::class.'@exportLeads');
+        $route = Route::getRoutes()->getByAction(AdminCrmController::class.'@exportLeads');
 
         $this->assertNotNull($route);
         $this->assertContains('throttle:export', $route->middleware());
