@@ -146,10 +146,15 @@ function initListing() {
   const grid = document.querySelector('#listing-grid');
   if (!grid) return;
 
+  const isHome = document.body.dataset.page === 'home';
   const empty = document.querySelector('#empty-state');
   const count = document.querySelector('#listing-count');
   const form = document.querySelector('#search-form');
   const filterSummary = document.querySelector('#filter-summary');
+  const paginationNode = document.querySelector('#catalog-pagination');
+  const paginationLabel = document.querySelector('#catalog-pagination-label');
+  const previousPage = document.querySelector('#catalog-page-previous');
+  const nextPage = document.querySelector('#catalog-page-next');
   const filters = {
     purpose: document.querySelector('#purpose'),
     location: document.querySelector('#location'),
@@ -158,6 +163,8 @@ function initListing() {
     bedrooms: document.querySelector('#bedrooms')
   };
   let catalog = [];
+  let pagination = { current_page: 1, last_page: 1, total: 0 };
+  let facetsInitialized = false;
 
   function renderFilterSummary(resultCount) {
     if (!filterSummary) return;
@@ -177,34 +184,40 @@ function initListing() {
   }
 
   function renderListings(items = catalog) {
-    grid.innerHTML = items.map((item, index) => listingCard(item, index)).join('');
+    const visibleItems = isHome ? items.slice(0, 6) : items;
+    grid.innerHTML = visibleItems.map((item, index) => listingCard(item, index)).join('');
     activateListingCards(grid);
-    if (count) count.textContent = String(items.length).padStart(2, '0');
+    if (count) count.textContent = String(pagination.total).padStart(2, '0');
     if (empty) empty.hidden = items.length > 0;
-    renderFilterSummary(items.length);
+    renderFilterSummary(pagination.total);
+    renderPagination();
     form?.classList.remove('has-pending-filters');
   }
 
   function clearFilters() {
     Object.values(filters).forEach((filter) => { if (filter) filter.value = 'all'; });
     updatePriceOptions();
-    renderListings(catalog);
+    loadProperties(1);
   }
 
-  function fillSelect(select, values, allLabel) {
+  function fillSelect(select, values, allLabel, selected = 'all') {
     if (!select) return;
-    select.innerHTML = `<option value="all">${escapeHTML(allLabel)}</option>` + values.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join('');
-    select.value = 'all';
+    select.innerHTML = `<option value="all">${escapeHTML(allLabel)}</option>` + values.map((item) => {
+      const value = typeof item === 'string' ? item : item.value;
+      const label = typeof item === 'string' ? item : item.label;
+      return `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`;
+    }).join('');
+    select.value = [...select.options].some((option) => option.value === selected) ? selected : 'all';
   }
 
-  function populateFilterOptions() {
-    const neighborhoods = [...new Set(catalog.map((item) => item.neighborhood).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const types = [...new Set(catalog.map((item) => item.type).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    fillSelect(filters.location, neighborhoods, 'Todos os bairros');
-    fillSelect(filters.type, types, 'Todos os tipos');
+  function populateFilterOptions(facets) {
+    const locations = Array.isArray(facets?.locations) ? facets.locations : [];
+    const types = Array.isArray(facets?.types) ? facets.types : [];
+    fillSelect(filters.location, locations.map((value) => ({ value, label: String(value).split(' · ')[0] })), 'Todos os bairros', filters.location?.value || 'all');
+    fillSelect(filters.type, types, 'Todos os tipos', filters.type?.value || 'all');
   }
 
-  function updatePriceOptions() {
+  function updatePriceOptions(selected = filters.price?.value || 'all') {
     const select = filters.price;
     if (!select) return;
     const purpose = filters.purpose?.value || 'all';
@@ -230,7 +243,7 @@ function initListing() {
           ['3', 'Acima de R$ 3 mi']
         ];
     select.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
-    select.value = 'all';
+    select.value = options.some(([value]) => value === selected) ? selected : 'all';
   }
 
   function applyUrlFilters() {
@@ -245,8 +258,27 @@ function initListing() {
       const value = params.get(key);
       if (value && [...filter.options].some((option) => option.value === value)) filter.value = value;
     }
-    const requestedPrice = params.get('price');
+    const requestedPrice = params.get('price_band') || params.get('price');
     if (requestedPrice && [...filters.price.options].some((option) => option.value === requestedPrice)) filters.price.value = requestedPrice;
+
+    return [...params.keys()].some((key) => ['purpose', 'location', 'type', 'price', 'price_band', 'bedrooms'].includes(key));
+  }
+
+  function queryForPage(page) {
+    const params = new URLSearchParams({ page: String(page), per_page: '20' });
+    const names = { purpose: 'purpose', location: 'location', type: 'type', price: 'price_band', bedrooms: 'bedrooms' };
+    Object.entries(filters).forEach(([key, filter]) => {
+      if (filter?.value && filter.value !== 'all') params.set(names[key], filter.value);
+    });
+    return params;
+  }
+
+  function renderPagination() {
+    if (!paginationNode || isHome) return;
+    paginationNode.hidden = pagination.last_page <= 1;
+    if (paginationLabel) paginationLabel.textContent = `Página ${pagination.current_page} de ${pagination.last_page}`;
+    if (previousPage) previousPage.disabled = pagination.current_page <= 1;
+    if (nextPage) nextPage.disabled = pagination.current_page >= pagination.last_page;
   }
 
   Object.values(filters).forEach((filter) => filter?.addEventListener('change', () => form?.classList.add('has-pending-filters')));
@@ -254,31 +286,40 @@ function initListing() {
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const filtered = catalog.filter((item) => {
-      const purposeOk = filters.purpose.value === 'all' || item.purpose === filters.purpose.value;
-      const locationOk = filters.location.value === 'all' || item.neighborhood === filters.location.value;
-      const typeOk = filters.type.value === 'all' || item.type === filters.type.value;
-      const priceOk = filters.price.value === 'all' || item.priceValue === Number(filters.price.value);
-      const bedroomsOk = filters.bedrooms.value === 'all' || (filters.bedrooms.value === '4+' ? item.bedrooms >= 4 : item.bedrooms === Number(filters.bedrooms.value));
-      return purposeOk && locationOk && typeOk && priceOk && bedroomsOk;
-    });
-    renderListings(filtered);
+    if (isHome) {
+      window.location.assign(`/imoveis?${queryForPage(1).toString()}`);
+      return;
+    }
+    loadProperties(1);
     document.querySelector('#imoveis')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   document.querySelector('#clear-filters')?.addEventListener('click', clearFilters);
+  previousPage?.addEventListener('click', () => loadProperties(pagination.current_page - 1));
+  nextPage?.addEventListener('click', () => loadProperties(pagination.current_page + 1));
 
-  async function loadProperties() {
+  async function loadProperties(page = 1) {
     try {
       grid.setAttribute('aria-busy', 'true');
       grid.innerHTML = listingSkeletons(document.body.dataset.page === 'home' ? 6 : 6);
-      const response = await fetch('/api/properties', { headers: { Accept: 'application/json' } });
+      const params = queryForPage(page);
+      const response = await fetch(`/api/v2/properties?${params.toString()}`, { headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error('LOAD_FAILED');
       const payload = await response.json();
       catalog = Array.isArray(payload?.properties) ? payload.properties.map(normalizeProperty) : [];
-      populateFilterOptions();
-      updatePriceOptions();
-      applyUrlFilters();
+      pagination = payload?.pagination || pagination;
+      if (!facetsInitialized) {
+        populateFilterOptions(payload?.facets);
+        updatePriceOptions();
+        const hasUrlFilters = applyUrlFilters();
+        const requestedPage = Math.max(1, Number(new URLSearchParams(window.location.search).get('page') || 1));
+        facetsInitialized = true;
+        if (hasUrlFilters || requestedPage > 1) {
+          await loadProperties(hasUrlFilters ? 1 : requestedPage);
+          return;
+        }
+      }
+      if (!isHome) history.replaceState(null, '', `/imoveis?${params.toString()}`);
       renderListings(catalog);
     } catch {
       grid.innerHTML = '';
@@ -286,7 +327,7 @@ function initListing() {
       if (empty) empty.hidden = true;
       if (filterSummary) {
         filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis.</span><button type="button" id="retry-properties">Tentar novamente</button>';
-        filterSummary.querySelector('#retry-properties')?.addEventListener('click', loadProperties, { once: true });
+        filterSummary.querySelector('#retry-properties')?.addEventListener('click', () => loadProperties(page), { once: true });
       }
     } finally {
       grid.removeAttribute('aria-busy');
@@ -585,7 +626,7 @@ async function initWhatsAppShortcut() {
     link.rel = 'noopener noreferrer';
     link.setAttribute('aria-label', 'Falar com a Gisley Nunes pelo WhatsApp');
     link.innerHTML = '<span aria-hidden="true">↗</span><strong>WhatsApp</strong>';
-    document.body.append(link);
+    (document.querySelector('.site-footer') || document.body).append(link);
   } catch {}
 }
 

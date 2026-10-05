@@ -11,7 +11,8 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], leads: [], team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
+const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+let propertySearchTimer = 0;
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -22,6 +23,25 @@ function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (cha
 function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(value)) : 'agora'; }
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }
 
+function setButtonPending(button, pending, label = '') {
+  if (!button) return;
+  if (pending) {
+    button.dataset.originalHtml ||= button.innerHTML;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = label;
+    return;
+  }
+  if (button.dataset.originalHtml) button.innerHTML = button.dataset.originalHtml;
+  button.disabled = false;
+  button.removeAttribute('aria-busy');
+}
+
+function setFormPending(targetForm, pending, label = '') {
+  targetForm?.setAttribute('aria-busy', String(pending));
+  setButtonPending(targetForm?.querySelector('button[type="submit"]'), pending, label);
+}
+
 async function request(url, options = {}) {
   const headers = { Accept: 'application/json', ...(options.headers || {}) };
   const method = String(options.method || 'GET').toUpperCase();
@@ -31,7 +51,10 @@ async function request(url, options = {}) {
   }
   const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (response.status === 401) { showLogin(); throw new Error('AUTH_REQUIRED'); }
-  if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || 'REQUEST_FAILED'); }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || (response.status === 422 ? 'VALIDATION_FAILED' : 'REQUEST_FAILED'));
+  }
   return response.status === 204 ? null : response.json();
 }
 
@@ -39,12 +62,17 @@ function clearSensitiveState() {
   state.user = null;
   state.csrfToken = '';
   state.properties = [];
+  state.propertyPagination = null;
+  state.propertySummary = null;
+  state.propertyFilters = { search: '', status: '', page: 1, per_page: 20 };
   state.leads = [];
+  state.leadPagination = null;
+  state.leadFilters = { status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
   state.team = [];
   state.invitations = [];
   state.audit = [];
   state.editing = null;
-  state.search = '';
+  clearTimeout(propertySearchTimer);
   clearPendingFiles();
   if (dialog?.open) dialog.close();
   const propertyList = $('#property-list');
@@ -139,22 +167,36 @@ function showDashboard() {
 }
 
 function renderProperties() {
-  const published = state.properties.filter((item) => item.status === 'published').length;
-  const drafts = state.properties.filter((item) => item.status === 'draft').length;
-  const active = state.properties.filter((item) => item.status !== 'archived').length;
-  $('#metric-total').textContent = String(active).padStart(2, '0');
-  $('#metric-published').textContent = String(published).padStart(2, '0');
-  $('#metric-draft').textContent = String(drafts).padStart(2, '0');
-  const query = String(state.search || '').trim().toLowerCase();
-  const items = query ? state.properties.filter((item) => `${item.title} ${item.location} ${item.type}`.toLowerCase().includes(query)) : state.properties;
-  $('#side-count').textContent = state.properties.length;
+  document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
+  document.querySelectorAll('.property-filters input, .property-filters select').forEach((control) => { control.disabled = false; });
+  const summary = state.propertySummary || { total: 0, active: 0, published: 0, draft: 0 };
+  $('#metric-total').textContent = String(summary.active).padStart(2, '0');
+  $('#metric-published').textContent = String(summary.published).padStart(2, '0');
+  $('#metric-draft').textContent = String(summary.draft).padStart(2, '0');
+  const query = String(state.propertyFilters.search || '').trim();
+  const statusFilter = state.propertyFilters.status;
+  const items = state.properties;
+  $('#side-count').textContent = summary.total;
+  $('#property-search').value = query;
+  $('#property-status-filter').value = statusFilter;
+  $('#property-per-page').value = String(state.propertyFilters.per_page);
   $('#property-list').innerHTML = items.length ? items.map((item) => {
     const canEdit = state.user?.role === 'manager' || item.status === 'draft';
     const action = canEdit
       ? `<button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button>`
       : '<span class="row-locked" title="Somente Gestor pode alterar imóvel publicado ou arquivado">Somente Gestor</span>';
     return `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span>${action}</article>`;
-  }).join('') : (query ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo de busca.</p></div>' : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>');
+  }).join('') : (summary.total > 0 && (query || statusFilter)
+    ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo ou status.</p></div>'
+    : summary.total > 0
+      ? '<div class="empty-properties" role="status">Carregando imóveis…</div>'
+      : '<div class="empty-properties"><span>✦</span><h4>Seu portfólio começa aqui.</h4><p>Cadastre o primeiro imóvel para começar a construir a vitrine da Gisley Nunes.</p><button class="outline-button" data-empty-new type="button">Cadastrar primeiro imóvel <span>＋</span></button></div>');
+  const pagination = state.propertyPagination;
+  $('#property-page-summary').textContent = pagination?.total
+    ? `Exibindo ${pagination.from}–${pagination.to} de ${pagination.total}`
+    : 'Nenhum imóvel encontrado';
+  $('#property-page-previous').disabled = !pagination || pagination.current_page <= 1;
+  $('#property-page-next').disabled = !pagination || pagination.current_page >= pagination.last_page;
   document.querySelectorAll('[data-edit]').forEach((button) => button.addEventListener('click', () => openEditor(state.properties.find((item) => item.id === button.dataset.edit))));
   $('[data-empty-new]')?.addEventListener('click', () => openEditor());
 }
@@ -274,7 +316,7 @@ async function saveProperty(event) {
   event.preventDefault();
 
   const button = $('#save-property');
-  button.disabled = true;
+  setButtonPending(button, true, 'Salvando…');
   toast('Salvando alterações…');
 
   const data = Object.fromEntries(new FormData(form));
@@ -284,32 +326,58 @@ async function saveProperty(event) {
   data.status = data.published ? 'published' : 'draft';
 
   let propertySaved = false;
+  const publishAfterUpload = data.status === 'published'
+    && state.pendingFiles.length > 0
+    && !state.editing?.photos?.some((photo) => photo.is_cover);
   try {
+    const initialData = publishAfterUpload
+      ? { ...data, status: 'draft', published: false, featured: false }
+      : data;
     const result = await request(
       state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties',
-      { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(data) }
+      { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(initialData) }
     );
 
     state.editing = result.property;
     propertySaved = true;
     await uploadPendingFiles(result.property.id);
+    if (publishAfterUpload) {
+      const published = await request(`/api/admin/properties/${result.property.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+      state.editing = published.property;
+    }
 
-    state.properties = (await request('/api/admin/properties')).properties;
-    renderProperties();
+    await loadProperties();
     dialog.close();
   } catch (error) {
     if (error.message === 'AUTH_REQUIRED') {
       toast('Sua sessão expirou.', 'error');
     } else if (propertySaved) {
-      state.properties = (await request('/api/admin/properties').catch(() => ({ properties: state.properties }))).properties;
-      renderProperties();
+      await loadProperties();
       renderEditorPhotos();
-      toast('Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.', 'error');
+      toast(['INVALID_IMAGE', 'INVALID_IMAGE_DIMENSIONS'].includes(error.message)
+        ? 'A imagem excede as dimensões permitidas. Escolha outra foto.'
+        : state.pendingFiles.length
+          ? 'Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.'
+          : data.status === 'published'
+            ? 'Imóvel salvo como rascunho. Confira a capa e tente publicar novamente.'
+            : 'Imóvel salvo, mas não foi possível concluir a atualização. Tente novamente.', 'error');
     } else {
-      toast(error.message === 'SLUG_CONFLICT' ? 'Já existe um imóvel com esse endereço de URL.' : 'Não foi possível salvar. Tente novamente.', 'error');
+      const message = error.message === 'SLUG_CONFLICT'
+        ? 'Já existe um imóvel com esse endereço de URL.'
+        : error.message === 'COVER_REQUIRED'
+          ? 'Adicione uma foto de capa antes de publicar.'
+          : error.message === 'INVALID_PROPERTY_NUMBER'
+            ? 'Confira os valores numéricos e os limites dos campos.'
+            : error.message === 'INVALID_PROPERTY' || error.message === 'VALIDATION_FAILED'
+              ? 'Revise os campos obrigatórios e tente novamente.'
+              : 'Não foi possível salvar. Confira os dados e tente novamente.';
+      toast(message, 'error');
     }
   } finally {
-    button.disabled = false;
+    setButtonPending(button, false);
   }
 }
 
@@ -319,17 +387,16 @@ async function archiveProperty() {
   const confirmed = window.confirm(`Arquivar "${state.editing.title}"? Ele deixará de aparecer no site público.`);
   if (!confirmed) return;
   const button = $('#archive-property');
-  if (button) button.disabled = true;
+  setButtonPending(button, true, 'Arquivando…');
   toast('Arquivando imóvel…');
   try {
     await request(`/api/admin/properties/${state.editing.id}`, { method: 'DELETE' });
-    state.properties = (await request('/api/admin/properties')).properties;
-    renderProperties();
+    await loadProperties();
     dialog.close();
   } catch {
     toast('Não foi possível arquivar este imóvel.', 'error');
   } finally {
-    if (button) button.disabled = false;
+    setButtonPending(button, false);
   }
 }
 
@@ -365,7 +432,17 @@ async function uploadPendingFiles(propertyId) {
     const existingPhotoCount = state.editing?.photos?.length || 0;
     toast(`Enviando foto ${uploadedCount + 1}…`);
 
-    const dimensions = await imageDimensions(file);
+    let dimensions;
+    try {
+      dimensions = await imageDimensions(file);
+    } catch {
+      throw new Error('INVALID_IMAGE');
+    }
+    if (!Number.isInteger(dimensions.width) || !Number.isInteger(dimensions.height)
+      || dimensions.width < 1 || dimensions.height < 1
+      || dimensions.width > 20000 || dimensions.height > 20000) {
+      throw new Error('INVALID_IMAGE_DIMENSIONS');
+    }
     const presign = await request('/api/admin/uploads/presign', {
       method: 'POST',
       body: JSON.stringify({
@@ -389,7 +466,7 @@ async function uploadPendingFiles(propertyId) {
         storagePath: presign.storagePath,
         altText: file.name.replace(/\.[^.]+$/, ''),
         sortOrder: existingPhotoCount,
-        isCover: existingPhotoCount === 0,
+        isCover: !state.editing?.photos?.some((photo) => photo.is_cover),
         contentType: file.type,
         size: file.size,
         width: dimensions.width,
@@ -406,31 +483,55 @@ async function uploadPendingFiles(propertyId) {
   clearPendingFiles();
 }
 
-async function removePhoto(id) { if (!state.editing || !window.confirm('Remover esta foto? Esta ação não pode ser desfeita.')) return; try { await request(`/api/admin/photos/${id}`, { method: 'DELETE' }); const result = await request(`/api/admin/properties/${state.editing.id}`); state.editing = result.property; renderPhotos(state.editing.photos); } catch { toast('Não foi possível remover esta foto.', 'error'); } }
+async function removePhoto(id) {
+  if (!state.editing) return;
+  if (!window.confirm('Remover esta foto? Esta ação não pode ser desfeita.')) return;
+  const button = document.querySelector(`[data-photo-remove="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, '…');
+  try {
+    await request(`/api/admin/photos/${id}`, { method: 'DELETE' });
+    const result = await request(`/api/admin/properties/${state.editing.id}`);
+    state.editing = result.property;
+    renderPhotos(state.editing.photos);
+  } catch {
+    toast('Não foi possível remover esta foto.', 'error');
+  } finally {
+    setButtonPending(button, false);
+  }
+}
 
 async function movePhoto(id, direction) {
   if (!state.editing) return;
-  const photos = [...state.editing.photos];
+  const previousPhotos = state.editing.photos;
+  const photos = [...previousPhotos];
   const index = photos.findIndex((photo) => photo.id === id);
   const target = index + direction;
   if (index < 0 || target < 0 || target >= photos.length) return;
+  const selector = direction < 0 ? 'data-photo-up' : 'data-photo-down';
+  const button = document.querySelector(`[${selector}="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, '…');
   [photos[index], photos[target]] = [photos[target], photos[index]];
-  state.editing.photos = photos;
-  renderPhotos(photos);
   try {
     const result = await request(`/api/admin/properties/${state.editing.id}/photos/order`, { method: 'PUT', body: JSON.stringify({ photoIds: photos.map((photo) => photo.id) }) });
     state.editing.photos = result.photos;
     renderPhotos(result.photos);
-  } catch { toast('Não foi possível reordenar.', 'error'); }
+  } catch {
+    toast('Não foi possível reordenar.', 'error');
+  } finally {
+    setButtonPending(button, false);
+  }
 }
 
 async function makeCover(id) {
   if (!state.editing) return;
+  const button = document.querySelector(`[data-photo-cover="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, '…');
   try {
     const result = await request(`/api/admin/photos/${id}/cover`, { method: 'PUT' });
     state.editing.photos = result.photos;
     renderPhotos(result.photos);
   } catch { toast('Não foi possível definir a capa.', 'error'); }
+  finally { setButtonPending(button, false); }
 }
 
 const siteForm = $('#site-settings-form');
@@ -441,6 +542,21 @@ let teamLoaded = false;
 let auditLoaded = false;
 
 function siteNotify(message, tone = 'success') { const status = $('#site-status'); status.textContent = message; status.dataset.tone = tone; }
+
+const instagramUrlInput = siteForm?.elements.instagramUrl;
+instagramUrlInput?.addEventListener('input', () => {
+  const value = instagramUrlInput.value.trim();
+  let valid = value === '';
+  if (value !== '') {
+    try {
+      const url = new URL(value);
+      valid = url.protocol === 'https:' && /(^|\.)instagram\.com$/i.test(url.hostname);
+    } catch {
+      valid = false;
+    }
+  }
+  instagramUrlInput.setCustomValidity(valid ? '' : 'Informe um endereço HTTPS válido do Instagram.');
+});
 
 function switchView(name) {
   document.querySelectorAll('.admin-view').forEach((view) => { view.hidden = view.id !== name; });
@@ -457,43 +573,70 @@ function renderTestimonials(items = []) {
 }
 
 async function loadSite() {
+  siteNotify('Carregando os dados do site…');
   try {
     const data = await request('/api/admin/site');
     const values = { whatsapp: data.site.whatsapp, phoneDisplay: data.site.phoneDisplay, email: data.site.email, address: data.site.address, crci: data.site.crci, area: data.site.area, instagramUrl: data.site.instagramUrl, instagramDisplay: data.site.instagramDisplay };
     for (const [key, value] of Object.entries(values)) { if (siteForm.elements[key]) siteForm.elements[key].value = value ?? ''; }
     renderTestimonials(data.testimonials);
-  } catch { siteNotify('Não foi possível carregar os dados do site.', 'error'); }
+    siteNotify('');
+  } catch {
+    siteLoaded = false;
+    siteNotify('Não foi possível carregar os dados do site. Tente novamente ao voltar a esta seção.', 'error');
+  }
 }
 
 async function saveSite(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(siteForm));
+  setFormPending(siteForm, true, 'Salvando…');
+  siteNotify('Salvando os dados do site…');
   try {
     await request('/api/admin/site', { method: 'PUT', body: JSON.stringify(data) });
     siteNotify('Dados do site salvos com sucesso.');
-  } catch { siteNotify('Não foi possível salvar. Tente novamente.', 'error'); }
+  } catch (error) {
+    siteNotify(error.message === 'INVALID_SITE_SETTINGS' || error.message === 'VALIDATION_FAILED'
+      ? 'Confira WhatsApp, e-mail, Instagram e limites dos campos.'
+      : 'Não foi possível salvar. Tente novamente.', 'error');
+  } finally {
+    setFormPending(siteForm, false);
+  }
 }
 
 async function addTestimonial(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(testimonialForm));
+  data.author = String(data.author || '').trim();
+  data.quote = String(data.quote || '').trim();
   if (!data.author || !data.quote) { siteNotify('Preencha nome e depoimento.', 'error'); return; }
+  setFormPending(testimonialForm, true, 'Adicionando…');
+  siteNotify('Adicionando depoimento…');
   try {
     const result = await request('/api/admin/testimonials', { method: 'POST', body: JSON.stringify({ author: data.author, quote: data.quote, location: data.location, year: data.year, sortOrder: 0 }) });
     renderTestimonials(result.testimonials);
     testimonialForm.reset();
     siteNotify('Depoimento adicionado.');
-  } catch { siteNotify('Não foi possível adicionar o depoimento.', 'error'); }
+  } catch (error) {
+    siteNotify(error.message === 'INVALID_TESTIMONIAL' || error.message === 'VALIDATION_FAILED'
+      ? 'Revise o nome, o depoimento e o ano informado.'
+      : 'Não foi possível adicionar o depoimento.', 'error');
+  } finally {
+    setFormPending(testimonialForm, false);
+  }
 }
 
 async function removeTestimonial(id) {
   if (!window.confirm('Remover este depoimento? Esta ação não pode ser desfeita.')) return;
+  const button = document.querySelector(`[data-testimonial-remove="${CSS.escape(id)}"]`);
+  setButtonPending(button, true, 'Removendo…');
+  siteNotify('Removendo depoimento…');
   try {
     await request(`/api/admin/testimonials/${id}`, { method: 'DELETE' });
     const data = await request('/api/admin/site');
     renderTestimonials(data.testimonials);
     siteNotify('Depoimento removido.');
   } catch { siteNotify('Não foi possível remover o depoimento.', 'error'); }
+  finally { setButtonPending(button, false); }
 }
 
 const auditLabels = {
@@ -528,6 +671,11 @@ function renderAudit() {
 
 async function loadAudit() {
   const status = $('#audit-status');
+  const button = $('#refresh-audit');
+  setButtonPending(button, true, 'Atualizando…');
+  if (status) { status.textContent = 'Carregando histórico…'; status.dataset.tone = ''; }
+  const list = $('#audit-list');
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando atividade…</div>';
   try {
     state.audit = (await request('/api/admin/audit?limit=100')).audit || [];
     renderAudit();
@@ -537,6 +685,8 @@ async function loadAudit() {
       status.textContent = 'Não foi possível carregar o histórico agora.';
       status.dataset.tone = 'error';
     }
+  } finally {
+    setButtonPending(button, false);
   }
 }
 
@@ -566,6 +716,7 @@ function renderTeam() {
   list.querySelectorAll('[data-team-role]').forEach((button) => button.addEventListener('click', async () => {
     const nextRole = button.dataset.nextRole === 'manager' ? 'gestor' : 'editor';
     if (!window.confirm(`Tornar este membro ${nextRole}?`)) return;
+    setButtonPending(button, true, 'Salvando…');
     try {
       const email = button.dataset.teamRole;
       await request(`/api/admin/team/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify({ role: button.dataset.nextRole }) });
@@ -573,17 +724,22 @@ function renderTeam() {
       teamNotify('Permissão atualizada.');
     } catch (error) {
       teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser rebaixado.' : 'Não foi possível alterar a permissão.', 'error');
+    } finally {
+      setButtonPending(button, false);
     }
   }));
 
   list.querySelectorAll('[data-team-remove]').forEach((button) => button.addEventListener('click', async () => {
     if (!window.confirm('Remover este acesso da equipe? A pessoa deixará de entrar no painel.')) return;
+    setButtonPending(button, true, 'Removendo…');
     try {
       await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamRemove)}`, { method: 'DELETE' });
       await loadTeam();
       teamNotify('Acesso removido.');
     } catch (error) {
       teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser removido.' : 'Não foi possível remover o acesso.', 'error');
+    } finally {
+      setButtonPending(button, false);
     }
   }));
 }
@@ -599,33 +755,40 @@ function renderTeamInvitations() {
 
   list.querySelectorAll('[data-team-invite-revoke]').forEach((button) => button.addEventListener('click', async () => {
     if (!window.confirm('Revogar este convite? O link deixará de funcionar.')) return;
+    setButtonPending(button, true, 'Revogando…');
     try {
       await request(`/api/admin/team/invitations/${encodeURIComponent(button.dataset.teamInviteRevoke)}`, { method: 'DELETE' });
       await loadTeam();
       teamNotify('Convite revogado.');
     } catch {
       teamNotify('Não foi possível revogar este convite.', 'error');
+    } finally {
+      setButtonPending(button, false);
     }
   }));
 }
 
 async function loadTeam() {
+  const list = $('#team-list');
+  const invitations = $('#team-invitations');
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando acessos…</div>';
+  if (invitations) invitations.innerHTML = '<div class="empty-properties compact" role="status">Carregando convites…</div>';
   try {
     state.team = (await request('/api/admin/team')).team || [];
     state.invitations = (await request('/api/admin/team/invitations')).invitations || [];
     renderTeam();
     renderTeamInvitations();
   } catch {
-    const list = $('#team-list');
     if (list) list.innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar a equipe agora.</p></div>';
-    const invitations = $('#team-invitations');
-    if (invitations) invitations.innerHTML = '';
+    if (invitations) invitations.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os convites agora.</p></div>';
   }
 }
 
 async function createTeamInvitation(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(teamForm));
+  setFormPending(teamForm, true, 'Gerando…');
+  teamNotify('Gerando convite temporário…');
   try {
     const result = await request('/api/admin/team/invitations', { method: 'POST', body: JSON.stringify(data) });
     teamForm.reset();
@@ -651,6 +814,8 @@ async function createTeamInvitation(event) {
           : 'Não foi possível adicionar este acesso.',
       'error'
     );
+  } finally {
+    setFormPending(teamForm, false);
   }
 }
 
@@ -661,42 +826,95 @@ function ensureLeadsPanel() {
   const panel = document.createElement('section');
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">novos contatos</p><h3>Interesses recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><div id="lead-list" class="lead-list"></div>';
+  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><a class="outline-button lead-export" data-lead-export="csv" href="/api/admin/leads/export?format=csv">Exportar CSV</a><a class="outline-button lead-export" data-lead-export="json" href="/api/admin/leads/export?format=json">Exportar JSON</a></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
   metrics.insertAdjacentElement('afterend', panel);
+  $('#lead-filters').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    const dateFrom = String(values.get('date_from') || '');
+    const dateTo = String(values.get('date_to') || '');
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      const status = $('#lead-status');
+      status.textContent = 'A data inicial deve ser anterior ou igual à data final.';
+      status.dataset.tone = 'error';
+      return;
+    }
+    const status = $('#lead-status');
+    status.textContent = '';
+    status.dataset.tone = '';
+    state.leadFilters = {
+      ...state.leadFilters,
+      status: String(values.get('status') || ''),
+      date_from: dateFrom,
+      date_to: dateTo,
+      per_page: Number(values.get('per_page')) || 20,
+      page: 1
+    };
+    void loadLeads();
+  });
+  panel.querySelectorAll('[data-lead-page]').forEach((button) => button.addEventListener('click', () => {
+    const current = state.leadPagination?.current_page || 1;
+    const last = state.leadPagination?.last_page || 1;
+    state.leadFilters.page = button.dataset.leadPage === 'next' ? Math.min(last, current + 1) : Math.max(1, current - 1);
+    void loadLeads();
+  }));
   return panel;
 }
 
 function renderLeads() {
   const panel = ensureLeadsPanel();
   if (!panel) return;
+  panel.removeAttribute('aria-busy');
+  panel.querySelectorAll('#lead-filters button, #lead-filters input, #lead-filters select')
+    .forEach((control) => { control.disabled = false; });
   const list = $('#lead-list');
-  const newCount = state.leads.filter((lead) => lead.status === 'new').length;
+  const newCount = Number(state.leadSummary?.new || 0);
   $('#lead-total').textContent = `${newCount} ${newCount === 1 ? 'novo' : 'novos'}`;
   const accent = document.querySelector('.metric-accent');
   if (accent) accent.innerHTML = `<span class="metric-label">contatos novos</span><strong>${String(newCount).padStart(2, '0')}</strong><small>recebidos pelo site</small>`;
 
-  const items = state.leads.slice(0, 8);
+  const items = state.leads;
+  const filters = $('#lead-filters');
+  filters.elements.status.value = state.leadFilters.status;
+  filters.elements.date_from.value = state.leadFilters.date_from;
+  filters.elements.date_to.value = state.leadFilters.date_to;
+  filters.elements.per_page.value = String(state.leadFilters.per_page);
+  const exportParams = new URLSearchParams();
+  for (const key of ['status', 'date_from', 'date_to']) {
+    if (state.leadFilters[key]) exportParams.set(key, state.leadFilters[key]);
+  }
+  panel.querySelectorAll('[data-lead-export]').forEach((link) => {
+    const params = new URLSearchParams(exportParams);
+    params.set('format', link.dataset.leadExport);
+    link.href = `/api/admin/leads/export?${params.toString()}`;
+  });
+  const pagination = state.leadPagination;
+  $('#lead-page-summary').textContent = pagination?.total ? `Exibindo ${pagination.from}–${pagination.to} de ${pagination.total}` : 'Nenhum contato encontrado';
+  panel.querySelector('[data-lead-page="previous"]').disabled = !pagination || pagination.current_page <= 1;
+  panel.querySelector('[data-lead-page="next"]').disabled = !pagination || pagination.current_page >= pagination.last_page;
   list.innerHTML = items.length ? items.map((lead) => {
     const propertyLink = String(lead.property_path || '').startsWith('/imoveis/')
       ? `<a class="lead-property" href="${escapeHTML(lead.property_path)}" target="_blank" rel="noopener">Ver imóvel ↗</a>` : '';
-    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><button type="button" data-lead-status="contacted" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'contacted' ? 'disabled' : ''}>Contatado</button><button type="button" data-lead-status="closed" data-lead-id="${escapeHTML(lead.id)}" ${lead.status === 'closed' ? 'disabled' : ''}>Concluir</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
-  }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato pendente.</h4><p>Os formulários enviados pelo site aparecerão aqui.</p></div>';
+    const statusOptions = [['new', 'Novo'], ['em_contato', 'Em contato'], ['fechado', 'Fechado'], ['perdido', 'Perdido']];
+    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><label class="lead-status-control"><span class="sr-only">Status de ${escapeHTML(lead.name)}</span><select data-lead-status="${escapeHTML(lead.id)}">${statusOptions.map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button type="button" data-lead-save="${escapeHTML(lead.id)}">Salvar status</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
+  }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato encontrado.</h4><p>Ajuste os filtros ou aguarde novos contatos pelo site.</p></div>';
 
   list.querySelectorAll('[data-lead-delete]').forEach((button) => button.addEventListener('click', async () => {
     const lead = state.leads.find((item) => item.id === button.dataset.leadDelete);
     const confirmed = window.confirm(`Apagar permanentemente os dados de ${lead?.name || 'este contato'}? Esta ação não pode ser desfeita.`);
     if (!confirmed) return;
 
+    setButtonPending(button, true, 'Apagando…');
     try {
       await request(`/api/admin/leads/${button.dataset.leadDelete}`, { method: 'DELETE' });
-      state.leads = state.leads.filter((item) => item.id !== button.dataset.leadDelete);
-      renderLeads();
+      await loadLeads();
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Dados pessoais apagados permanentemente.';
         status.dataset.tone = 'success';
       }
     } catch {
+      setButtonPending(button, false);
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Não foi possível apagar os dados deste contato.';
@@ -705,17 +923,20 @@ function renderLeads() {
     }
   }));
 
-  list.querySelectorAll('[data-lead-id]').forEach((button) => button.addEventListener('click', async () => {
+  list.querySelectorAll('[data-lead-save]').forEach((button) => button.addEventListener('click', async () => {
+    const statusInput = list.querySelector(`[data-lead-status="${CSS.escape(button.dataset.leadSave)}"]`);
+    if (!(statusInput instanceof HTMLSelectElement)) return;
+    setButtonPending(button, true, 'Salvando…');
     try {
-      await request(`/api/admin/leads/${button.dataset.leadId}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.leadStatus }) });
-      state.leads = state.leads.map((lead) => lead.id === button.dataset.leadId ? { ...lead, status: button.dataset.leadStatus } : lead);
-      renderLeads();
+      await request(`/api/admin/leads/${button.dataset.leadSave}`, { method: 'PATCH', body: JSON.stringify({ status: statusInput.value }) });
+      await loadLeads();
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Contato atualizado.';
         status.dataset.tone = 'success';
       }
     } catch {
+      setButtonPending(button, false);
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Não foi possível atualizar este contato. Tente novamente.';
@@ -726,12 +947,75 @@ function renderLeads() {
 }
 
 async function loadLeads() {
+  const panel = ensureLeadsPanel();
+  const list = panel?.querySelector('#lead-list');
+  panel?.setAttribute('aria-busy', 'true');
+  panel?.querySelectorAll('[data-lead-page], #lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
+    .forEach((control) => { control.disabled = true; });
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando contatos…</div>';
   try {
-    state.leads = (await request('/api/admin/leads')).leads || [];
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(state.leadFilters)) {
+      if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
+    }
+    const result = await request(`/api/admin/leads?${params.toString()}`);
+    state.leads = result.leads || [];
+    state.leadPagination = result.pagination || null;
+    state.leadSummary = result.summary || { new: 0 };
     renderLeads();
-  } catch {
+  } catch (error) {
     ensureLeadsPanel();
-    if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar os contatos agora.</p></div>';
+    if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p></div>';
+    const status = $('#lead-status');
+    if (status) {
+      status.textContent = error.message === 'VALIDATION_FAILED'
+        ? 'Confira o intervalo de datas e os filtros.'
+        : 'Não foi possível carregar os contatos agora.';
+      status.dataset.tone = 'error';
+    }
+    if (panel) {
+      panel.removeAttribute('aria-busy');
+      const pagination = state.leadPagination;
+      panel.querySelector('[data-lead-page="previous"]').disabled = !pagination || pagination.current_page <= 1;
+      panel.querySelector('[data-lead-page="next"]').disabled = !pagination || pagination.current_page >= pagination.last_page;
+      panel.querySelectorAll('#lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
+        .forEach((control) => { control.disabled = false; });
+    }
+  }
+}
+
+async function loadProperties() {
+  const list = $('#property-list');
+  const controls = document.querySelectorAll('.property-filters input, .property-filters select, #property-page-previous, #property-page-next');
+  controls.forEach((control) => { control.disabled = true; });
+  document.querySelector('.properties-table-wrap')?.setAttribute('aria-busy', 'true');
+  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando imóveis…</div>';
+  try {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(state.propertyFilters)) {
+      if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
+    }
+    const result = await request(`/api/admin/properties?${params.toString()}`);
+    state.properties = result.properties || [];
+    state.propertyPagination = result.pagination || null;
+    state.propertySummary = result.summary || { total: 0, active: 0, published: 0, draft: 0 };
+    if (state.propertyPagination?.last_page > 0 && state.propertyFilters.page > state.propertyPagination.last_page) {
+      state.propertyFilters.page = state.propertyPagination.last_page;
+      return loadProperties();
+    }
+    renderProperties();
+  } catch {
+    if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora.</p></div>';
+    document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
+    controls.forEach((control) => {
+      if (control.matches('#property-page-previous')) {
+        control.disabled = !state.propertyPagination || state.propertyPagination.current_page <= 1;
+      } else if (control.matches('#property-page-next')) {
+        control.disabled = !state.propertyPagination || state.propertyPagination.current_page >= state.propertyPagination.last_page;
+      } else {
+        control.disabled = false;
+      }
+    });
   }
 }
 
@@ -742,9 +1026,7 @@ async function init() {
     if (!session.authenticated) return showLogin();
     state.user = session.user;
     showDashboard();
-    const [properties] = await Promise.all([request('/api/admin/properties'), loadLeads()]);
-    state.properties = properties.properties;
-    renderProperties();
+    await Promise.all([loadProperties(), loadLeads()]);
   } catch (error) {
     if (error.message !== 'AUTH_REQUIRED') showLogin();
   }
@@ -787,5 +1069,28 @@ $('#copy-team-invite')?.addEventListener('click', async () => {
   }
 });
 $('#refresh-audit')?.addEventListener('click', loadAudit);
-$('#property-search')?.addEventListener('input', (event) => { state.search = event.target.value; renderProperties(); });
+$('#property-search')?.addEventListener('input', (event) => {
+  state.propertyFilters.search = event.target.value;
+  state.propertyFilters.page = 1;
+  clearTimeout(propertySearchTimer);
+  propertySearchTimer = setTimeout(() => { void loadProperties(); }, 250);
+});
+$('#property-status-filter')?.addEventListener('change', (event) => {
+  state.propertyFilters.status = event.target.value;
+  state.propertyFilters.page = 1;
+  void loadProperties();
+});
+$('#property-per-page')?.addEventListener('change', (event) => {
+  state.propertyFilters.per_page = Number(event.target.value) || 20;
+  state.propertyFilters.page = 1;
+  void loadProperties();
+});
+$('#property-page-previous')?.addEventListener('click', () => {
+  state.propertyFilters.page = Math.max(1, state.propertyFilters.page - 1);
+  void loadProperties();
+});
+$('#property-page-next')?.addEventListener('click', () => {
+  state.propertyFilters.page = Math.min(state.propertyPagination?.last_page || 1, state.propertyFilters.page + 1);
+  void loadProperties();
+});
 init();

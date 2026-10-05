@@ -722,6 +722,8 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
   .gallery-main img{transition:none}
 }
 
+.catalog-pagination{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:42px;color:var(--muted);font-size:11px}.catalog-pagination button{border:1px solid var(--line);background:transparent;color:var(--ink);padding:9px 15px;font-weight:700}.catalog-pagination button:disabled{opacity:.45;cursor:not-allowed}.catalog-pagination button:not(:disabled):hover{border-color:var(--ink);background:var(--ink);color:#fff}
+
 /* Leitura e toque confortáveis nas áreas de busca e contato. */
 .eyebrow{font-size:10px}
 .desktop-nav{font-size:12px}
@@ -1002,3 +1004,12 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
   .search-form::after{transition:none!important}
   .button:active{transform:none}
 }
+
+/* Paleta de texto validada contra as superfícies claras do design. */
+:root{--copper:#8f523b;--muted:#607477}
+.site-footer{--copper:#d89569}
+.field span,.contact-form label{color:#536668}
+.listing-count,.filter-summary,.listing-meta,.catalog-pagination{color:#536668}
+.hero-meta span{color:#536668}
+.page-hero-aside p,.about-hero-note p{color:#536668}
+.pathway-card-warm>span,.pathway-card-warm>p,.pathway-card-paper>span,.pathway-card-paper>p{color:#536668}

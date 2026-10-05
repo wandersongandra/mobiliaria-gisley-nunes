@@ -76,3 +76,16 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 :where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:3px solid rgba(201,130,91,.7);outline-offset:2px}
 @media(max-width:800px){.login-screen{grid-template-columns:minmax(0,1fr)}.login-panel{min-width:0;width:100%;padding:35px 28px}.login-panel h1{font-size:36px}.login-panel>p:not(.admin-kicker):not(.login-note){max-width:100%}.login-art{display:none}}
 @media(max-width:360px){.login-panel h1{font-size:32px}}
+
+/* Texto auxiliar precisa manter contraste AA também no estado não autenticado. */
+:root{--copper:#8f523b;--muted:#607477}
+.sidebar{--copper:#d89569}
+.top-status,.login-note,.metric-card small,.metric-label{color:#536668}
+.metric-featured .metric-label,.metric-featured small{color:#b8c9c8}
+.metric-card.metric-accent .metric-label,.metric-card.metric-accent small{color:#536668}
+.role-chip{color:#4f6264}
+.role-chip[data-role="manager"],.role-pill.manager{color:#8b4f38}
+.logout-all-button{color:#536668}
+#login-screen .login-panel>p:not(.admin-kicker):not(.login-note){color:#536668}
+#logout-all-button{color:#536668}
+#logout-all-button{color:#b8c9c8}
