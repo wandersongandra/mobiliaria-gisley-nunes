@@ -36,7 +36,7 @@ Referências capturadas no navegador real:
 - [Catálogo mobile antes](../output/playwright/catalog-mobile-before.png)
 - [Detalhe desktop antes](../output/playwright/property-desktop-before.png)
 - [Detalhe mobile depois](../output/playwright/property-mobile-after.png)
-- [Galeria em tela cheia](../output/playwright/property-lightbox-desktop.png)
+- [Galeria em tela cheia](../output/playwright/property-lightbox-desktop-final.png)
 - [Login admin desktop](../output/playwright/admin-login-desktop.png)
 - [Dashboard admin mobile final](../output/playwright/admin-dashboard-mobile-final.png)
 
