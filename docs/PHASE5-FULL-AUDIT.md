@@ -38,6 +38,12 @@ escopo desta rodada e bloqueiam a prontidão de produção.
 - `pnpm audit --prod --audit-level=moderate`: PASS;
 - `pnpm security:secrets`: PASS.
 
+`php artisan app:production-check` foi executado sem alterar `.env` e ficou
+FAIL no checkout local por ausência deliberada de `APP_KEY`, HTTPS canônico,
+credenciais MySQL, R2, OAuth e CIDRs de proxy. Isso é evidência do ambiente
+local incompleto, não uma tentativa de mascarar o estado externo da
+HostGator; nenhum valor secreto foi impresso.
+
 ## 3. Findings
 
 | ID | Severidade | Componente | Evidência | Risco | Correção | Teste | Status |
