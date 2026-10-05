@@ -89,3 +89,10 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 #login-screen .login-panel>p:not(.admin-kicker):not(.login-note){color:#536668}
 #logout-all-button{color:#536668}
 #logout-all-button{color:#b8c9c8}
+
+/* O atributo nativo evita que telas e views ocultas permaneçam no fluxo. */
+[hidden]{display:none !important}
+.admin-topbar h1{font-family:Fraunces,Georgia,serif;font-size:35px;font-weight:600;letter-spacing:-.05em}
+.admin-topbar h1 span{color:var(--copper);font-style:italic}
+@media(max-width:760px){.sidebar{width:100%}}
+@media(max-width:460px){.admin-topbar h1{font-size:28px}}

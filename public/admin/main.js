@@ -19,6 +19,17 @@ const dashboard = $('#dashboard');
 const dialog = $('#property-dialog');
 const form = $('#property-form');
 
+loginScreen?.setAttribute('role', 'main');
+
+const dashboardHeading = $('#page-title');
+if (dashboardHeading && dashboardHeading.tagName !== 'H1') {
+  const heading = document.createElement('h1');
+  heading.id = dashboardHeading.id;
+  heading.className = dashboardHeading.className;
+  heading.innerHTML = dashboardHeading.innerHTML;
+  dashboardHeading.replaceWith(heading);
+}
+
 function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]); }
 function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(value)) : 'agora'; }
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }

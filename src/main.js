@@ -48,7 +48,7 @@ function listingCard(item, index = 0) {
   const delayClass = `listing-delay-${Math.min(Math.max(Number(index) || 0, 0), 7)}`;
   return `<article class="listing-card listing-card-enter ${delayClass}" data-listing-card>
     <a href="${href}" class="listing-image">
-      <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" loading="lazy" decoding="async" />
+      <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" width="1200" height="800" sizes="(max-width: 600px) calc(100vw - 32px), (max-width: 980px) 50vw, 33vw" loading="lazy" decoding="async" />
       <span class="listing-tag">${escapeHTML(item.tag)}</span>
       <span class="listing-arrow" aria-hidden="true">↗</span>
       <span class="listing-image-shade" aria-hidden="true"></span>
@@ -115,6 +115,11 @@ function initMobileMenu() {
   });
 
   mobileNav.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => close()));
+
+  document.addEventListener('click', (event) => {
+    if (toggle.getAttribute('aria-expanded') !== 'true') return;
+    if (!event.target.closest('.site-header')) close();
+  });
 
   document.addEventListener('keydown', (event) => {
     if (toggle.getAttribute('aria-expanded') !== 'true') return;
@@ -452,7 +457,7 @@ function renderPropertyDetail(property) {
       <img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" fetchpriority="high" decoding="async" />
       <div class="gallery-main-overlay">
         <span class="gallery-count"><strong data-gallery-current>${String(primaryIndex + 1).padStart(2, '0')}</strong> / ${String(photos.length).padStart(2, '0')}</span>
-        ${photos.length > 1 ? '<div class="gallery-controls"><button type="button" data-gallery-prev aria-label="Foto anterior">←</button><button type="button" data-gallery-next aria-label="Próxima foto">→</button></div>' : ''}
+        <div class="gallery-controls"><button type="button" class="gallery-lightbox-trigger" data-gallery-open aria-label="Abrir galeria em tela cheia">⤢</button>${photos.length > 1 ? '<button type="button" data-gallery-prev aria-label="Foto anterior">←</button><button type="button" data-gallery-next aria-label="Próxima foto">→</button>' : ''}</div>
       </div>
       <span class="sr-only" data-gallery-status aria-live="polite"></span>
     </div>
@@ -462,7 +467,7 @@ function renderPropertyDetail(property) {
   return `<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Início</a><span aria-hidden="true">›</span><a href="/imoveis">Imóveis</a><span aria-hidden="true">›</span><span aria-current="page">${escapeHTML(property.title)}</span></nav>
     <section class="property-hero">
       <div class="property-gallery">${gallery}</div>
-      <aside class="property-summary">
+      <div class="property-summary">
         <div class="property-summary-topline"><span>${escapeHTML(property.purpose)}</span><span>${escapeHTML(property.type)}</span></div>
         <h1>${escapeHTML(property.title)}</h1>
         <p class="property-location">${escapeHTML(property.location)}</p>
@@ -474,12 +479,22 @@ function renderPropertyDetail(property) {
           <a class="button button-primary" href="#contato">Tenho interesse <span aria-hidden="true">↗</span></a>
           <a class="property-back-link" href="/imoveis">← Ver outros imóveis</a>
         </div>
-      </aside>
+      </div>
     </section>
+    <a class="property-mobile-cta" href="#contato" aria-label="Demonstrar interesse por este imóvel"><span>Tenho interesse</span><span aria-hidden="true">↗</span></a>
     <section class="property-description">
       <div><p class="eyebrow">descrição</p><span class="property-description-index">01</span></div>
       <p class="property-description-copy">${escapeHTML(property.description || '')}</p>
-    </section>`;
+    </section>
+    <dialog class="gallery-lightbox" data-gallery-lightbox aria-label="Galeria de ${escapeHTML(property.title)}">
+      <button class="gallery-lightbox-close" type="button" data-gallery-lightbox-close aria-label="Fechar galeria">×</button>
+      <button class="gallery-lightbox-control gallery-lightbox-prev" type="button" data-gallery-lightbox-prev aria-label="Foto anterior">←</button>
+      <figure>
+        <img data-gallery-lightbox-image alt="" decoding="async" />
+        <figcaption><span data-gallery-lightbox-current>01</span> / ${String(photos.length).padStart(2, '0')}</figcaption>
+      </figure>
+      <button class="gallery-lightbox-control gallery-lightbox-next" type="button" data-gallery-lightbox-next aria-label="Próxima foto">→</button>
+    </dialog>`;
 }
 
 function initPropertyDetail() {
@@ -499,7 +514,25 @@ function initPropertyDetail() {
   const mainImage = root.querySelector('.gallery-main img');
   const current = root.querySelector('[data-gallery-current]');
   const galleryStatus = root.querySelector('[data-gallery-status]');
+  const lightbox = root.querySelector('[data-gallery-lightbox]');
+  const lightboxImage = root.querySelector('[data-gallery-lightbox-image]');
+  const lightboxCurrent = root.querySelector('[data-gallery-lightbox-current]');
+  const lightboxTrigger = root.querySelector('[data-gallery-open]');
   let activeIndex = Math.max(0, thumbs.findIndex((thumb) => thumb.classList.contains('is-active')));
+
+  const syncLightbox = () => {
+    if (!lightboxImage || !thumbs.length) return;
+    const thumb = thumbs[activeIndex];
+    lightboxImage.src = thumb.dataset.image;
+    lightboxImage.alt = thumb.dataset.alt || property.title;
+    if (lightboxCurrent) lightboxCurrent.textContent = String(activeIndex + 1).padStart(2, '0');
+  };
+
+  const openLightbox = () => {
+    if (!lightbox || !thumbs.length) return;
+    syncLightbox();
+    if (!lightbox.open) lightbox.showModal();
+  };
 
   const selectPhoto = (index) => {
     if (!thumbs.length || !mainImage) return;
@@ -519,6 +552,7 @@ function initPropertyDetail() {
     thumb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
     if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${thumbs.length}: ${nextAlt}`;
+    if (lightbox?.open) syncLightbox();
   };
 
   thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => selectPhoto(index)));
@@ -534,11 +568,15 @@ function initPropertyDetail() {
     pointerStartX = null;
     if (Math.abs(delta) > 44) selectPhoto(activeIndex + (delta < 0 ? 1 : -1));
   });
-  galleryMain?.setAttribute('tabindex', '0');
-  galleryMain?.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowLeft') selectPhoto(activeIndex - 1);
-    if (event.key === 'ArrowRight') selectPhoto(activeIndex + 1);
+  lightboxTrigger?.addEventListener('click', openLightbox);
+
+  lightbox?.querySelector('[data-gallery-lightbox-close]')?.addEventListener('click', () => lightbox.close());
+  lightbox?.querySelector('[data-gallery-lightbox-prev]')?.addEventListener('click', () => selectPhoto(activeIndex - 1));
+  lightbox?.querySelector('[data-gallery-lightbox-next]')?.addEventListener('click', () => selectPhoto(activeIndex + 1));
+  lightbox?.addEventListener('click', (event) => {
+    if (event.target === lightbox) lightbox.close();
   });
+  lightbox?.addEventListener('close', () => lightboxTrigger?.focus());
 }
 
 function initScrollPolish() {
