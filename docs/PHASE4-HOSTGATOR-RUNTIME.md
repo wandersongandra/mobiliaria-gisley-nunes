@@ -1,9 +1,10 @@
 # Fase 4 — Runtime HostGator
 
-Data da verificação: 2026-10-03.
+Data da verificação inicial: 2026-10-03. Atualização operacional: 2026-10-05.
 
-Esta fase foi executada sem deploy público, sem alteração de DNS, sem migration
-da aplicação no banco HostGator e sem solicitar ou imprimir qualquer segredo.
+Esta fase foi executada sem alteração de DNS externo e sem expor qualquer
+segredo. A migration foi aplicada somente na base dedicada do HostGator após
+autorização explícita.
 
 ## Resultado resumido
 
@@ -11,17 +12,17 @@ da aplicação no banco HostGator e sem solicitar ou imprimir qualquer segredo.
 | --- | --- | --- |
 | HostGator SSH | PASS | Chave `gisley_hostgator_deploy` autenticou no host `192.185.213.23:2222`. |
 | PHP CLI HostGator | PASS | PHP `8.3.35`, CLI, OPcache 8.3.35 e ionCube carregados. |
-| PHP web / PHP-FPM | BLOCKED | O domínio público ainda não aponta para este checkout; não há domínio Laravel de staging configurado. |
+| PHP web / PHP-FPM | BLOCKED | Os domínios foram cadastrados no cPanel, mas o DNS público ainda aponta para o provedor antigo. |
 | Extensões HostGator | PASS | pdo, pdo_mysql, openssl, mbstring, fileinfo, json, ctype, tokenizer e curl disponíveis. |
 | Composer HostGator | PASS | `~/bin/composer` 2.10.3 e instalação `--no-dev` já confirmadas. |
 | Laravel boot HostGator | PASS | `artisan` iniciou no checkout e `db:show` conectou à base dedicada. |
 | `app:production-check` HostGator | FAIL | Todos os controles locais passaram; R2 e OAuth permanecem ausentes por dependerem de secrets externos. |
 | Storage e permissões | PASS | Diretórios graváveis, sem `777`; probe temporário de escrita/remoção passou. |
 | Apache / PHP-FPM | BLOCKED | `.htaccess` foi auditado estaticamente; handler web efetivo ainda não pode ser testado. |
-| Document Root | BLOCKED | O cPanel mantém `public_html`; o projeto `public/` não foi apontado para um domínio. |
-| MySQL HostGator | PASS | Conexão Laravel confirmada; MySQL `5.7.44-48`, base dedicada vazia. |
-| Compatibilidade de migrations | PARCIAL | FK, UNIQUE, índices e triggers foram sondados; migration da aplicação não foi executada por segurança. |
-| Health live/ready | BLOCKED | Os URLs públicos retornaram HTML LiteSpeed `200`, não o JSON Laravel esperado. |
+| Document Root | PASS (configuração) | `gisleynunesimoveis.com.br` e `painel.gisleynunesimoveis.com.br` apontam no cPanel para `/home1/gisley77/repositories/mobiliaria-gisley-nunes/public`. |
+| MySQL HostGator | PASS | Conexão Laravel confirmada; MySQL `5.7.44-48`, base dedicada migrada. |
+| Compatibilidade de migrations | PASS | As nove migrations foram aplicadas com sucesso no MySQL 5.7.44 e `migrate:status` confirmou todas como `Ran`. |
+| Health live/ready | BLOCKED | Os URLs públicos retornaram `302` do site antigo para `/`, não o JSON Laravel esperado. |
 | Cloudflare trusted proxy | PASS (configuração) | Ranges oficiais explícitos foram gravados no `.env`; tráfego Cloudflare real ainda não foi exercitado. |
 | R2 real | BLOCKED | Não há credenciais autorizadas de bucket de teste. |
 | OAuth real | BLOCKED | Não há provedor/callback de teste autorizado. |
@@ -32,6 +33,8 @@ da aplicação no banco HostGator e sem solicitar ou imprimir qualquer segredo.
 
 - Branch: `migration/laravel-backend-2026-10-02`.
 - SHA inicial da fase: `3b78b474c2c6d8199697bc132939ac93fd61af4b`.
+- SHA atual validado no checkout local, no `origin` e na HostGator:
+  `1db7ee6c83237bf9692804fb916e6f076d39300f`.
 - O repositório contém a estrutura Laravel esperada e `composer.lock`.
 - `composer.json` requer PHP `^8.2`, Laravel 12 e `pdo_mysql` é exigido pelo
   `app:production-check`.
@@ -41,9 +44,9 @@ da aplicação no banco HostGator e sem solicitar ou imprimir qualquer segredo.
   somente requisições que não sejam arquivos/diretórios para `public/index.php`.
 - `/health/live` não acessa banco e `/health/ready` responde `503` sem revelar
   SQL, host, stack trace ou credenciais quando o banco falha.
-- O cPanel não lista `gisleynunesimoveis.com.br`; lista somente os domínios
-  temporários `meusitehostgator.com.br`. O `public_html` atual contém o site
-  antigo e permanece intocado.
+- O cPanel lista `gisleynunesimoveis.com.br` e
+  `painel.gisleynunesimoveis.com.br`, ambos com Document Root no `public/` do
+  checkout. O `public_html` do domínio principal antigo permanece intocado.
 
 ## Extensões exigidas
 
@@ -67,13 +70,14 @@ da aplicação no banco HostGator e sem solicitar ou imprimir qualquer segredo.
   nem exibido.
 - Ranges oficiais atuais da Cloudflare configurados explicitamente em
   `TRUSTED_PROXIES`; nenhum wildcard foi usado.
-- Criada a base dedicada `gisley77_gisley_nunes` e o usuário dedicado
-  `gisley77_gisley_app`. A senha foi gerada/resetada no servidor e só está no
-  `.env` remoto.
-- O usuário possui privilégios restritos à base dedicada. `SHOW GRANTS` não
-  mostrou privilégios globais.
-- `migrate:status` retornou `Migration table not found`, pois a base está vazia;
-  `migrate --force` não foi executado.
+- A base dedicada `gisley77_gisley_nunes` e o usuário dedicado
+  `gisley77_gisley_app` estão configurados. A credencial só está no `.env`
+  remoto.
+- `SHOW GRANTS` não mostrou privilégios globais, mas mostrou `ALL PRIVILEGES`
+  no schema dedicado; o privilégio mínimo depende do cPanel e permanece como
+  pendência operacional.
+- `migrate:status` confirmou as nove migrations como `Ran`; a base permanece
+  sem dados de negócio.
 - A sonda controlada confirmou InnoDB, FK, UNIQUE, índices e criação de
   triggers; todas as tabelas/objetos da sonda foram removidos.
 - O servidor é MySQL 5.7.44. A migration
@@ -107,16 +111,47 @@ variables, host key estrita e não usa autenticação por senha.
 
 ## Intervenções que ainda dependem do operador
 
-1. Criar/configurar no cPanel o domínio de staging ou apontar o Document Root
-   para `/home1/gisley77/repositories/mobiliaria-gisley-nunes/public` somente
-   quando a janela de publicação for aprovada; isso não foi alterado.
+1. Alterar no DNS autoritativo os registros de `gisleynunesimoveis.com.br`,
+   `www` e `painel` para o IP HTTP HostGator `192.185.176.183`. O endpoint SSH
+   `192.185.213.23` não deve ser usado como A record sem confirmação do
+   provedor.
 2. Cadastrar no `.env` remoto os secrets reais do R2 e OAuth diretamente no
    servidor. Não enviar esses valores pelo chat.
-3. Confirmar no provedor OAuth o redirect URI correspondente ao domínio de
-   staging e fornecer o client secret no `.env`.
-4. Cadastrar no GitHub Environment `production` os secrets
-   `HOSTGATOR_SSH_PRIVATE_KEY` e `HOSTGATOR_KNOWN_HOSTS`, além das variables
-   `HOSTGATOR_HOST`, `HOSTGATOR_PORT`, `HOSTGATOR_USER`, `DEPLOY_PATH`,
-   `HEALTH_URL`; manter `HOSTGATOR_DEPLOY_ENABLED` desligada até aprovação.
-5. Autorizar explicitamente a primeira execução de `migrate --force` na base
-   dedicada depois que a migration 000009 estiver no checkout remoto.
+3. Confirmar no provedor OAuth o redirect URI
+   `https://www.gisleynunesimoveis.com.br/api/auth/callback` e preencher no
+   `.env` remoto `MANUS_OAUTH_PORTAL_URL`, `MANUS_OAUTH_API_URL` e
+   `MANUS_PROJECT_ID`. O código atual não lê `MANUS_OAUTH_CLIENT_SECRET`; não
+   inventar essa variável.
+4. Reduzir, se o cPanel permitir, os privilégios do usuário da aplicação ao
+   mínimo necessário; o estado atual é isolado por schema, mas contém `ALL`.
+5. A migration real foi executada na base dedicada em 2026-10-05; manter a
+   confirmação de `migrate:status` como evidência antes de qualquer release.
+
+## Atualização da execução remota — 2026-10-05
+
+Após a confirmação explícita de execução, a migration foi aplicada na base
+dedicada `gisley77_gisley_nunes` por SSH:
+
+- MySQL HostGator `5.7.44-48` confirmou conexão pelo Laravel.
+- As nove migrations `2026_10_02_000001` até
+  `2026_10_04_000009` terminaram com `DONE`.
+- `php artisan migrate:status` confirmou todas como `Ran`.
+- A base continua dedicada ao projeto; não foram inseridos dados de negócio.
+- O modo `migrate --pretend` não é uma prova válida para esta sequência: o
+  Laravel cria a tabela `migrations` e migrations com `cursor()` não são
+  compatíveis com o retorno simulado do framework. A execução real foi a
+  validação usada para o MySQL 5.7.
+- `app:production-check` passa em todos os controles de runtime e falha somente
+  pela ausência de configuração R2 e OAuth.
+- O cPanel agora lista `gisleynunesimoveis.com.br` como addon domain e
+  `painel.gisleynunesimoveis.com.br` como subdomínio, ambos no `public/` do
+  checkout. O módulo UAPI `AddonDomain` não está disponível, mas o `cpapi2`
+  legado executou a configuração corretamente.
+- O DNS público ainda resolve `gisleynunesimoveis.com.br` e `www` para
+  `89.116.224.14`; a saída HTTP pública da HostGator foi confirmada em
+  `192.185.176.183`, enquanto `192.185.213.23` permanece o endpoint SSH.
+- As variables e secrets SSH do deploy foram cadastrados no repositório GitHub;
+  `HOSTGATOR_DEPLOY_ENABLED` permanece `false`.
+
+Estado atualizado: migration `PASS`; domínio/PHP-FPM público `BLOCKED`; R2 e
+OAuth `BLOCKED`; deploy público `NÃO EXECUTADO`.
