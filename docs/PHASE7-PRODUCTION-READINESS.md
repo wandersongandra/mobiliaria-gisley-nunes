@@ -26,7 +26,7 @@ impresso.
 | P7-EXT-002 | HIGH | SSL/AutoSSL | HTTPS sem `-k` falha com `SEC_E_WRONG_PRINCIPAL`; SAN não contém domínios públicos | Não há cadeia confiável para produção nem base segura para Full strict | Emitir AutoSSL para os três hostnames | `curl` sem `-k` e inspeção SNI/SAN | BLOCKED_EXTERNALLY |
 | P7-REL-001 | HIGH | Release HostGator | checkout remoto `a808885c...` difere de local/origin `5a286fca...` | Origem pública não contém a versão validada da aplicação | Deploy gated autorizado do SHA imutável | `git rev-parse` por SSH | NOT_EXECUTED_BY_POLICY |
 | P7-INT-001 | HIGH | R2 | `app:production-check` remoto falha em R2; nenhum bucket de teste seguro foi autorizado | Upload/presign/delete reais não podem ser certificados | Configuração efetiva e bucket/prefixo de teste autorizado; depois smoke não destrutivo | production-check + testes R2 controlados | BLOCKED_BY_CONFIG/SECRET |
-| P7-INT-002 | HIGH | OAuth | `app:production-check` remoto falha em OAuth | Login, callback e revogação não podem ser certificados | Configuração efetiva e redirect URI aprovada pelo provedor | fluxo OAuth real sem replay | BLOCKED_BY_CONFIG/SECRET |
+| P7-INT-002 | HIGH | Google OAuth | `app:production-check` remoto falha em OAuth; checkout remoto anterior à troca de provedor | Login, callback e revogação não podem ser certificados | Publicar o código Google, configurar credenciais no ambiente e aprovar o redirect URI | fluxo OAuth real sem replay | BLOCKED_BY_CONFIG/SECRET |
 | P7-EXT-003 | MEDIUM | Cloudflare | origem não passa HTTPS validado; `painel` sem DNS | Full strict/proxy e trusted proxy real não podem ser provados | Corrigir DNS/AutoSSL e só então configurar Full strict | requests proxied e spoof tests | BLOCKED_EXTERNALLY |
 | P7-OPS-001 | MEDIUM | Deploy | `HOSTGATOR_DEPLOY_ENABLED=false` | Evita publicação acidental, mas mantém entrega manual pendente | Habilitar apenas após todos os gates e autorização explícita | revisão do workflow gated | NOT_ENABLED |
 
@@ -114,8 +114,10 @@ PRODUCTION READINESS: FAIL
 - Cloudflare DNS: `A painel -> 192.185.213.23`, DNS only durante AutoSSL.
 - cPanel/HostGator: AutoSSL para `@`, `www` e `painel`.
 - Ambiente seguro de R2 e configuração efetiva, sem enviar segredo pelo chat.
-- Configuração OAuth aprovada pelo provedor, com callback
-  `https://www.gisleynunesimoveis.com.br/api/auth/callback`.
+- Cliente OAuth Web do Google Cloud configurado com o callback exato
+  `https://www.gisleynunesimoveis.com.br/api/auth/callback`, seguido de
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
+  `GISELY_ADMIN_BOOTSTRAP_EMAILS` no ambiente remoto.
 - Janela de deploy explicitamente autorizada para publicar o SHA atual.
 - Depois dos gates verdes: Cloudflare `Full (strict)`, proxy e smoke/CWV/admin
   reais.

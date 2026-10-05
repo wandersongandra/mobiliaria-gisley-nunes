@@ -117,11 +117,11 @@ variables, host key estrita e não usa autenticação por senha.
    usado em DNS.
 2. Cadastrar no `.env` remoto os secrets reais do R2 e OAuth diretamente no
    servidor. Não enviar esses valores pelo chat.
-3. Confirmar no provedor OAuth o redirect URI
-   `https://www.gisleynunesimoveis.com.br/api/auth/callback` e preencher no
-   `.env` remoto `MANUS_OAUTH_PORTAL_URL`, `MANUS_OAUTH_API_URL` e
-   `MANUS_PROJECT_ID`. O código atual não lê `MANUS_OAUTH_CLIENT_SECRET`; não
-   inventar essa variável.
+3. Criar um cliente OAuth Web no Google Cloud, cadastrar o redirect URI
+   exato `https://www.gisleynunesimoveis.com.br/api/auth/callback` e preencher
+   no `.env` remoto `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Para o
+   primeiro gestor, preencher também `GISELY_ADMIN_BOOTSTRAP_EMAILS` com o
+   e-mail Google verificado exato. Não enviar esses valores pelo chat.
 4. Reduzir, se o cPanel permitir, os privilégios do usuário da aplicação ao
    mínimo necessário; o estado atual é isolado por schema, mas contém `ALL`.
 5. A migration real foi executada na base dedicada em 2026-10-05; manter a

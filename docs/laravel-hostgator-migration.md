@@ -52,7 +52,12 @@ Configure no `.env`, fora do Document Root e sem versionar credenciais:
 - Sessão e cache: `SESSION_DRIVER=file`, `SESSION_SECURE_COOKIE=true`, `SESSION_LIFETIME`, `CACHE_STORE=file`.
 - Gestores: `GISELY_ADMIN_OPEN_IDS`, `GISELY_ADMIN_IDLE_TIMEOUT_MINUTES`, `GISELY_MAX_ADMIN_SESSIONS`.
 - Cloudflare R2: `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_UPLOAD_EXPIRES_SECONDS`.
-- OAuth: `MANUS_OAUTH_PORTAL_URL`, `MANUS_OAUTH_API_URL`, `MANUS_PROJECT_ID`.
+- Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
+  `GISELY_ADMIN_BOOTSTRAP_EMAILS` para a lista explícita de e-mails Google
+  verificados autorizados no primeiro bootstrap.
+
+  O callback cadastrado no Google Cloud deve ser exatamente
+  `https://www.gisleynunesimoveis.com.br/api/auth/callback`.
 
 Use `.env.example` como referência, nunca como fonte de credenciais de produção. Gere `APP_KEY` uma vez e preserve-a entre releases.
 

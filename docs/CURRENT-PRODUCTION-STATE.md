@@ -62,7 +62,8 @@ O `php artisan app:production-check` executado no checkout observado no
 HostGator passou os controles básicos e falhou em:
 
 - R2 configuration is present;
-- OAuth configuration is present.
+- OAuth configuration is present. O código local está preparado para Google
+  OAuth, mas o checkout remoto observado ainda é anterior a essa troca.
 
 Uma inspeção somente por nomes indicou variáveis R2/OAuth preenchidas no
 `.env` remoto, sem imprimir valores. Como o checkout remoto está stale e o
@@ -99,8 +100,12 @@ executado.
 2. No cPanel/HostGator, executar ou solicitar AutoSSL para
    `gisleynunesimoveis.com.br`, `www.gisleynunesimoveis.com.br` e
    `painel.gisleynunesimoveis.com.br`, todos com o document root confirmado.
-3. Somente depois do certificado válido, configurar Cloudflare como
+3. Criar/configurar o cliente OAuth Web no Google Cloud com o callback
+   `https://www.gisleynunesimoveis.com.br/api/auth/callback` e, sem enviar
+   segredos pelo chat, preencher `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
+   `GISELY_ADMIN_BOOTSTRAP_EMAILS` no `.env` remoto após o deploy do código.
+4. Somente depois do certificado válido, configurar Cloudflare como
    `Full (strict)` e ativar proxy mediante autorização.
-4. Após uma janela de deploy autorizada, publicar o SHA da branch autorizada
+5. Após uma janela de deploy autorizada, publicar o SHA da branch autorizada
    pelo workflow gated. Não habilitar `HOSTGATOR_DEPLOY_ENABLED` antes de
    R2, OAuth, HTTPS e health público estarem verdes.
