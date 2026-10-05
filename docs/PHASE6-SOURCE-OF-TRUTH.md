@@ -1,7 +1,7 @@
 # Fase 6 — source of truth e runtime frontend
 
-Data da rodada: 2026-10-05  
-Branch: `migration/laravel-backend-2026-10-02`  
+Data da rodada: 2026-10-05
+Branch: `migration/laravel-backend-2026-10-02`
 Base: `c02f83d`
 
 ## Resumo executivo
