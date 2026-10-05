@@ -39,3 +39,11 @@ cliente é preservado; qualquer outro é substituído e entra no contexto dos lo
 Manter essa organização enquanto o produto tiver este tamanho; extrair actions
 apenas quando um fluxo passar a ser usado por mais de uma interface. O sistema é
 single-tenant por definição desta versão.
+
+## Verificações da rodada 5
+
+O catálogo público usa `/api/v2/properties`, com paginação e filtros validados
+no controller. A rota legada permanece disponível para compatibilidade e é
+marcada como depreciada; sua remoção depende de inventário de consumidores.
+Exports de leads ficam separados do throttle administrativo geral porque
+produzem uma resposta com dados pessoais e podem ser consumidos em CSV ou JSON.
