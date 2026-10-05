@@ -12,7 +12,10 @@
 - R2 privado, PUT pré-assinado curto sem overwrite, confirmação por HEAD e
   inspeção real do tipo e das dimensões da imagem antes do registro.
 - Headers CSP com nonce, `nosniff`, frame denial, política de referrer e cache
-  privado para administração.
+  privado para administração; `style-src` não depende de `unsafe-inline`.
+- Exportação de leads com limite dedicado de 20 requisições por 10 minutos por
+  IP, além da autenticação, capability e CSRF/origem aplicáveis à superfície
+  administrativa.
 - Auditoria crítica transacional para mudanças administrativas sensíveis e log
   append-only no banco.
 
@@ -29,6 +32,8 @@
 | SEC-07 | HIGH | Sessões não tinham FK e e-mail era base de identidade OAuth. `morada_users` e `morada_oauth_identities` usam subject imutável, e sessões novas referenciam ambos por FK. |
 | SEC-08 | HIGH | Auditoria sensível era best-effort. `CriticalAuditService` grava mutação e evento na mesma transação e triggers bloqueiam `UPDATE`/`DELETE` no log. |
 | SEC-09 | MEDIUM | O framework registrava rotas locais `storage/*` assinadas que não eram usadas. `config/filesystems.php` desativa o serving local e o teste garante sua ausência. |
+| SEC-10 | MEDIUM | O CSP ainda permitia estilos inline sem necessidade observada. `SecurityHeaders` removeu `style-src 'unsafe-inline'` e o teste de renderização impede regressão. Resolvido nesta rodada. |
+| SEC-11 | MEDIUM | Exportação de leads concentrava dados pessoais sob o throttle administrativo genérico. A rota agora usa `throttle:export` (20/10 min/IP), mantendo a capability `lead.read`. Resolvido nesta rodada. |
 
 ## Riscos residuais
 

@@ -28,7 +28,7 @@ class SecurityHeaders
             "default-src 'self'; ".
             "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; ".
             "script-src 'self' 'nonce-{$nonce}'; ".
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; ".
+            "style-src 'self' https://fonts.googleapis.com; ".
             "font-src 'self' https://fonts.gstatic.com data:; ".
             "img-src 'self' https: data: blob:; ".
             "connect-src 'self' https://*.r2.cloudflarestorage.com; ".

@@ -48,5 +48,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('destructive', fn (Request $request) => [
             Limit::perMinutes(10, 60)->by('destructive:'.$request->ip()),
         ]);
+
+        RateLimiter::for('export', fn (Request $request) => [
+            Limit::perMinutes(10, 20)->by('export:'.$request->ip()),
+        ]);
     }
 }

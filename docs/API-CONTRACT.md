@@ -40,7 +40,7 @@ As páginas HTML, `robots.txt`, `sitemap.xml` e `llms.txt` são públicas e não
 | `PUT /api/admin/properties/{id}/photos/order`, `PUT /api/admin/photos/{id}/cover` | `media.manage` | UUIDs e ordenação estrita. |
 | `GET/PUT /api/admin/site` | `site.read` / `site.manage` | Configuração pública. |
 | `POST/DELETE /api/admin/testimonials[/{id}]` | `testimonial.manage` | Cria/remove depoimento. |
-| `GET /api/admin/leads`, `/export` | `lead.read` | Filtros status/data; export streaming CSV/JSON. |
+| `GET /api/admin/leads`, `/export` | `lead.read` | Filtros status/data; export streaming CSV/JSON. A exportação usa limite dedicado de 20 requisições/10 min por IP. |
 | `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | Atualiza/apaga lead. |
 | `GET /api/admin/audit` | `audit.read` | `limit` 1–250. |
 | `GET/POST/PATCH/DELETE /api/admin/team...` | `team.manage` | Equipe, convites e revogação. |

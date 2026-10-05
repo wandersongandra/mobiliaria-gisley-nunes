@@ -46,6 +46,7 @@ class PublicPageRenderTest extends TestCase
 
         $csp = (string) $response->headers->get('Content-Security-Policy');
         $this->assertNotSame('', $csp, 'A página respondeu sem header Content-Security-Policy.');
+        $this->assertStringNotContainsString("style-src 'self' 'unsafe-inline'", $csp);
 
         $this->assertSame(
             1,

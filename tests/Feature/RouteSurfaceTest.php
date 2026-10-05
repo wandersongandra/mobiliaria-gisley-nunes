@@ -109,6 +109,14 @@ class RouteSurfaceTest extends TestCase
         $this->assertSame([], $storageRoutes);
     }
 
+    public function test_lead_export_has_a_dedicated_rate_limit(): void
+    {
+        $route = Route::getRoutes()->getByAction(\App\Http\Controllers\AdminCrmController::class.'@exportLeads');
+
+        $this->assertNotNull($route);
+        $this->assertContains('throttle:export', $route->middleware());
+    }
+
     /**
      * @return list<string>
      */

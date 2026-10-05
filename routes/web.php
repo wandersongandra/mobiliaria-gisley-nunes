@@ -88,7 +88,7 @@ Route::prefix('api/admin')
             ->middleware(['capability:testimonial.manage', 'throttle:destructive']);
 
         Route::get('/leads/export', [AdminCrmController::class, 'exportLeads'])
-            ->middleware('capability:lead.read');
+            ->middleware(['capability:lead.read', 'throttle:export']);
         Route::get('/leads', [AdminCrmController::class, 'leads'])
             ->middleware('capability:lead.read');
         Route::patch('/leads/{id}', [AdminCrmController::class, 'updateLead'])
