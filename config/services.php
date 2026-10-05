@@ -1,11 +1,13 @@
 <?php
 
 return [
-    'manus_oauth' => [
-        'provider' => env('MANUS_OAUTH_PROVIDER', 'manus'),
-        'portal_url' => env('MANUS_OAUTH_PORTAL_URL'),
-        'api_url' => env('MANUS_OAUTH_API_URL'),
-        'project_id' => env('MANUS_PROJECT_ID'),
+    'google_oauth' => [
+        'provider' => 'google',
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'authorization_url' => 'https://accounts.google.com/o/oauth2/v2/auth',
+        'token_url' => 'https://oauth2.googleapis.com/token',
+        'userinfo_url' => 'https://openidconnect.googleapis.com/v1/userinfo',
     ],
 
     'r2' => [

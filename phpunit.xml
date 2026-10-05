@@ -29,12 +29,12 @@
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="GISELY_ADMIN_OPEN_IDS" value="test-bootstrap-open-id"/>
+        <env name="GISELY_ADMIN_BOOTSTRAP_EMAILS" value="bootstrap@example.test"/>
         <env name="R2_ACCOUNT_ID" value="test-account"/>
         <env name="R2_BUCKET" value="test-bucket"/>
         <env name="R2_ACCESS_KEY_ID" value="test-key"/>
         <env name="R2_SECRET_ACCESS_KEY" value="test-secret"/>
-        <env name="MANUS_OAUTH_PORTAL_URL" value="https://oauth.example.test"/>
-        <env name="MANUS_OAUTH_API_URL" value="https://oauth-api.example.test"/>
-        <env name="MANUS_PROJECT_ID" value="test-project"/>
+        <env name="GOOGLE_CLIENT_ID" value="test-client-id.apps.googleusercontent.com"/>
+        <env name="GOOGLE_CLIENT_SECRET" value="test-client-secret"/>
     </php>
 </phpunit>

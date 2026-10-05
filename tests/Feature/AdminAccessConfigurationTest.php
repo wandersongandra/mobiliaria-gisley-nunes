@@ -24,6 +24,17 @@ class AdminAccessConfigurationTest extends TestCase
         $this->assertFalse(app(AdminAccessService::class)->isBootstrap('other-user'));
     }
 
+    public function test_verified_google_bootstrap_emails_are_matched_exactly(): void
+    {
+        config(['gisley.admin.bootstrap_emails' => ['owner@example.com']]);
+
+        $access = app(AdminAccessService::class);
+
+        $this->assertTrue($access->isBootstrapIdentity('google-subject', 'owner@example.com'));
+        $this->assertTrue($access->isBootstrapIdentity('google-subject', 'OWNER@example.com'));
+        $this->assertFalse($access->isBootstrapIdentity('other-subject', 'other@example.com'));
+    }
+
     public function test_renamed_config_file_still_reads_the_legacy_gisely_env_names(): void
     {
         // O arquivo passou de gisely.php para gisley.php, mas o .env de produção

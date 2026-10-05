@@ -35,7 +35,7 @@ class OAuthIdentityTest extends TestCase
 
     public function test_verified_email_can_continue_to_staff_pairing(): void
     {
-        $this->fakeOAuthIdentity(['emailVerified' => true]);
+        $this->fakeOAuthIdentity(['email_verified' => true]);
 
         $state = $this->beginLogin();
 
@@ -45,6 +45,26 @@ class OAuthIdentityTest extends TestCase
         ]))
             ->assertForbidden()
             ->assertSee('Código de vinculação temporário');
+    }
+
+    public function test_login_builds_google_authorization_request_with_the_public_callback(): void
+    {
+        config([
+            'app.admin_url' => 'https://www.gisleynunesimoveis.com.br',
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'test-client-secret',
+        ]);
+
+        $response = $this->get('/api/auth/login');
+        $location = (string) $response->headers->get('Location');
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+
+        $response->assertRedirect();
+        $this->assertSame('accounts.google.com', parse_url($location, PHP_URL_HOST));
+        $this->assertSame('client-id.apps.googleusercontent.com', $query['client_id'] ?? null);
+        $this->assertSame('https://www.gisleynunesimoveis.com.br/api/auth/callback', $query['redirect_uri'] ?? null);
+        $this->assertSame('code', $query['response_type'] ?? null);
+        $this->assertSame('openid email profile', $query['scope'] ?? null);
     }
 
     #[DataProvider('invalidIdentityClaims')]
@@ -67,17 +87,17 @@ class OAuthIdentityTest extends TestCase
     {
         return [
             'claim ausente' => [[]],
-            'claim nula' => [['emailVerified' => null]],
-            'claim falsa' => [['emailVerified' => false]],
-            'claim não booleana' => [['emailVerified' => 'true']],
+            'claim nula' => [['email_verified' => null]],
+            'claim falsa' => [['email_verified' => false]],
+            'claim não booleana' => [['email_verified' => 'true']],
         ];
     }
 
     public static function invalidIdentityClaims(): array
     {
         return [
-            'e-mail inválido' => [['email' => 'not-an-email', 'emailVerified' => true]],
-            'open id vazio' => [['openId' => '', 'emailVerified' => true]],
+            'e-mail inválido' => [['email' => 'not-an-email', 'email_verified' => true]],
+            'subject vazio' => [['sub' => '', 'email_verified' => true]],
         ];
     }
 
@@ -153,7 +173,7 @@ class OAuthIdentityTest extends TestCase
     private function identity(string $subject, string $email): array
     {
         return [
-            'provider' => 'manus',
+            'provider' => 'google',
             'providerSubject' => $subject,
             'openId' => $subject,
             'email' => $email,
@@ -171,17 +191,16 @@ class OAuthIdentityTest extends TestCase
     private function fakeOAuthIdentity(array $claims): void
     {
         config([
-            'services.manus_oauth.portal_url' => 'https://oauth.example.test',
-            'services.manus_oauth.api_url' => 'https://oauth-api.example.test',
-            'services.manus_oauth.project_id' => 'gisley-test',
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'test-client-secret',
         ]);
 
         Http::preventStrayRequests();
         Http::fakeSequence()
-            ->push(['accessToken' => 'test-access-token'])
+            ->push(['access_token' => 'test-access-token', 'token_type' => 'Bearer'])
             ->push(array_merge([
                 'email' => 'corretor@example.test',
-                'openId' => 'oauth-user-123',
+                'sub' => 'oauth-user-123',
                 'name' => 'Corretor Teste',
             ], $claims));
     }

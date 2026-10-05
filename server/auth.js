@@ -16,10 +16,11 @@ import {
   upsertAdmin
 } from './db.js';
 import {
+  adminBootstrapEmails,
   adminOpenIds,
   configuredAdminOrigin,
   hasDatabase,
-  isAllowedOpenId,
+  isAllowedIdentity,
   oauth,
   sessionSecret
 } from './config.js';
@@ -52,18 +53,6 @@ export function cookieOptions(req, extra = {}) {
   };
 }
 
-function validUrl(value, { httpsOnly = false } = {}) {
-  try {
-    const parsed = new URL(String(value || ''));
-    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
-    if (parsed.username || parsed.password) return false;
-    if (httpsOnly && parsed.protocol !== 'https:') return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function weakSessionSecret(value) {
   const secret = String(value || '');
   if (Buffer.byteLength(secret, 'utf8') < 32) return true;
@@ -77,23 +66,23 @@ function weakSessionSecret(value) {
 
 function assertAuthConfig() {
   if (!hasDatabase()) throw new Error('AUTH_DATABASE_NOT_CONFIGURED');
-  if (!oauth.portalUrl || !oauth.apiUrl || !oauth.projectId) throw new Error('OAUTH_NOT_CONFIGURED');
+  if (!oauth.clientId || !oauth.clientSecret) throw new Error('OAUTH_NOT_CONFIGURED');
 
   const secret = sessionSecret();
   if (weakSessionSecret(secret)) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
 
   const production = process.env.NODE_ENV === 'production';
-  if (!validUrl(oauth.portalUrl, { httpsOnly: production }) || !validUrl(oauth.apiUrl, { httpsOnly: production })) {
-    throw new Error('OAUTH_URL_INVALID');
-  }
-
   if (production) {
     const adminOrigin = configuredAdminOrigin();
     if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
     const bootstrapOpenIds = adminOpenIds();
-    if (bootstrapOpenIds.length === 0) throw new Error('BOOTSTRAP_IDENTITY_NOT_CONFIGURED');
+    const bootstrapEmails = adminBootstrapEmails();
+    if (bootstrapOpenIds.length === 0 && bootstrapEmails.length === 0) throw new Error('BOOTSTRAP_IDENTITY_NOT_CONFIGURED');
     if (bootstrapOpenIds.some((openId) => openId.length > 191 || !/^\S+$/.test(openId))) {
       throw new Error('BOOTSTRAP_IDENTITY_INVALID');
+    }
+    if (bootstrapEmails.some((email) => email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      throw new Error('BOOTSTRAP_EMAIL_INVALID');
     }
   }
 }
@@ -210,9 +199,9 @@ export async function verifySessionToken(token) {
 
 export function normalizeOAuthIdentity(userInfo = {}) {
   const email = String(userInfo.email || '').trim().toLowerCase();
-  const openId = String(userInfo.openId || userInfo.open_id || '').trim();
+  const openId = String(userInfo.sub || '').trim();
   const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
-  const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
+  const emailVerified = userInfo.email_verified;
 
   if (
     email.length === 0
@@ -222,7 +211,7 @@ export function normalizeOAuthIdentity(userInfo = {}) {
     || /\s/.test(openId)
     || /[\u0000-\u001f\u007f]/.test(openId)
     || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    || emailVerified === false
+    || emailVerified !== true
   ) return null;
 
   return { email, openId, name };
@@ -231,7 +220,7 @@ export function normalizeOAuthIdentity(userInfo = {}) {
 export function resolveAdminAccess({ openId, email = '', access }) {
   const normalizedOpenId = String(openId || '').trim();
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  const bootstrapManager = isAllowedOpenId(normalizedOpenId);
+  const bootstrapManager = isAllowedIdentity(normalizedOpenId, normalizedEmail);
 
   if (access?.invited_by === 'environment' && !bootstrapManager) return null;
   if (!bootstrapManager && (!access || !access.active)) return null;
@@ -367,11 +356,14 @@ export async function login(req, res, next) {
       sameSite: 'lax'
     });
 
-    const url = new URL(`${oauth.portalUrl.replace(/\/$/, '')}/app-auth`);
-    url.searchParams.set('appId', oauth.projectId);
-    url.searchParams.set('redirectUri', redirectUri);
+    const url = new URL(oauth.authorizationUrl);
+    url.searchParams.set('client_id', oauth.clientId);
+    url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('state', state);
-    url.searchParams.set('responseType', 'code');
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', 'openid email profile');
+    url.searchParams.set('access_type', 'online');
+    url.searchParams.set('prompt', 'select_account');
     return res.redirect(302, url.toString());
   } catch (error) {
     return next(error);
@@ -379,21 +371,25 @@ export async function login(req, res, next) {
 }
 
 async function exchangeCode({ code, redirectUri }) {
-  const response = await fetch(`${oauth.apiUrl.replace(/\/$/, '')}/webdev.v1.WebDevAuthPublicService/ExchangeToken`, {
+  const response = await fetch(oauth.tokenUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'connect-protocol-version': '1' },
-    body: JSON.stringify({ clientId: oauth.projectId, grantType: 'authorization_code', code, redirectUri }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({
+      client_id: oauth.clientId,
+      client_secret: oauth.clientSecret,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri
+    }),
     signal: AbortSignal.timeout(10000)
   });
   if (!response.ok) throw new Error(`OAUTH_EXCHANGE_${response.status}`);
 
   const result = await response.json();
-  if (!result.accessToken) throw new Error('OAUTH_ACCESS_TOKEN_MISSING');
+  if (!result.access_token) throw new Error('OAUTH_ACCESS_TOKEN_MISSING');
 
-  const infoResponse = await fetch(`${oauth.apiUrl.replace(/\/$/, '')}/webdev.v1.WebDevAuthPublicService/GetUserInfo`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'connect-protocol-version': '1' },
-    body: JSON.stringify({ accessToken: result.accessToken }),
+  const infoResponse = await fetch(oauth.userinfoUrl, {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${result.access_token}` },
     signal: AbortSignal.timeout(10000)
   });
   if (!infoResponse.ok) throw new Error(`OAUTH_USERINFO_${infoResponse.status}`);
@@ -469,7 +465,7 @@ export async function callback(req, res) {
       access = await findStaffAccessByOpenId(openId);
     }
 
-    const bootstrapManager = isAllowedOpenId(openId);
+    const bootstrapManager = isAllowedIdentity(openId, email);
     const resolvedAccess = resolveAdminAccess({ openId, email, access });
     if (!resolvedAccess) {
       const pairingCode = randomBytes(12).toString('base64url');

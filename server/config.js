@@ -14,8 +14,20 @@ export function adminOpenIds() {
     .filter(Boolean);
 }
 
+export function adminBootstrapEmails() {
+  return String(env.GISELY_ADMIN_BOOTSTRAP_EMAILS || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export function isAllowedOpenId(openId) {
   return adminOpenIds().includes(String(openId || '').trim());
+}
+
+export function isAllowedIdentity(openId, email = '') {
+  return isAllowedOpenId(openId)
+    || adminBootstrapEmails().includes(String(email || '').trim().toLowerCase());
 }
 
 export function sessionSecret() {
@@ -78,9 +90,12 @@ export function hasStorage() {
 }
 
 export const oauth = {
-  portalUrl: env.MANUS_OAUTH_PORTAL_URL || '',
-  apiUrl: env.MANUS_OAUTH_API_URL || '',
-  projectId: env.MANUS_PROJECT_ID || ''
+  provider: 'google',
+  clientId: env.GOOGLE_CLIENT_ID || '',
+  clientSecret: env.GOOGLE_CLIENT_SECRET || '',
+  authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+  tokenUrl: 'https://oauth2.googleapis.com/token',
+  userinfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo'
 };
 
 export function r2UploadExpiresSeconds() {

@@ -8,9 +8,9 @@ const baseEnv = {
   ADMIN_ORIGIN: 'https://painel.gisley.test',
   GISELY_ADMIN_OPEN_IDS: 'bootstrap-open-id',
   GISELY_SESSION_SECRET: 'Gisley-Session-Secret-2026!A9#xQ7@Lm2$Vr',
-  MANUS_OAUTH_PORTAL_URL: 'https://oauth.example.com',
-  MANUS_OAUTH_API_URL: 'https://oauth-api.example.com',
-  MANUS_PROJECT_ID: 'project-123'
+  GOOGLE_CLIENT_ID: 'client-id.apps.googleusercontent.com',
+  GOOGLE_CLIENT_SECRET: 'client-secret',
+  GISELY_ADMIN_BOOTSTRAP_EMAILS: 'owner@example.com'
 };
 
 function runConfig(overrides = {}) {
@@ -44,13 +44,13 @@ test('produção exige ADMIN_ORIGIN HTTPS', () => {
   assert.equal(runConfig({ ADMIN_ORIGIN: 'http://painel.gisley.test' }), 'ADMIN_ORIGIN_NOT_CONFIGURED');
 });
 
-test('produção rejeita endpoints OAuth inseguros', () => {
-  assert.equal(runConfig({ MANUS_OAUTH_PORTAL_URL: 'http://oauth.example.com' }), 'OAUTH_URL_INVALID');
-  assert.equal(runConfig({ MANUS_OAUTH_API_URL: 'http://oauth-api.example.com' }), 'OAUTH_URL_INVALID');
+test('produção exige cliente Google OAuth', () => {
+  assert.equal(runConfig({ GOOGLE_CLIENT_ID: '' }), 'OAUTH_NOT_CONFIGURED');
+  assert.equal(runConfig({ GOOGLE_CLIENT_SECRET: '' }), 'OAUTH_NOT_CONFIGURED');
 });
 
 test('produção exige identidade bootstrap explícita', () => {
-  assert.equal(runConfig({ GISELY_ADMIN_OPEN_IDS: '' }), 'BOOTSTRAP_IDENTITY_NOT_CONFIGURED');
+  assert.equal(runConfig({ GISELY_ADMIN_OPEN_IDS: '', GISELY_ADMIN_BOOTSTRAP_EMAILS: '' }), 'BOOTSTRAP_IDENTITY_NOT_CONFIGURED');
 });
 
 test('produção rejeita OpenID bootstrap inválido', () => {

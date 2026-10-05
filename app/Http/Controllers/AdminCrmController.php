@@ -381,7 +381,7 @@ class AdminCrmController extends Controller
 
         $targetOpenId = (string) ($current['open_id'] ?? '');
         $isSelf = $targetOpenId !== '' && hash_equals($targetOpenId, $admin['openId']);
-        $isBootstrap = $this->access->isBootstrap($targetOpenId);
+        $isBootstrap = $this->access->isBootstrapIdentity($targetOpenId, (string) ($current['email'] ?? ''));
 
         if ($isSelf && (
             (isset($patch['role']) && $patch['role'] !== $admin['role'])
@@ -431,7 +431,7 @@ class AdminCrmController extends Controller
         if ($openId !== '' && hash_equals($openId, $admin['openId'])) {
             return response()->json(['error' => 'CANNOT_REMOVE_SELF'], 400);
         }
-        if ($this->access->isBootstrap($openId)) {
+        if ($this->access->isBootstrapIdentity($openId, (string) ($current['email'] ?? ''))) {
             return response()->json(['error' => 'BOOTSTRAP_MANAGER_PROTECTED'], 400);
         }
 

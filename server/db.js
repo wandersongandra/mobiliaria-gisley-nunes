@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { adminOpenIds, databaseSslConfig, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
+import { adminBootstrapEmails, adminOpenIds, databaseSslConfig, hasDatabase, isProduction, maxAdminSessions, sessionIdleTimeoutMs } from './config.js';
 import { demoProperties, seedRows } from './seed.js';
 import { normalizeContactLead, normalizePropertyInput, normalizePropertySlug, normalizeSiteSettings, normalizeTestimonial } from './validation.js';
 
@@ -166,25 +166,43 @@ export async function migrate() {
   );
 
   const bootstrapOpenIds = adminOpenIds();
-  if (bootstrapOpenIds.length) {
-    const placeholders = bootstrapOpenIds.map(() => '?').join(',');
+  const bootstrapEmails = adminBootstrapEmails();
+  if (bootstrapOpenIds.length || bootstrapEmails.length) {
+    const staleConditions = [];
+    const staleParams = [];
+    if (bootstrapOpenIds.length) {
+      staleConditions.push(`(a.open_id IS NULL OR a.open_id NOT IN (${bootstrapOpenIds.map(() => '?').join(',')}))`);
+      staleParams.push(...bootstrapOpenIds);
+    }
+    if (bootstrapEmails.length) {
+      staleConditions.push(`(a.email IS NULL OR LOWER(a.email) NOT IN (${bootstrapEmails.map(() => '?').join(',')}))`);
+      staleParams.push(...bootstrapEmails);
+    }
+    const staleWhere = staleConditions.join(' AND ');
     await db.execute(
       `UPDATE morada_admin_sessions s
        LEFT JOIN morada_staff_access a ON a.open_id=s.open_id
        SET s.revoked_at=COALESCE(s.revoked_at, CURRENT_TIMESTAMP)
-       WHERE (
-         a.invited_by='environment'
-         AND (a.open_id IS NULL OR a.open_id NOT IN (${placeholders}))
-       )
+       WHERE a.invited_by='environment'
+         AND ${staleWhere}
        AND s.revoked_at IS NULL`,
-      bootstrapOpenIds
+      staleParams
     );
+    const staffParams = [];
+    const staffConditions = [];
+    if (bootstrapOpenIds.length) {
+      staffConditions.push(`(open_id IS NULL OR open_id NOT IN (${bootstrapOpenIds.map(() => '?').join(',')}))`);
+      staffParams.push(...bootstrapOpenIds);
+    }
+    if (bootstrapEmails.length) {
+      staffConditions.push(`(email IS NULL OR LOWER(email) NOT IN (${bootstrapEmails.map(() => '?').join(',')}))`);
+      staffParams.push(...bootstrapEmails);
+    }
     await db.execute(
       `UPDATE morada_staff_access
        SET active=0, updated_at=CURRENT_TIMESTAMP
-       WHERE invited_by='environment'
-         AND (open_id IS NULL OR open_id NOT IN (${placeholders}))`,
-      bootstrapOpenIds
+       WHERE invited_by='environment' AND ${staffConditions.join(' AND ')}`,
+      staffParams
     );
   } else {
     await db.execute(

@@ -28,9 +28,8 @@ class ProductionCheckCommandTest extends TestCase
             'services.r2.bucket' => 'bucket',
             'services.r2.access_key_id' => 'key',
             'services.r2.secret_access_key' => 'not-printed-secret',
-            'services.manus_oauth.portal_url' => 'https://oauth.example.test',
-            'services.manus_oauth.api_url' => 'https://oauth-api.example.test',
-            'services.manus_oauth.project_id' => 'project',
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'not-printed-secret',
             'gisley.network.trusted_proxies' => ['203.0.113.0/24'],
         ]);
 

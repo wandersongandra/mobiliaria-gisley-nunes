@@ -47,9 +47,23 @@ class AdminAccessService
         return is_array($openIds) ? array_values(array_filter($openIds, 'is_string')) : [];
     }
 
+    /** @return list<string> */
+    public function bootstrapEmails(): array
+    {
+        $emails = config('gisley.admin.bootstrap_emails', []);
+
+        return is_array($emails) ? array_values(array_filter($emails, 'is_string')) : [];
+    }
+
     public function isBootstrap(string $openId): bool
     {
         return $openId !== '' && in_array($openId, $this->bootstrapOpenIds(), true);
+    }
+
+    public function isBootstrapIdentity(string $openId, string $email = ''): bool
+    {
+        return $this->isBootstrap($openId)
+            || ($email !== '' && in_array(strtolower($email), $this->bootstrapEmails(), true));
     }
 
     public function hasCapability(?array $admin, string $capability): bool
@@ -105,7 +119,7 @@ class AdminAccessService
         }
 
         $access = DB::table('morada_staff_access')->where('open_id', $openId)->first();
-        $bootstrap = $this->isBootstrap($openId);
+        $bootstrap = $this->isBootstrapIdentity($openId, (string) $user->email);
 
         if (! $bootstrap) {
             if (! $access || ! (bool) $access->active) {
@@ -141,7 +155,7 @@ class AdminAccessService
     public function establish(Request $request, array $identity, string $role): array
     {
         $identity += [
-            'provider' => (string) config('services.manus_oauth.provider', 'manus'),
+            'provider' => (string) config('services.google_oauth.provider', 'google'),
             'providerSubject' => (string) ($identity['openId'] ?? ''),
         ];
         $resolved = $this->identities->resolve($identity);
@@ -205,7 +219,7 @@ class AdminAccessService
     public function revokeAllForOpenId(string $openId): int
     {
         $userId = DB::table('morada_oauth_identities')
-            ->where('provider', (string) config('services.manus_oauth.provider', 'manus'))
+            ->where('provider', (string) config('services.google_oauth.provider', 'google'))
             ->where('provider_subject', $openId)
             ->value('user_id');
 

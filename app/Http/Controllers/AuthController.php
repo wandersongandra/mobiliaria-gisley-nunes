@@ -25,8 +25,8 @@ class AuthController extends Controller
 
     public function login(Request $request): RedirectResponse|Response
     {
-        $oauth = config('services.manus_oauth');
-        if (empty($oauth['portal_url']) || empty($oauth['api_url']) || empty($oauth['project_id'])) {
+        $oauth = config('services.google_oauth');
+        if (empty($oauth['client_id']) || empty($oauth['client_secret'])) {
             return response('Autenticação administrativa não configurada.', 503);
         }
 
@@ -58,11 +58,14 @@ class AuthController extends Controller
         );
         $request->session()->put('oauth_state', $state);
 
-        $url = rtrim((string) $oauth['portal_url'], '/').'/app-auth?'.http_build_query([
-            'appId' => $oauth['project_id'],
-            'redirectUri' => $redirectUri,
+        $url = (string) $oauth['authorization_url'].'?'.http_build_query([
+            'client_id' => $oauth['client_id'],
             'state' => $state,
-            'responseType' => 'code',
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'scope' => 'openid email profile',
+            'access_type' => 'online',
+            'prompt' => 'select_account',
         ]);
 
         return redirect()->away($url, 302)
@@ -135,7 +138,7 @@ class AuthController extends Controller
             $staff = $this->crm->findStaffByOpenId($identity['openId']);
         }
 
-        $bootstrap = $this->access->isBootstrap($identity['openId']);
+        $bootstrap = $this->access->isBootstrapIdentity($identity['openId'], $identity['email']);
         if (! $bootstrap && ! $this->validStaffAccess($staff, $identity)) {
             $pairingCode = Tokens::random(12);
             $this->crm->createPairing(
@@ -168,7 +171,7 @@ class AuthController extends Controller
         }
 
         $admin = $this->access->establish($request, $identity + [
-            'provider' => (string) config('services.manus_oauth.provider', 'manus'),
+            'provider' => (string) config('services.google_oauth.provider', 'google'),
             'providerSubject' => $identity['openId'],
         ], $role);
         $this->auditAuthentication($admin, 'auth.login');
@@ -230,32 +233,48 @@ class AuthController extends Controller
 
     private function exchangeCode(string $code, string $redirectUri): array
     {
-        $oauth = config('services.manus_oauth');
+        $oauth = config('services.google_oauth');
 
-        $token = Http::timeout(10)
-            ->withHeaders(['connect-protocol-version' => '1'])
-            ->post(rtrim((string) $oauth['api_url'], '/').'/webdev.v1.WebDevAuthPublicService/ExchangeToken', [
-                'clientId' => $oauth['project_id'],
-                'grantType' => 'authorization_code',
+        $tokenResponse = Http::asForm()
+            ->acceptJson()
+            ->timeout(10)
+            ->post((string) $oauth['token_url'], [
+                'client_id' => $oauth['client_id'],
+                'client_secret' => $oauth['client_secret'],
+                'grant_type' => 'authorization_code',
                 'code' => $code,
-                'redirectUri' => $redirectUri,
-            ])->throw()->json();
+                'redirect_uri' => $redirectUri,
+            ]);
 
-        $accessToken = (string) ($token['accessToken'] ?? '');
+        if (! $tokenResponse->successful()) {
+            throw new RuntimeException('OAUTH_TOKEN_EXCHANGE_FAILED');
+        }
+
+        $token = $tokenResponse->json();
+        if (! is_array($token)) {
+            throw new RuntimeException('OAUTH_TOKEN_RESPONSE_INVALID');
+        }
+
+        $accessToken = (string) ($token['access_token'] ?? '');
         if ($accessToken === '') {
             throw new RuntimeException('OAUTH_ACCESS_TOKEN_MISSING');
         }
 
-        $info = Http::timeout(10)
-            ->withHeaders(['connect-protocol-version' => '1'])
-            ->post(rtrim((string) $oauth['api_url'], '/').'/webdev.v1.WebDevAuthPublicService/GetUserInfo', [
-                'accessToken' => $accessToken,
-            ])->throw()->json();
+        $identityResponse = Http::withToken($accessToken)
+            ->acceptJson()
+            ->timeout(10)
+            ->get((string) $oauth['userinfo_url']);
+
+        if (! $identityResponse->successful()) {
+            throw new RuntimeException('OAUTH_USERINFO_FAILED');
+        }
+
+        $info = $identityResponse->json();
 
         $email = strtolower(trim((string) ($info['email'] ?? '')));
-        $openId = trim((string) ($info['openId'] ?? $info['open_id'] ?? ''));
+        $openId = trim((string) ($info['sub'] ?? ''));
         $name = trim((string) ($info['name'] ?? ($email ?: 'Administrador')));
-        $verified = $info['emailVerified'] ?? $info['email_verified'] ?? null;
+        $verified = $info['email_verified'] ?? null;
 
         if ($verified !== true) {
             throw new RuntimeException('EMAIL_NOT_VERIFIED');

@@ -72,18 +72,6 @@ class AdminIdentityService
                         'updated_at' => now(),
                     ]);
 
-                    if ($provider === 'manus') {
-                        DB::table('morada_admin_users')->updateOrInsert(
-                            ['open_id' => $subject],
-                            [
-                                'user_id' => $userId,
-                                'email' => $email,
-                                'name' => $name,
-                                'last_login_at' => now(),
-                            ]
-                        );
-                    }
-
                     return [
                         'userId' => $userId,
                         'identityId' => $identityId,

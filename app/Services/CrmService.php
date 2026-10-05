@@ -603,7 +603,7 @@ class CrmService
             'role' => ($member['role'] ?? '') === 'manager' ? 'manager' : 'editor',
             'active' => (bool) ($member['active'] ?? false),
             'is_self' => $openId !== '' && $openId === (string) ($actor['openId'] ?? ''),
-            'is_bootstrap' => $access->isBootstrap($openId),
+            'is_bootstrap' => $access->isBootstrapIdentity($openId, (string) ($member['email'] ?? '')),
         ];
     }
 

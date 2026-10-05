@@ -376,24 +376,24 @@ test('normalizeOAuthIdentity rejeita identidade OAuth inconsistente', () => {
   assert.deepEqual(
     normalizeOAuthIdentity({
       email: ' Gestor@Example.com ',
-      openId: 'oauth-user-123',
+      sub: 'oauth-user-123',
       name: 'Gestor',
-      emailVerified: true
+      email_verified: true
     }),
     { email: 'gestor@example.com', openId: 'oauth-user-123', name: 'Gestor' }
   );
 
-  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: '', emailVerified: true }), null);
-  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: 'open id', emailVerified: true }), null);
-  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: 'open\ncontrol', emailVerified: true }), null);
-  assert.equal(normalizeOAuthIdentity({ email: 'email-invalido', openId: 'oauth-user-123', emailVerified: true }), null);
-  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', openId: 'oauth-user-123', emailVerified: false }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', sub: '', email_verified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', sub: 'open id', email_verified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', sub: 'open\ncontrol', email_verified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'email-invalido', sub: 'oauth-user-123', email_verified: true }), null);
+  assert.equal(normalizeOAuthIdentity({ email: 'gestor@example.com', sub: 'oauth-user-123', email_verified: false }), null);
 
   const providerWithoutVerificationClaim = normalizeOAuthIdentity({
     email: 'gestor@example.com',
-    openId: 'oauth-user-123'
+    sub: 'oauth-user-123'
   });
-  assert.equal(providerWithoutVerificationClaim?.openId, 'oauth-user-123');
+  assert.equal(providerWithoutVerificationClaim, null);
 });
 
 test('resolveSessionIdentity exige vínculo completo entre JWT sessão usuário e acesso', () => {

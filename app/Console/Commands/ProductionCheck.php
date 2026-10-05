@@ -34,7 +34,7 @@ class ProductionCheck extends Command
                 'services.r2.account_id', 'services.r2.bucket', 'services.r2.access_key_id', 'services.r2.secret_access_key',
             ]),
             'OAuth configuration is present' => $this->configured([
-                'services.manus_oauth.portal_url', 'services.manus_oauth.api_url', 'services.manus_oauth.project_id',
+                'services.google_oauth.client_id', 'services.google_oauth.client_secret',
             ]),
             'trusted proxy CIDRs are configured' => $this->hasValidTrustedProxies(),
         ];

@@ -23,7 +23,7 @@ trait CreatesAdminIdentity
         DB::table('morada_oauth_identities')->insert([
             'id' => $identityId,
             'user_id' => $userId,
-            'provider' => 'manus',
+            'provider' => 'google',
             'provider_subject' => $openId,
             'provider_email' => strtolower($email),
             'created_at' => now(),

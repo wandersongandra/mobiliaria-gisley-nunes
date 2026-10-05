@@ -19,6 +19,10 @@ return [
 
     'admin' => [
         'bootstrap_open_ids' => array_values(array_filter(array_map('trim', explode(',', (string) env('GISELY_ADMIN_OPEN_IDS', ''))))),
+        'bootstrap_emails' => array_values(array_filter(array_map(
+            static fn (string $email): string => strtolower(trim($email)),
+            explode(',', (string) env('GISELY_ADMIN_BOOTSTRAP_EMAILS', '')),
+        ))),
         'idle_timeout_minutes' => (int) env('GISELY_ADMIN_IDLE_TIMEOUT_MINUTES', 60),
         'max_sessions' => (int) env('GISELY_MAX_ADMIN_SESSIONS', 3),
     ],
