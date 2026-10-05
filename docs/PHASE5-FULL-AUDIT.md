@@ -164,12 +164,12 @@ continuam bloqueados conforme escopo do usuário.
 
 ## 17. Commits
 
-Esta rodada será registrada em commits pequenos nesta branch após a validação
-final:
+Commits pequenos realizados nesta branch:
 
-- `security: harden CSP and lead export throttling`;
-- `admin: add destructive action confirmations and favicon`;
-- `docs: publish phase five audit and engineering baselines`.
+- `d5e47a2 security: harden CSP and lead export throttling`;
+- `958bf9f admin: add destructive action confirmations and favicon`;
+- `935d7d3 docs: publish phase five audit and engineering baselines`;
+- `af47e76 test: format route security contract`.
 
 ## 18. Riscos residuais e próximas ações permitidas
 
