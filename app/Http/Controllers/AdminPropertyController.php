@@ -74,10 +74,17 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
         }
 
-        $property = $this->properties->saveProperty($request->all(), null, ! $manager);
-        $this->audit($admin, 'property.create', 'property', $property['id'], [
-            'title' => $property['title'], 'status' => $property['status'],
-        ]);
+        $property = $this->criticalAudit->run(
+            $admin,
+            'property.create',
+            'property',
+            null,
+            fn (): array => $this->properties->saveProperty($request->all(), null, ! $manager),
+            fn (array $created): array => [
+                'title' => $created['title'],
+                'status' => $created['status'],
+            ],
+        );
 
         return response()->json(['property' => $this->properties->adminProperty($property)], 201);
     }
@@ -107,10 +114,17 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
         }
 
-        $property = $this->properties->saveProperty($request->all(), $id, ! $manager);
-        $this->audit($admin, 'property.update', 'property', $id, [
-            'title' => $property['title'], 'status' => $property['status'],
-        ]);
+        $property = $this->criticalAudit->run(
+            $admin,
+            'property.update',
+            'property',
+            $id,
+            fn (): array => $this->properties->saveProperty($request->all(), $id, ! $manager),
+            fn (array $updated): array => [
+                'title' => $updated['title'],
+                'status' => $updated['status'],
+            ],
+        );
 
         return response()->json(['property' => $this->properties->adminProperty($property)]);
     }
@@ -233,21 +247,28 @@ class AdminPropertyController extends Controller
 
         $photoId = (string) Str::uuid();
         try {
-            $photos = $this->properties->addPhoto([
-                'id' => $photoId,
-                'property_id' => $propertyId,
-                'storage_path' => $storagePath,
-                'url' => $this->storage->assetUrl($storagePath),
-                'alt_text' => $altText !== '' ? $altText : 'Foto de '.$property['title'],
-                'sort_order' => $sortOrder,
-                'is_cover' => $isCover ? 1 : 0,
-                'storage_provider' => 'r2',
-                'mime_type' => $contentType,
-                'file_size' => $size,
-                'width' => $image['width'],
-                'height' => $image['height'],
-                'uploaded_by' => $admin['email'],
-            ], ! $this->access->hasCapability($admin, 'property.publish'));
+            $photos = $this->criticalAudit->run(
+                $admin,
+                'photo.add',
+                'photo',
+                $photoId,
+                fn (): array => $this->properties->addPhoto([
+                    'id' => $photoId,
+                    'property_id' => $propertyId,
+                    'storage_path' => $storagePath,
+                    'url' => $this->storage->assetUrl($storagePath),
+                    'alt_text' => $altText !== '' ? $altText : 'Foto de '.$property['title'],
+                    'sort_order' => $sortOrder,
+                    'is_cover' => $isCover ? 1 : 0,
+                    'storage_provider' => 'r2',
+                    'mime_type' => $contentType,
+                    'file_size' => $size,
+                    'width' => $image['width'],
+                    'height' => $image['height'],
+                    'uploaded_by' => $admin['email'],
+                ], ! $this->access->hasCapability($admin, 'property.publish')),
+                ['propertyId' => $propertyId, 'storagePath' => $storagePath],
+            );
         } catch (\Throwable $error) {
             if ($error->getMessage() !== 'ASSET_ALREADY_REGISTERED') {
                 try {
@@ -257,10 +278,6 @@ class AdminPropertyController extends Controller
             }
             throw $error;
         }
-
-        $this->audit($admin, 'photo.add', 'photo', $photoId, [
-            'propertyId' => $propertyId, 'storagePath' => $storagePath,
-        ]);
 
         return response()->json(['photos' => $this->adminPhotos($photos)], 201);
     }
@@ -330,12 +347,18 @@ class AdminPropertyController extends Controller
             $this->assertId((string) $photoId);
         }
 
-        $photos = $this->properties->reorderPhotos(
+        $photos = $this->criticalAudit->run(
+            $admin,
+            'photo.reorder',
+            'property',
             $propertyId,
-            array_values(array_map('strval', $photoIds)),
-            ! $this->access->hasCapability($admin, 'property.publish')
+            fn (): array => $this->properties->reorderPhotos(
+                $propertyId,
+                array_values(array_map('strval', $photoIds)),
+                ! $this->access->hasCapability($admin, 'property.publish')
+            ),
+            ['photoCount' => count($photoIds)],
         );
-        $this->audit($admin, 'photo.reorder', 'property', $propertyId, ['photoCount' => count($photos)]);
 
         return response()->json(['photos' => $this->adminPhotos($photos)]);
     }
@@ -357,15 +380,16 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
         }
 
-        $photos = $this->properties->setCover(
+        $photos = $this->criticalAudit->run(
+            $admin,
+            'photo.cover',
+            'photo',
             $id,
-            ! $this->access->hasCapability($admin, 'property.publish')
+            fn (): array => $this->properties->setCover(
+                $id,
+                ! $this->access->hasCapability($admin, 'property.publish')
+            ) ?? throw new RuntimeException('NOT_FOUND'),
         );
-        if (! $photos) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-
-        $this->audit($admin, 'photo.cover', 'photo', $id);
 
         return response()->json(['photos' => $this->adminPhotos($photos)]);
     }

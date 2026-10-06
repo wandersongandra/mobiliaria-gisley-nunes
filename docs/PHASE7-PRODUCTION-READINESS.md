@@ -1,6 +1,13 @@
 # Fase 7 — Final Production Readiness
 
-Data: 2026-10-05 (America/Sao_Paulo)
+Data: 2026-10-06 (America/Sao_Paulo)
+
+Atualização de 2026-10-06: a branch autorizada está em
+`b147c616580ee497cafbe96bbc67dc741d6d8e28`. Os caminhos administrativos
+agora falham fechado quando a auditoria não pode ser persistida e o CSP
+Laravel usa allowlist explícita para imagens e mídia. Os testes locais
+passaram; OAuth, R2, Cloudflare, checkout público e deploy continuam gates
+externos.
 
 ## Resumo executivo
 
@@ -8,7 +15,7 @@ Uma sonda somente leitura de 2026-10-05 confirmou os três registros A em
 `192.185.213.23`. `curl` sem `-k` retornou `HTTP 200`, `ssl=0` e
 `{"status":"ok"}` em `/health/live` e `/health/ready` no domínio público e em
 `/health/live` no painel. O checkout público ainda não foi comparado nesta
-continuação com o SHA local `f104609`; portanto essa prova não é aprovação de
+continuação com o SHA local `b147c616580ee497cafbe96bbc67dc741d6d8e28`; portanto essa prova não é aprovação de
 deploy da versão atual.
 
 O `app:production-check` remoto falha em R2 e OAuth. Não foram feitos testes
@@ -25,7 +32,7 @@ e-mail; essa operação deve ocorrer por convite/bootstrap explícito.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | P7-EXT-001 | HIGH | DNS | `@`, `www` e `painel` resolveram para `192.185.213.23` na sonda atual | Drift futuro ou resolver divergente ainda pode afetar a publicação | Manter registros e revalidar antes do deploy | `Resolve-DnsName` + `curl` | RESOLVED_CURRENT_PROBE |
 | P7-EXT-002 | HIGH | SSL/AutoSSL | Os três checks HTTPS passaram sem `-k`, com `ssl=0` | SHA/runtime e Full strict ainda não foram provados | Comparar checkout público e validar Cloudflare Full strict | `curl` sem `-k` | RESOLVED_CURRENT_PROBE |
-| P7-REL-001 | HIGH | Release HostGator | Último SSH documentado registrava checkout remoto stale; a sonda atual não comparou SHA público | Origem pública pode não conter a versão validada da aplicação | Deploy gated autorizado do SHA imutável e comparação por SSH | `git rev-parse` por SSH | NOT_EXECUTED_BY_POLICY |
+| P7-REL-001 | HIGH | Release HostGator | Último SSH documentado registrava checkout remoto stale; a sonda atual não comparou o SHA público `b147c616580ee497cafbe96bbc67dc741d6d8e28` | Origem pública pode não conter a versão validada da aplicação | Deploy gated autorizado do SHA imutável e comparação por SSH | `git rev-parse` por SSH | NOT_EXECUTED_BY_POLICY |
 | P7-INT-001 | HIGH | R2 | Último `app:production-check` remoto documentado falhou em R2; nenhuma prova live nova foi executada | Upload/presign/delete reais não podem ser certificados | Configuração efetiva e bucket/prefixo de teste autorizado; depois smoke não destrutivo | production-check + testes R2 controlados | BLOCKED_BY_CONFIG/SECRET |
 | P7-INT-002 | HIGH | Google OAuth | Último `app:production-check` remoto documentado falhou em OAuth; nenhuma prova E2E nova foi executada | Login, callback e revogação não podem ser certificados | Publicar o código Google, configurar credenciais no ambiente e aprovar o redirect URI | fluxo OAuth real sem replay | BLOCKED_BY_CONFIG/SECRET |
 | P7-EXT-003 | MEDIUM | Cloudflare | HTTPS/DNS passaram na sonda atual, mas proxy e tráfego proxied não foram exercitados | Full strict/proxy e trusted proxy real não podem ser provados | Configurar Full strict e validar requests proxied/spoof após autorização | requests proxied e spoof tests | NOT_VERIFIED_EXTERNAL |

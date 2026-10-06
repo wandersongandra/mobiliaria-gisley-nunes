@@ -159,10 +159,12 @@ class AdminCrmController extends Controller
         $status = $request->validate([
             'status' => ['required', 'string', Rule::in(CrmService::LEAD_STATUSES)],
         ])['status'];
-        if (! $this->crm->updateLeadStatus($id, $status)) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-        $this->audit($this->admin($request), 'lead.status', 'lead', $id, ['status' => $status]);
+        $admin = $this->admin($request);
+        $this->criticalAudit->run($admin, 'lead.status', 'lead', $id, function () use ($id, $status): void {
+            if (! $this->crm->updateLeadStatus($id, $status)) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+        }, ['status' => $status]);
 
         return response()->json(['ok' => true]);
     }
@@ -219,10 +221,12 @@ class AdminCrmController extends Controller
     public function deleteLead(Request $request, string $id)
     {
         $this->assertId($id);
-        if (! $this->crm->deleteLead($id)) {
-            return response()->json(['error' => 'NOT_FOUND'], 404);
-        }
-        $this->audit($this->admin($request), 'lead.delete', 'lead', $id, [
+        $admin = $this->admin($request);
+        $this->criticalAudit->run($admin, 'lead.delete', 'lead', $id, function () use ($id): void {
+            if (! $this->crm->deleteLead($id)) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+        }, [
             'reason' => 'privacy_or_admin_request',
         ]);
 

@@ -30,9 +30,9 @@ class SecurityHeaders
             "script-src 'self' 'nonce-{$nonce}'; ".
             "style-src 'self' https://fonts.googleapis.com; ".
             "font-src 'self' https://fonts.gstatic.com data:; ".
-            "img-src 'self' https: data: blob:; ".
+            "img-src 'self' https://images.unsplash.com https://*.r2.cloudflarestorage.com data: blob:; ".
             "connect-src 'self' https://*.r2.cloudflarestorage.com; ".
-            "media-src 'self' https:; upgrade-insecure-requests"
+            "media-src 'self' https://*.r2.cloudflarestorage.com; upgrade-insecure-requests"
         );
 
         if ($request->is('api/admin*') || $request->is('api/auth*') || $request->is('admin*')) {

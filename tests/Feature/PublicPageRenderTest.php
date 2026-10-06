@@ -68,6 +68,23 @@ class PublicPageRenderTest extends TestCase
             ->assertHeader('Strict-Transport-Security', 'max-age=31536000');
     }
 
+    public function test_csp_media_sources_use_the_explicit_asset_allowlist(): void
+    {
+        $response = $this->get('/');
+        $csp = (string) $response->headers->get('Content-Security-Policy');
+
+        $this->assertStringContainsString(
+            "img-src 'self' https://images.unsplash.com https://*.r2.cloudflarestorage.com data: blob:",
+            $csp
+        );
+        $this->assertStringContainsString(
+            "media-src 'self' https://*.r2.cloudflarestorage.com",
+            $csp
+        );
+        $this->assertStringNotContainsString("img-src 'self' https: data:", $csp);
+        $this->assertStringNotContainsString("media-src 'self' https:;", $csp);
+    }
+
     public function test_published_property_page_renders_and_embeds_its_json_payload(): void
     {
         $property = $this->publishPropertyWithCover();

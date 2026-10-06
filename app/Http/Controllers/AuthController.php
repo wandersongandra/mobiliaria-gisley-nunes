@@ -11,7 +11,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -170,11 +169,22 @@ class AuthController extends Controller
             ]);
         }
 
-        $admin = $this->access->establish($request, $identity + [
-            'provider' => (string) config('services.google_oauth.provider', 'google'),
-            'providerSubject' => $identity['openId'],
-        ], $role);
-        $this->auditAuthentication($admin, 'auth.login');
+        try {
+            $admin = $this->access->establish($request, $identity + [
+                'provider' => (string) config('services.google_oauth.provider', 'google'),
+                'providerSubject' => $identity['openId'],
+            ], $role);
+            $this->auditAuthentication($admin, 'auth.login');
+        } catch (\Throwable $error) {
+            try {
+                $this->access->revokeCurrent($request);
+            } catch (\Throwable $revokeError) {
+                report($revokeError);
+            }
+            report($error);
+
+            return response('Não foi possível concluir o acesso. Tente novamente.', 503);
+        }
 
         return redirect()->to($origin.'/admin', 303);
     }
@@ -201,9 +211,19 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         $admin = $this->access->current($request);
-        $this->access->revokeCurrent($request);
-        if ($admin) {
-            $this->auditAuthentication($admin, 'auth.logout');
+        try {
+            $this->access->revokeCurrent($request);
+            if ($admin) {
+                $this->auditAuthentication($admin, 'auth.logout');
+            }
+        } catch (\Throwable $error) {
+            report($error);
+
+            return response()->json([
+                'ok' => false,
+                'localLoggedOut' => true,
+                'error' => 'AUDIT_UNAVAILABLE',
+            ], 503);
         }
 
         return response()->json(['ok' => true]);
@@ -307,22 +327,15 @@ class AuthController extends Controller
     }
 
     /**
-     * Falhas na trilha não podem desfazer uma revogação de sessão já aplicada.
-     * Elas ficam visíveis em log sem incluir tokens, cookie, e-mail ou openId.
+     * A autenticação só é considerada concluída quando a trilha também foi
+     * persistida. O chamador revoga a sessão em caso de falha.
      *
      * @param  array<string, mixed>  $admin
      * @param  array<string, mixed>|null  $details
      */
     private function auditAuthentication(array $admin, string $action, ?array $details = null): void
     {
-        try {
-            $this->crm->recordAudit($admin, $action, 'admin_user', (string) $admin['openId'], $details);
-        } catch (\Throwable $error) {
-            Log::warning('audit.authentication_write_failed', [
-                'action' => $action,
-                'exception' => $error::class,
-            ]);
-        }
+        $this->crm->recordAudit($admin, $action, 'admin_user', (string) $admin['openId'], $details);
     }
 
     private function adminOrigin(Request $request): string

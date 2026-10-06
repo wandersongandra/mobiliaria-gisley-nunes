@@ -31,18 +31,16 @@ trait AdminRequestContext
     }
 
     /**
-     * Falha de auditoria não pode derrubar a operação que a originou.
+     * A operação chamadora deve ocorrer depois da auditoria ou dentro de
+     * CriticalAuditService. Uma falha aqui interrompe a resposta e evita
+     * liberar dados protegidos sem trilha registrada.
      *
      * @param  array<string, mixed>  $admin
      * @param  array<string, mixed>|null  $details
      */
     protected function audit(array $admin, string $action, string $type, ?string $id = null, ?array $details = null): void
     {
-        try {
-            $this->crm->recordAudit($admin, $action, $type, $id, $details);
-        } catch (\Throwable $error) {
-            report($error);
-        }
+        $this->crm->recordAudit($admin, $action, $type, $id, $details);
     }
 
     protected function assertId(string $id): string

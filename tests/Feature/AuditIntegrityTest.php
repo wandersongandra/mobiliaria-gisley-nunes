@@ -47,6 +47,37 @@ class AuditIntegrityTest extends TestCase
         $this->assertSame('Antes', DB::table('morada_site_settings')->where('id', 1)->value('area'));
     }
 
+    public function test_critical_mutation_derives_created_entity_id_and_details_after_mutation(): void
+    {
+        $crm = new class extends CrmService
+        {
+            public ?string $entityId = null;
+
+            /** @var array<string, mixed>|null */
+            public ?array $details = null;
+
+            public function recordAudit(array $admin, string $action, string $entityType, ?string $entityId = null, ?array $details = null): void
+            {
+                $this->entityId = $entityId;
+                $this->details = $details;
+            }
+        };
+        $critical = new CriticalAuditService($crm);
+
+        $result = $critical->run(
+            ['email' => 'manager@example.test', 'userId' => null],
+            'property.create',
+            'property',
+            null,
+            static fn (): array => ['id' => 'property-123', 'status' => 'draft'],
+            static fn (array $created): array => ['status' => $created['status']],
+        );
+
+        $this->assertSame('property-123', $crm->entityId);
+        $this->assertSame(['status' => 'draft'], $crm->details);
+        $this->assertSame('property-123', $result['id']);
+    }
+
     public function test_audit_log_accepts_inserts_but_rejects_updates_and_deletes(): void
     {
         $id = (string) Str::uuid();

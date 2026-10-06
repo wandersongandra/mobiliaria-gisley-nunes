@@ -1,13 +1,18 @@
 # Estado operacional atual — Gisley Nunes Imóveis
 
-Data da verificação: 2026-10-05 (America/Sao_Paulo)
+Data da verificação: 2026-10-06 (America/Sao_Paulo)
 
-Atualização desta continuação: uma sonda somente leitura executada em
-2026-10-05 confirmou DNS A para `@`, `www` e `painel` em `192.185.213.23`.
+Atualização desta continuação: o HEAD local e a origem da branch autorizada
+estão em `b147c616580ee497cafbe96bbc67dc741d6d8e28`. A remediação de
+segurança local foi validada nesta rodada; isso não confirma que o runtime
+público executa este SHA.
+
+Uma sonda somente leitura executada em 2026-10-05 confirmou DNS A para
+`@`, `www` e `painel` em `192.185.213.23`.
 `curl` sem `-k` retornou `HTTP 200`, `ssl=0` e o corpo exato
 `{"status":"ok"}` em `/health/live` e `/health/ready` no domínio público, e
 em `/health/live` no painel. Essa prova confirma o endpoint público observado,
-mas não confirma que ele já executa o SHA local `f104609`, nem R2/OAuth reais.
+mas não confirma que ele já executa o SHA local atual, nem R2/OAuth reais.
 
 Este é o documento canônico para a preparação de produção. Ele substitui
 instruções anteriores que apontem a origem HTTP para `192.185.176.183`.
@@ -17,13 +22,14 @@ instruções anteriores que apontem a origem HTTP para `192.185.176.183`.
 | Item | Valor | Estado |
 | --- | --- | --- |
 | Branch autorizada | `migration/laravel-backend-2026-10-02` | CONFIRMED |
-| SHA local/origin | `5a286fca8bccb473f12d5b1594ffe27e6c11b516` | CONFIRMED |
+| SHA local/origin | `b147c616580ee497cafbe96bbc67dc741d6d8e28` | CONFIRMED |
 | Origem HTTP HostGator | `192.185.213.23` | CONFIRMED |
 | SSH | `192.185.213.23:2222` / `gisley77` | CONFIRMED |
 | Projeto | `/home1/gisley77/repositories/mobiliaria-gisley-nunes` | CONFIRMED |
 | Document root | `/home1/gisley77/repositories/mobiliaria-gisley-nunes/public` | CONFIRMED |
 | Checkout atualmente observado no HostGator | `a808885c44ed875e472e3f8252a6376410cc7bae` | STALE; não coincide com origin |
 | Deploy automático | `HOSTGATOR_DEPLOY_ENABLED=false` | CONFIRMED |
+| Remediação de segurança local | auditoria fail-closed + CSP allowlist | CONFIRMED |
 
 O IP `192.185.176.183` está superseded. Não usar esse endereço em DNS,
 `--resolve`, documentação operacional ou deploy.

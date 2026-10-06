@@ -20,11 +20,16 @@ class CriticalAuditService
         string $entityType,
         ?string $entityId,
         Closure $mutation,
-        ?array $details = null,
+        array|Closure|null $details = null,
     ): mixed {
         return DB::transaction(function () use ($admin, $action, $entityType, $entityId, $mutation, $details): mixed {
             $result = $mutation();
-            $this->crm->recordAudit($admin, $action, $entityType, $entityId, $details);
+            $auditEntityId = $entityId;
+            if ($auditEntityId === null && is_array($result) && isset($result['id'])) {
+                $auditEntityId = (string) $result['id'];
+            }
+            $auditDetails = $details instanceof Closure ? $details($result) : $details;
+            $this->crm->recordAudit($admin, $action, $entityType, $auditEntityId, $auditDetails);
 
             return $result;
         });
