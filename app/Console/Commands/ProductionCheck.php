@@ -36,6 +36,7 @@ class ProductionCheck extends Command
             'OAuth configuration is present' => $this->configured([
                 'services.google_oauth.client_id', 'services.google_oauth.client_secret',
             ]),
+            'bootstrap identity is configured and valid' => $this->hasValidBootstrapIdentity(),
             'trusted proxy CIDRs are configured' => $this->hasValidTrustedProxies(),
         ];
 
@@ -102,6 +103,35 @@ class ProductionCheck extends Command
 
         foreach ($proxies as $proxy) {
             if (! is_string($proxy) || ! $this->isValidIpOrCidr($proxy)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function hasValidBootstrapIdentity(): bool
+    {
+        $openIds = config('gisley.admin.bootstrap_open_ids', []);
+        $emails = config('gisley.admin.bootstrap_emails', []);
+        if (! is_array($openIds) || ! is_array($emails)) {
+            return false;
+        }
+
+        $openIds = array_values(array_filter($openIds, 'is_string'));
+        $emails = array_values(array_filter($emails, 'is_string'));
+        if ($openIds === [] && $emails === []) {
+            return false;
+        }
+
+        foreach ($openIds as $openId) {
+            if (strlen($openId) > 191 || preg_match('/^\S+$/', $openId) !== 1) {
+                return false;
+            }
+        }
+
+        foreach ($emails as $email) {
+            if (strlen($email) > 255 || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
                 return false;
             }
         }

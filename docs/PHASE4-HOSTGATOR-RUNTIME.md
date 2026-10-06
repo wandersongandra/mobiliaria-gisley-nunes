@@ -6,6 +6,13 @@ Esta fase foi executada sem alteração de DNS externo e sem expor qualquer
 segredo. A migration foi aplicada somente na base dedicada do HostGator após
 autorização explícita.
 
+Atualização da continuação em 2026-10-05: sem alterar DNS ou runtime, uma sonda
+externa somente leitura confirmou `gisleynunesimoveis.com.br`, `www` e `painel`
+resolvendo para `192.185.213.23`. `curl` sem `-k` retornou `HTTP 200`, `ssl=0` e
+`{"status":"ok"}` nos health checks executados. As classificações históricas
+`BLOCKED` abaixo permanecem como snapshot da fase inicial; não foram usados para
+provar que o SHA público atual é o mesmo do checkout local.
+
 ## Resultado resumido
 
 | Controle | Estado | Evidência |

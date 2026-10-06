@@ -2,6 +2,13 @@
 
 Data da verificação: 2026-10-05 (America/Sao_Paulo)
 
+Atualização desta continuação: uma sonda somente leitura executada em
+2026-10-05 confirmou DNS A para `@`, `www` e `painel` em `192.185.213.23`.
+`curl` sem `-k` retornou `HTTP 200`, `ssl=0` e o corpo exato
+`{"status":"ok"}` em `/health/live` e `/health/ready` no domínio público, e
+em `/health/live` no painel. Essa prova confirma o endpoint público observado,
+mas não confirma que ele já executa o SHA local `f104609`, nem R2/OAuth reais.
+
 Este é o documento canônico para a preparação de produção. Ele substitui
 instruções anteriores que apontem a origem HTTP para `192.185.176.183`.
 
@@ -35,26 +42,17 @@ nameservers autoritativos retornaram:
 | --- | --- |
 | `gisleynunesimoveis.com.br` | A `192.185.213.23` |
 | `www.gisleynunesimoveis.com.br` | A `192.185.213.23` |
-| `painel.gisleynunesimoveis.com.br` | NXDOMAIN |
+| `painel.gisleynunesimoveis.com.br` | A `192.185.213.23` |
 
-Status DNS: `WAITING_PROPAGATION` / configuração incompleta para `painel`.
-Nenhum registro foi alterado nesta rodada.
+Status DNS observado: `PASS` nesta sonda. Nenhum registro foi alterado nesta
+rodada.
 
 ## HTTPS e AutoSSL
 
-HTTP para `@` e `www` chega ao Laravel. HTTPS sem `-k` falha com erro de
-principal incorreto. O certificado observado por SNI:
-
-- `@` e `www`: Let's Encrypt, mas SAN somente para o hostname temporário
-  `*.meusitehostgator.com.br` da conta;
-- `painel`: certificado wildcard `*.hostgator.com.br`.
-
-Nenhum dos certificados cobre os hostnames públicos do projeto. Status:
-`BLOCKED_AUTOSSL`.
-
-O teste com `-k` foi usado somente para diagnóstico; não é evidência de SSL
-válido. Os endpoints retornaram `{"status":"ok"}` nesse diagnóstico, mas a
-prova final precisa ser feita por HTTPS validado sem `-k`.
+Os três endpoints testados por HTTPS validado responderam `HTTP 200`, `ssl=0` e
+`{"status":"ok"}`. O snapshot anterior de certificado/DNS estava stale e não
+deve ser usado para classificar o estado atual desses hostnames. Isso ainda não
+prova que o checkout público coincide com o SHA local/origin atual.
 
 ## Aplicação e integrações
 
@@ -71,22 +69,27 @@ runtime carregado mantém configuração incompleta, R2 e OAuth reais continuam
 `BLOCKED`; nenhum upload, delete, login OAuth ou alteração de bucket foi
 executado.
 
+A troca de provider `manus -> google` não faz vínculo automático por e-mail.
+Identidades antigas precisam de re-vinculação controlada por convite/bootstrap;
+unir subjects de providers diferentes apenas porque o e-mail coincide seria uma
+quebra do contrato de identidade.
+
 ## Gates da rodada
 
 | Gate | Estado |
 | --- | --- |
-| DNS | WAITING |
-| SSL da origem | BLOCKED |
-| HTTPS sem `-k` | FAIL |
-| PHP web | NÃO VERIFICADO; versão/SAPI não foram expostos por `phpinfo` |
+| DNS | PASS (sonda atual) |
+| SSL da origem | PASS nos hostnames testados |
+| HTTPS sem `-k` | PASS nos checks executados |
+| PHP web | HEALTH PASS; versão/SAPI ainda não expostos |
 | R2 real | BLOCKED_BY_CONFIG/SECRET |
 | OAuth real | BLOCKED_BY_CONFIG/SECRET |
-| Health por HTTP | diagnóstico PASS |
-| Health público por HTTPS validado | BLOCKED |
+| Health por HTTP | PASS histórico |
+| Health público por HTTPS validado | PASS nos endpoints testados |
 | Cloudflare Full (strict) | BLOCKED |
 | Proxy Cloudflare | não ativado |
 | Trusted proxy real | não verificável sem tráfego proxied |
-| Frontend público real | BLOCKED pelo HTTPS/origem stale |
+| Frontend público real na versão atual | NÃO VERIFICADO; SHA público não confirmado |
 | Admin real | BLOCKED pelo OAuth |
 | CWV real | NOT VERIFIED |
 | Deploy automático | NOT ENABLED |
@@ -94,18 +97,12 @@ executado.
 
 ## Intervenções externas necessárias
 
-1. No Cloudflare DNS da zona `gisleynunesimoveis.com.br`, criar ou confirmar
-   `A painel -> 192.185.213.23`, mantendo DNS only durante o AutoSSL. Não usar
-   `192.185.176.183`.
-2. No cPanel/HostGator, executar ou solicitar AutoSSL para
-   `gisleynunesimoveis.com.br`, `www.gisleynunesimoveis.com.br` e
-   `painel.gisleynunesimoveis.com.br`, todos com o document root confirmado.
-3. Criar/configurar o cliente OAuth Web no Google Cloud com o callback
+1. Criar/configurar o cliente OAuth Web no Google Cloud com o callback
    `https://www.gisleynunesimoveis.com.br/api/auth/callback` e, sem enviar
    segredos pelo chat, preencher `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
    `GISELY_ADMIN_BOOTSTRAP_EMAILS` no `.env` remoto após o deploy do código.
-4. Somente depois do certificado válido, configurar Cloudflare como
+2. Configurar Cloudflare como
    `Full (strict)` e ativar proxy mediante autorização.
-5. Após uma janela de deploy autorizada, publicar o SHA da branch autorizada
+3. Após uma janela de deploy autorizada, publicar o SHA da branch autorizada
    pelo workflow gated. Não habilitar `HOSTGATOR_DEPLOY_ENABLED` antes de
    R2, OAuth, HTTPS e health público estarem verdes.

@@ -30,6 +30,8 @@ class ProductionCheckCommandTest extends TestCase
             'services.r2.secret_access_key' => 'not-printed-secret',
             'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
             'services.google_oauth.client_secret' => 'not-printed-secret',
+            'gisley.admin.bootstrap_open_ids' => ['bootstrap-open-id'],
+            'gisley.admin.bootstrap_emails' => [],
             'gisley.network.trusted_proxies' => ['203.0.113.0/24'],
         ]);
 
@@ -38,6 +40,19 @@ class ProductionCheckCommandTest extends TestCase
             ->expectsOutputToContain('Production configuration checks passed.')
             ->doesntExpectOutputToContain('not-printed-secret')
             ->assertSuccessful();
+    }
+
+    public function test_production_check_rejects_an_invalid_bootstrap_identity(): void
+    {
+        config([
+            'app.env' => 'production',
+            'gisley.admin.bootstrap_open_ids' => [],
+            'gisley.admin.bootstrap_emails' => ['not-an-email'],
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] bootstrap identity is configured and valid')
+            ->assertFailed();
     }
 
     public function test_production_check_fails_closed_for_an_insecure_configuration(): void

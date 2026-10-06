@@ -56,3 +56,10 @@ test('produção exige identidade bootstrap explícita', () => {
 test('produção rejeita OpenID bootstrap inválido', () => {
   assert.equal(runConfig({ GISELY_ADMIN_OPEN_IDS: 'id com espaco' }), 'BOOTSTRAP_IDENTITY_INVALID');
 });
+
+test('produção rejeita e-mail bootstrap inválido', () => {
+  assert.equal(
+    runConfig({ GISELY_ADMIN_OPEN_IDS: '', GISELY_ADMIN_BOOTSTRAP_EMAILS: 'not-an-email' }),
+    'BOOTSTRAP_EMAIL_INVALID'
+  );
+});

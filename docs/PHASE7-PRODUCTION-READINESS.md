@@ -4,30 +4,31 @@ Data: 2026-10-05 (America/Sao_Paulo)
 
 ## Resumo executivo
 
-A origem HTTP correta foi confirmada como `192.185.213.23`. Os registros A de
-`@` e `www` já resolvem para esse IP em Cloudflare DNS, Google DNS e nos
-nameservers autoritativos. `painel` ainda retorna NXDOMAIN.
-
-A aplicação responde os health checks por HTTP e o diagnóstico HTTPS com
-`-k`, mas a validação HTTPS normal falha porque o certificado da origem não
-contém os hostnames públicos. O AutoSSL ainda é o blocker principal de
-origem. O checkout HostGator também está em `a808885c...`, atrás do SHA
-`5a286fca...` validado em local/origin; nenhum deploy foi executado.
+Uma sonda somente leitura de 2026-10-05 confirmou os três registros A em
+`192.185.213.23`. `curl` sem `-k` retornou `HTTP 200`, `ssl=0` e
+`{"status":"ok"}` em `/health/live` e `/health/ready` no domínio público e em
+`/health/live` no painel. O checkout público ainda não foi comparado nesta
+continuação com o SHA local `f104609`; portanto essa prova não é aprovação de
+deploy da versão atual.
 
 O `app:production-check` remoto falha em R2 e OAuth. Não foram feitos testes
 destrutivos em bucket, não foi iniciado login OAuth real e nenhum segredo foi
 impresso.
 
+A troca `manus -> google` também requer re-vinculação controlada das identidades
+administrativas existentes. O código não une providers distintos apenas por
+e-mail; essa operação deve ocorrer por convite/bootstrap explícito.
+
 ## Evidências e findings
 
 | ID | Severidade | Componente | Evidência | Risco | Correção | Teste | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| P7-EXT-001 | HIGH | DNS | `@`/`www` apontam para `192.185.213.23`; `painel` retorna NXDOMAIN | Admin e emissão do certificado de `painel` não podem ser validados | Criar/confirmar A `painel -> 192.185.213.23` no Cloudflare | `nslookup`, DoH Cloudflare/Google e consulta autoritativa | BLOCKED_EXTERNALLY |
-| P7-EXT-002 | HIGH | SSL/AutoSSL | HTTPS sem `-k` falha com `SEC_E_WRONG_PRINCIPAL`; SAN não contém domínios públicos | Não há cadeia confiável para produção nem base segura para Full strict | Emitir AutoSSL para os três hostnames | `curl` sem `-k` e inspeção SNI/SAN | BLOCKED_EXTERNALLY |
-| P7-REL-001 | HIGH | Release HostGator | checkout remoto `a808885c...` difere de local/origin `5a286fca...` | Origem pública não contém a versão validada da aplicação | Deploy gated autorizado do SHA imutável | `git rev-parse` por SSH | NOT_EXECUTED_BY_POLICY |
-| P7-INT-001 | HIGH | R2 | `app:production-check` remoto falha em R2; nenhum bucket de teste seguro foi autorizado | Upload/presign/delete reais não podem ser certificados | Configuração efetiva e bucket/prefixo de teste autorizado; depois smoke não destrutivo | production-check + testes R2 controlados | BLOCKED_BY_CONFIG/SECRET |
-| P7-INT-002 | HIGH | Google OAuth | `app:production-check` remoto falha em OAuth; checkout remoto anterior à troca de provedor | Login, callback e revogação não podem ser certificados | Publicar o código Google, configurar credenciais no ambiente e aprovar o redirect URI | fluxo OAuth real sem replay | BLOCKED_BY_CONFIG/SECRET |
-| P7-EXT-003 | MEDIUM | Cloudflare | origem não passa HTTPS validado; `painel` sem DNS | Full strict/proxy e trusted proxy real não podem ser provados | Corrigir DNS/AutoSSL e só então configurar Full strict | requests proxied e spoof tests | BLOCKED_EXTERNALLY |
+| P7-EXT-001 | HIGH | DNS | `@`, `www` e `painel` resolveram para `192.185.213.23` na sonda atual | Drift futuro ou resolver divergente ainda pode afetar a publicação | Manter registros e revalidar antes do deploy | `Resolve-DnsName` + `curl` | RESOLVED_CURRENT_PROBE |
+| P7-EXT-002 | HIGH | SSL/AutoSSL | Os três checks HTTPS passaram sem `-k`, com `ssl=0` | SHA/runtime e Full strict ainda não foram provados | Comparar checkout público e validar Cloudflare Full strict | `curl` sem `-k` | RESOLVED_CURRENT_PROBE |
+| P7-REL-001 | HIGH | Release HostGator | Último SSH documentado registrava checkout remoto stale; a sonda atual não comparou SHA público | Origem pública pode não conter a versão validada da aplicação | Deploy gated autorizado do SHA imutável e comparação por SSH | `git rev-parse` por SSH | NOT_EXECUTED_BY_POLICY |
+| P7-INT-001 | HIGH | R2 | Último `app:production-check` remoto documentado falhou em R2; nenhuma prova live nova foi executada | Upload/presign/delete reais não podem ser certificados | Configuração efetiva e bucket/prefixo de teste autorizado; depois smoke não destrutivo | production-check + testes R2 controlados | BLOCKED_BY_CONFIG/SECRET |
+| P7-INT-002 | HIGH | Google OAuth | Último `app:production-check` remoto documentado falhou em OAuth; nenhuma prova E2E nova foi executada | Login, callback e revogação não podem ser certificados | Publicar o código Google, configurar credenciais no ambiente e aprovar o redirect URI | fluxo OAuth real sem replay | BLOCKED_BY_CONFIG/SECRET |
+| P7-EXT-003 | MEDIUM | Cloudflare | HTTPS/DNS passaram na sonda atual, mas proxy e tráfego proxied não foram exercitados | Full strict/proxy e trusted proxy real não podem ser provados | Configurar Full strict e validar requests proxied/spoof após autorização | requests proxied e spoof tests | NOT_VERIFIED_EXTERNAL |
 | P7-OPS-001 | MEDIUM | Deploy | `HOSTGATOR_DEPLOY_ENABLED=false` | Evita publicação acidental, mas mantém entrega manual pendente | Habilitar apenas após todos os gates e autorização explícita | revisão do workflow gated | NOT_ENABLED |
 
 ## DNS, SSL e canonical
@@ -38,19 +39,17 @@ Estado observado:
 
 - `gisleynunesimoveis.com.br` -> `192.185.213.23`;
 - `www.gisleynunesimoveis.com.br` -> `192.185.213.23`;
-- `painel.gisleynunesimoveis.com.br` -> NXDOMAIN.
+- `painel.gisleynunesimoveis.com.br` -> `192.185.213.23`.
 
-HTTP não foi tratado como prova final de canonical HTTPS. Cloudflare está
-DNS only no período de origem/AutoSSL e não foi alterado nesta rodada. Full
-(strict), proxy e redirects finais permanecem bloqueados até o certificado
-correto existir.
+Os checks HTTPS atuais passaram sem `-k`. Cloudflare Full (strict), proxy,
+redirects finais e o SHA público permanecem não verificados nesta rodada.
 
 ## PHP web e health
 
-O endpoint HTTP respondeu Laravel e os dois endpoints retornaram exatamente
-`{"status":"ok"}`. Isso confirma o caminho HTTP da aplicação, não confirma
-PHP_VERSION/SAPI do web worker nem health público HTTPS confiável. Nenhum
-`phpinfo()` foi criado ou exposto.
+Os endpoints públicos testados retornaram exatamente `{"status":"ok"}` por
+HTTPS validado (`ssl=0`). Isso confirma o caminho observado da aplicação, não
+confirma PHP_VERSION/SAPI nem que o runtime público corresponde ao SHA local.
+Nenhum `phpinfo()` foi criado ou exposto.
 
 ## R2 e OAuth
 
@@ -91,16 +90,16 @@ o workflow continua inativo.
 ## Status final
 
 ```text
-DNS: WAITING
-SSL ORIGIN: BLOCKED
-HTTPS: FAIL
-PHP WEB: FAIL / NOT VERIFIED
+DNS: PASS (sonda atual)
+SSL ORIGIN: PASS (hostnames testados)
+HTTPS: PASS (endpoints testados)
+PHP WEB: HEALTH PASS / SAPI NOT VERIFIED
 R2: BLOCKED
 OAUTH: BLOCKED
 TRUSTED PROXY REAL: BLOCKED
 PRODUCTION CHECK: FAIL
-HEALTH LIVE: BLOCKED (HTTP diagnóstico PASS; HTTPS validado pendente)
-HEALTH READY: BLOCKED (HTTP diagnóstico PASS; HTTPS validado pendente)
+HEALTH LIVE: PASS (endpoints testados)
+HEALTH READY: PASS (endpoint público testado)
 CLOUDFLARE FULL STRICT: BLOCKED
 FRONTEND REAL: BLOCKED
 ADMIN REAL: BLOCKED
@@ -111,8 +110,6 @@ PRODUCTION READINESS: FAIL
 
 ## Intervenções ainda necessárias
 
-- Cloudflare DNS: `A painel -> 192.185.213.23`, DNS only durante AutoSSL.
-- cPanel/HostGator: AutoSSL para `@`, `www` e `painel`.
 - Ambiente seguro de R2 e configuração efetiva, sem enviar segredo pelo chat.
 - Cliente OAuth Web do Google Cloud configurado com o callback exato
   `https://www.gisleynunesimoveis.com.br/api/auth/callback`, seguido de

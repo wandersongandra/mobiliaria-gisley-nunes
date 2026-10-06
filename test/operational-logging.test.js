@@ -17,7 +17,8 @@ test('logs operacionais não incluem mensagens ou stack traces não classificado
 test('logs preservam códigos técnicos explicitamente permitidos e neutralizam eventos desconhecidos', () => {
   const entries = [];
   logOperationalError((entry) => entries.push(entry), 'api.error', Object.assign(new Error('unsafe'), { code: 'ER_LOCK_DEADLOCK' }));
+  logOperationalError((entry) => entries.push(entry), 'startup.failed', Object.assign(new Error('unsafe'), { code: 'BOOTSTRAP_EMAIL_INVALID' }));
   logOperationalError((entry) => entries.push(entry), '[api] injected secret', new Error('unsafe'));
 
-  assert.deepEqual(entries, ['[api.error] ER_LOCK_DEADLOCK', '[startup.failed] UNCLASSIFIED']);
+  assert.deepEqual(entries, ['[api.error] ER_LOCK_DEADLOCK', '[startup.failed] BOOTSTRAP_EMAIL_INVALID', '[startup.failed] UNCLASSIFIED']);
 });
