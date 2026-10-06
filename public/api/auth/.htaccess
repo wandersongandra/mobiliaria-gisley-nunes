@@ -1,0 +1,6 @@
+<IfModule mod_security2.c>
+    # Google OAuth legitimately returns absolute URLs in `iss` and `scope`.
+    # Keep ModSecurity enabled and exclude only those callback parameters from
+    # Atomicorp rule 340162 in this authentication path.
+    SecRuleUpdateTargetById 340162 "!ARGS:iss,!ARGS:scope"
+</IfModule>
