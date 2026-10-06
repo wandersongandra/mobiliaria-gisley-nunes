@@ -57,7 +57,7 @@ Configure no `.env`, fora do Document Root e sem versionar credenciais:
   verificados autorizados no primeiro bootstrap.
 
   O callback cadastrado no Google Cloud deve ser exatamente
-  `https://www.gisleynunesimoveis.com.br/api/auth/callback`.
+  `https://painel.gisleynunesimoveis.com.br/api/auth/callback`.
 
 Use `.env.example` como referência, nunca como fonte de credenciais de produção. Gere `APP_KEY` uma vez e preserve-a entre releases.
 

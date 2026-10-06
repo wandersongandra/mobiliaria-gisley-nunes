@@ -125,7 +125,7 @@ variables, host key estrita e não usa autenticação por senha.
 2. Cadastrar no `.env` remoto os secrets reais do R2 e OAuth diretamente no
    servidor. Não enviar esses valores pelo chat.
 3. Criar um cliente OAuth Web no Google Cloud, cadastrar o redirect URI
-   exato `https://www.gisleynunesimoveis.com.br/api/auth/callback` e preencher
+   exato `https://painel.gisleynunesimoveis.com.br/api/auth/callback` e preencher
    no `.env` remoto `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Para o
    primeiro gestor, preencher também `GISELY_ADMIN_BOOTSTRAP_EMAILS` com o
    e-mail Google verificado exato. Não enviar esses valores pelo chat.

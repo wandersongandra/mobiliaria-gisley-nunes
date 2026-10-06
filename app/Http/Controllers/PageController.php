@@ -25,11 +25,26 @@ class PageController extends Controller
 
     public function home(Request $request)
     {
+        if ($this->isAdminOriginRequest($request)) {
+            return redirect('/admin/', 302);
+        }
+
         return view('home', $this->pageData(
             'Imóveis em Belo Horizonte e região | Gisley Nunes',
             'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
             '/'
         ));
+    }
+
+    private function isAdminOriginRequest(Request $request): bool
+    {
+        $publicHost = parse_url((string) config('app.url'), PHP_URL_HOST);
+        $adminHost = parse_url((string) config('app.admin_url'), PHP_URL_HOST);
+
+        return is_string($publicHost)
+            && is_string($adminHost)
+            && strcasecmp($publicHost, $adminHost) !== 0
+            && strcasecmp($request->getHost(), $adminHost) === 0;
     }
 
     public function imoveis(Request $request)

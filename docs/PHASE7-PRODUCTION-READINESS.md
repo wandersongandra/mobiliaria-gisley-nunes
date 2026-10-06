@@ -112,7 +112,7 @@ PRODUCTION READINESS: FAIL
 
 - Ambiente seguro de R2 e configuração efetiva, sem enviar segredo pelo chat.
 - Cliente OAuth Web do Google Cloud configurado com o callback exato
-  `https://www.gisleynunesimoveis.com.br/api/auth/callback`, seguido de
+  `https://painel.gisleynunesimoveis.com.br/api/auth/callback`, seguido de
   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
   `GISELY_ADMIN_BOOTSTRAP_EMAILS` no ambiente remoto.
 - Janela de deploy explicitamente autorizada para publicar o SHA atual.

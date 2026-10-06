@@ -98,7 +98,7 @@ quebra do contrato de identidade.
 ## Intervenções externas necessárias
 
 1. Criar/configurar o cliente OAuth Web no Google Cloud com o callback
-   `https://www.gisleynunesimoveis.com.br/api/auth/callback` e, sem enviar
+   `https://painel.gisleynunesimoveis.com.br/api/auth/callback` e, sem enviar
    segredos pelo chat, preencher `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
    `GISELY_ADMIN_BOOTSTRAP_EMAILS` no `.env` remoto após o deploy do código.
 2. Configurar Cloudflare como
