@@ -129,6 +129,12 @@ jobs:
       - name: Build Cloudflare design preview
         run: pnpm build:preview
 
+      - name: Install Chromium for browser smoke
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Frontend browser smoke
+        run: pnpm test:browser
+
       - name: Frontend tests
         run: pnpm test
 

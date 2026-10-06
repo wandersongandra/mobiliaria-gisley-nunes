@@ -74,6 +74,12 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
 .search-button:hover{background:#b66f49}
 .filter-chip{border-radius:999px;background:var(--surface);padding:6px 10px}
 
+/* Keep the empty catalog state readable when it includes a contact action. */
+.empty-state{display:flex;align-items:center;justify-content:center;gap:12px 18px;flex-wrap:wrap}
+.empty-state[hidden]{display:none}
+.empty-state-message{flex-basis:100%}
+.empty-state-action{margin-top:2px}
+
 /* Section headings */
 .section{padding-bottom:142px}
 .section-heading{margin-bottom:52px}
@@ -857,7 +863,7 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
   to{opacity:1;clip-path:inset(0)}
 }
 @keyframes hero-meta-in{
-  from{opacity:0;clip-path:inset(0 100% 0 0);transform:translateY(8px)}
+  from{opacity:1;clip-path:inset(0 100% 0 0);transform:translateY(8px)}
   to{opacity:1;clip-path:inset(0);transform:none}
 }
 @keyframes hero-visual-in{
@@ -1007,7 +1013,7 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
 }
 
 /* Paleta de texto validada contra as superfícies claras do design. */
-:root{--copper:#8f523b;--muted:#607477}
+:root{--copper:#8f523b;--muted:#536668}
 .site-footer{--copper:#d89569}
 .field span,.contact-form label{color:#536668}
 .listing-count,.filter-summary,.listing-meta,.catalog-pagination{color:#536668}

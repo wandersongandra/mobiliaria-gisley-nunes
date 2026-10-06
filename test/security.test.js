@@ -533,6 +533,31 @@ test('CSP não permite unsafe-inline unsafe-eval nem atributos script', () => {
 });
 
 
+test('HMR só relaxa CSP com opt-in de desenvolvimento', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const script = `
+    const { securityHeaders } = await import('./server/security.js');
+    const headers = {};
+    const res = { locals:{}, setHeader(k,v){ headers[String(k).toLowerCase()] = String(v); } };
+    securityHeaders({ headers:{}, get(){ return ''; } }, res, () => {});
+    process.stdout.write(JSON.stringify(headers));
+  `;
+  const run = (env) => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: process.cwd(),
+    env: { ...process.env, ...env },
+    encoding: 'utf8'
+  }));
+
+  const developmentCsp = run({ NODE_ENV: 'development', GISELY_DEV_HMR_CSP: 'true' })['content-security-policy'];
+  assert.match(developmentCsp, /style-src .*'unsafe-inline'/);
+  assert.match(developmentCsp, /connect-src .*ws:/);
+
+  const productionCsp = run({ NODE_ENV: 'production', GISELY_DEV_HMR_CSP: 'true' })['content-security-policy'];
+  assert.equal(productionCsp.includes("'unsafe-inline'"), false);
+  assert.equal(productionCsp.includes('ws:'), false);
+});
+
+
 test('headers defensivos básicos são emitidos em todas as respostas', () => {
   const req = { headers: {}, get() { return ''; } };
   const headers = new Map();

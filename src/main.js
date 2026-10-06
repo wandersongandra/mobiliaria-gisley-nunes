@@ -171,15 +171,19 @@ function initListing() {
   let pagination = { current_page: 1, last_page: 1, total: 0 };
   let facetsInitialized = false;
 
+  function activeFilterLabels() {
+    return [
+      filters.purpose?.value !== 'all' && filters.purpose?.options[filters.purpose.selectedIndex]?.text,
+      filters.location?.value !== 'all' && filters.location?.options[filters.location.selectedIndex]?.text,
+      filters.type?.value !== 'all' && filters.type?.options[filters.type.selectedIndex]?.text,
+      filters.price?.value !== 'all' && filters.price?.options[filters.price.selectedIndex]?.text,
+      filters.bedrooms?.value !== 'all' && filters.bedrooms?.options[filters.bedrooms.selectedIndex]?.text
+    ].filter(Boolean);
+  }
+
   function renderFilterSummary(resultCount) {
     if (!filterSummary) return;
-    const active = [
-      filters.purpose.value !== 'all' && filters.purpose.options[filters.purpose.selectedIndex].text,
-      filters.location.value !== 'all' && filters.location.options[filters.location.selectedIndex].text,
-      filters.type.value !== 'all' && filters.type.options[filters.type.selectedIndex].text,
-      filters.price.value !== 'all' && filters.price.options[filters.price.selectedIndex].text,
-      filters.bedrooms.value !== 'all' && filters.bedrooms.options[filters.bedrooms.selectedIndex].text
-    ].filter(Boolean);
+    const active = activeFilterLabels();
 
     filterSummary.innerHTML = active.length
       ? `<span><strong>${resultCount}</strong> ${resultCount === 1 ? 'imóvel encontrado' : 'imóveis encontrados'}</span><div class="active-filters">${active.map((label) => `<span class="filter-chip">${escapeHTML(label)}</span>`).join('')}<button type="button" id="clear-filters-inline">Limpar filtros</button></div>`
@@ -188,12 +192,27 @@ function initListing() {
     document.querySelector('#clear-filters-inline')?.addEventListener('click', clearFilters);
   }
 
+  function renderEmptyState(hasItems) {
+    if (!empty) return;
+    if (hasItems) {
+      empty.hidden = true;
+      return;
+    }
+
+    const active = activeFilterLabels();
+    empty.hidden = false;
+    empty.innerHTML = active.length
+      ? '<span class="empty-state-message">Não encontramos um imóvel com esses filtros.</span> <button type="button" id="clear-filters">Limpar filtros</button>'
+      : '<span class="empty-state-message">Ainda não há imóveis publicados. Fale com a equipe para contar o que você procura.</span> <a class="button button-primary empty-state-action" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a>';
+    empty.querySelector('#clear-filters')?.addEventListener('click', clearFilters);
+  }
+
   function renderListings(items = catalog) {
     const visibleItems = isHome ? items.slice(0, 6) : items;
     grid.innerHTML = visibleItems.map((item, index) => listingCard(item, index)).join('');
     activateListingCards(grid);
     if (count) count.textContent = String(pagination.total).padStart(2, '0');
-    if (empty) empty.hidden = items.length > 0;
+    renderEmptyState(items.length > 0);
     renderFilterSummary(pagination.total);
     renderPagination();
     form?.classList.remove('has-pending-filters');
@@ -220,6 +239,26 @@ function initListing() {
     const types = Array.isArray(facets?.types) ? facets.types : [];
     fillSelect(filters.location, locations.map((value) => ({ value, label: String(value).split(' · ')[0] })), 'Todos os bairros', filters.location?.value || 'all');
     fillSelect(filters.type, types, 'Todos os tipos', filters.type?.value || 'all');
+  }
+
+  function filterStaticPreview(items) {
+    if (document.body.dataset.preview !== 'static') return items;
+
+    return items.filter((item) => {
+      const property = normalizeProperty(item);
+      const purpose = filters.purpose?.value || 'all';
+      const location = filters.location?.value || 'all';
+      const type = filters.type?.value || 'all';
+      const price = filters.price?.value || 'all';
+      const bedrooms = filters.bedrooms?.value || 'all';
+
+      return (purpose === 'all' || property.purpose === purpose)
+        && (location === 'all' || property.location === location)
+        && (type === 'all' || property.type === type)
+        && (price === 'all' || String(property.priceValue) === price)
+        && (bedrooms === 'all'
+          || (bedrooms === '4+' ? property.bedrooms >= 4 : String(property.bedrooms) === bedrooms));
+    });
   }
 
   function updatePriceOptions(selected = filters.price?.value || 'all') {
@@ -307,12 +346,24 @@ function initListing() {
     try {
       grid.setAttribute('aria-busy', 'true');
       grid.innerHTML = listingSkeletons(document.body.dataset.page === 'home' ? 6 : 6);
+      if (empty) empty.hidden = true;
       const params = queryForPage(page);
       const response = await fetch(`/api/v2/properties?${params.toString()}`, { headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error('LOAD_FAILED');
       const payload = await response.json();
-      catalog = Array.isArray(payload?.properties) ? payload.properties.map(normalizeProperty) : [];
+      const rawProperties = Array.isArray(payload?.properties) ? payload.properties : [];
+      catalog = filterStaticPreview(rawProperties).map(normalizeProperty);
       pagination = payload?.pagination || pagination;
+      if (document.body.dataset.preview === 'static') {
+        pagination = {
+          ...pagination,
+          current_page: 1,
+          last_page: 1,
+          total: catalog.length,
+          from: catalog.length ? 1 : null,
+          to: catalog.length || null
+        };
+      }
       if (!facetsInitialized) {
         populateFilterOptions(payload?.facets);
         updatePriceOptions();

@@ -64,6 +64,7 @@ pnpm install --frozen-lockfile
 pnpm build
 pnpm test:source
 pnpm build:preview
+pnpm test:browser
 pnpm test
 ```
 
@@ -71,6 +72,22 @@ pnpm test
 manifesto Vite com `public/assets`. O workflow de CI executa esse guard após o
 build. O resultado esperado é nenhuma diferença inesperada no `git diff` dos
 artefatos gerados.
+
+`pnpm test:browser` sobe um servidor estático isolado sobre `dist-preview` e
+valida responsividade, overflow horizontal, axe, teclado, menu mobile,
+filtros, galeria, reduced motion e a página 404. O teste não substitui a
+validação do runtime Laravel nem a medição de Core Web Vitals em ambiente
+publicado.
+
+O CSP permanece estrito por padrão também fora de produção. Se uma sessão
+local usar Vite HMR, a exceção deve ser opt-in e limitada ao desenvolvimento:
+
+```text
+$env:GISELY_DEV_HMR_CSP = 'true'
+```
+
+Esse modo adiciona somente as origens locais e websocket necessárias ao HMR e
+`style-src 'unsafe-inline'`; não deve ser habilitado em produção.
 
 Alterações futuras devem seguir esta sequência:
 

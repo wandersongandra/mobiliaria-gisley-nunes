@@ -1,5 +1,5 @@
 <%- include('partials/head') %>
-  <body data-page="imoveis">
+  <body data-page="imoveis" data-preview="static">
     <%- include('partials/header') %>
     <main id="conteudo">
       <section class="page-hero shell catalog-hero">
@@ -29,7 +29,7 @@
       <section class="section shell listings-section catalog-results" id="imoveis" aria-labelledby="listings-title">
         <div class="catalog-results-head"><p class="eyebrow">imóveis disponíveis</p><span>Use os filtros para comparar opções em <%= site.area %>.</span></div>
         <div class="listing-grid" id="listing-grid"></div>
-        <p class="empty-state" id="empty-state" hidden>Não encontramos um imóvel com esses filtros. <button type="button" id="clear-filters">Limpar filtros</button></p>
+        <div class="empty-state" id="empty-state" hidden></div>
         <nav class="catalog-pagination" id="catalog-pagination" aria-label="Paginação do catálogo" hidden><button id="catalog-page-previous" type="button">Anterior</button><span id="catalog-pagination-label" aria-live="polite"></span><button id="catalog-page-next" type="button">Próxima</button></nav>
       </section>
     </main>

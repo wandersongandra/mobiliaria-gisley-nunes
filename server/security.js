@@ -202,11 +202,16 @@ export function securityHeaders(req, res, next) {
   const imageSources = ["'self'", 'data:', 'blob:'];
   const connectSources = ["'self'"];
   const mediaSources = ["'self'"];
+  const styleSources = ["'self'", 'https://fonts.googleapis.com'];
+  const allowDevHmrCsp = !isProduction && process.env.GISELY_DEV_HMR_CSP === 'true';
 
   if (!isProduction) {
     imageSources.push('https:');
-    connectSources.push('https:');
     mediaSources.push('https:');
+    if (allowDevHmrCsp) {
+      connectSources.push('https:', 'ws:', 'http://localhost:*', 'http://127.0.0.1:*');
+      styleSources.push("'unsafe-inline'");
+    }
   } else {
     imageSources.push('https://images.unsplash.com');
     if (hasR2Storage()) {
@@ -228,7 +233,7 @@ export function securityHeaders(req, res, next) {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
     "script-src-attr 'none'",
-    "style-src 'self' https://fonts.googleapis.com",
+    `style-src ${styleSources.join(' ')}`,
     "font-src 'self' https://fonts.gstatic.com data:",
     `img-src ${[...new Set(imageSources)].join(' ')}`,
     `connect-src ${[...new Set(connectSources)].join(' ')}`,
