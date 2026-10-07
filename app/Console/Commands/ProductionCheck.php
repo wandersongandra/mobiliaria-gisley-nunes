@@ -67,12 +67,16 @@ class ProductionCheck extends Command
     {
         $public = $this->canonicalOrigin((string) config('app.url'));
         $admin = $this->canonicalOrigin((string) config('app.admin_url'));
+        $publicHost = strtolower((string) parse_url((string) config('app.url'), PHP_URL_HOST));
+        $adminHost = strtolower((string) parse_url((string) config('app.admin_url'), PHP_URL_HOST));
 
         return $public !== null
             && $admin !== null
             && str_starts_with($public, 'https://')
             && str_starts_with($admin, 'https://')
-            && ! hash_equals($public, $admin);
+            && $publicHost !== ''
+            && $adminHost !== ''
+            && ! hash_equals($publicHost, $adminHost);
     }
 
     private function hasSecureOAuthConfiguration(): bool
