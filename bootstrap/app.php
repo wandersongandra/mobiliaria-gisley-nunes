@@ -3,10 +3,10 @@
 use App\Http\Middleware\ConfigureTrustedProxies;
 use App\Http\Middleware\LimitRequestBody;
 use App\Http\Middleware\RequestContext;
-use App\Http\Middleware\RequireAdminOrigin;
-use App\Http\Middleware\RequireKnownHost;
 use App\Http\Middleware\RequireAdmin;
+use App\Http\Middleware\RequireAdminOrigin;
 use App\Http\Middleware\RequireCapability;
+use App\Http\Middleware\RequireKnownHost;
 use App\Http\Middleware\RequireSameOrigin;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
