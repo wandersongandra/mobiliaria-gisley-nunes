@@ -662,10 +662,10 @@ class CrmService
                 ->delete();
 
             DB::table('morada_auth_challenges')->insert([
-            'state_hash' => $stateHash,
-            'redirect_uri' => $redirectUri,
-            'invitation_hash' => $invitationHash,
-            'expires_at_ms' => $expiresAtMs,
+                'state_hash' => $stateHash,
+                'redirect_uri' => $redirectUri,
+                'invitation_hash' => $invitationHash,
+                'expires_at_ms' => $expiresAtMs,
                 'created_at' => now(),
             ]);
         });
