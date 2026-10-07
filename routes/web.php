@@ -16,12 +16,16 @@ Route::get('/health/ready', [HealthController::class, 'ready']);
 
 Route::get('/', [PageController::class, 'home']);
 Route::get('/imoveis', [PageController::class, 'imoveis']);
+Route::redirect('/imoveis-a-venda', '/imoveis?purpose=Comprar', 301);
+Route::redirect('/imoveis-para-alugar', '/imoveis?purpose=Alugar', 301);
 Route::get('/servicos', [PageController::class, 'servicos']);
 Route::get('/bairros', [PageController::class, 'bairros']);
 Route::get('/bairros/{slug}', [PageController::class, 'bairro']);
 Route::get('/sobre', [PageController::class, 'sobre']);
 Route::get('/contato', [PageController::class, 'contato']);
 Route::get('/privacidade', [PageController::class, 'privacidade']);
+Route::redirect('/politica-de-privacidade', '/privacidade', 301);
+Route::redirect('/anuncie-seu-imovel', '/servicos', 301);
 Route::get('/imoveis/{slug}', [PageController::class, 'imovel']);
 
 Route::get('/robots.txt', [DiscoveryController::class, 'robots']);
@@ -118,5 +122,8 @@ Route::prefix('api/admin')
         Route::delete('/team/{email}', [AdminCrmController::class, 'removeTeamMember'])
             ->middleware(['capability:team.manage', 'throttle:destructive']);
     });
+
+Route::get('/{legacyPropertySlug}', [PageController::class, 'legacyProperty'])
+    ->where('legacyPropertySlug', '.*-cods-[0-9]+');
 
 Route::fallback([PageController::class, 'notFound']);
