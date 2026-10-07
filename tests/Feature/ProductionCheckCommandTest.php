@@ -70,6 +70,23 @@ class ProductionCheckCommandTest extends TestCase
             ->assertFailed();
     }
 
+    public function test_production_check_rejects_a_domain_scoped_admin_cookie(): void
+    {
+        config([
+            'app.env' => 'production',
+            'session.cookie' => '__Host-gisley_session',
+            'session.secure' => true,
+            'session.http_only' => true,
+            'session.path' => '/',
+            'session.domain' => '.example.test',
+            'session.same_site' => 'lax',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] session cookies are host-bound, secure and HttpOnly')
+            ->assertFailed();
+    }
+
     public function test_production_check_rejects_an_invalid_trusted_proxy_value(): void
     {
         config([
