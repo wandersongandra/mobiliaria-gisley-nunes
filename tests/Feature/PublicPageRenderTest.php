@@ -70,17 +70,20 @@ class PublicPageRenderTest extends TestCase
 
     public function test_csp_media_sources_use_the_explicit_asset_allowlist(): void
     {
+        config(['services.r2.account_id' => 'account123']);
+
         $response = $this->get('/');
         $csp = (string) $response->headers->get('Content-Security-Policy');
 
         $this->assertStringContainsString(
-            "img-src 'self' https://images.unsplash.com https://*.r2.cloudflarestorage.com data: blob:",
+            "img-src 'self' https://images.unsplash.com data: blob: https://account123.r2.cloudflarestorage.com",
             $csp
         );
         $this->assertStringContainsString(
-            "media-src 'self' https://*.r2.cloudflarestorage.com",
+            "media-src 'self' https://account123.r2.cloudflarestorage.com",
             $csp
         );
+        $this->assertStringNotContainsString('https://*.r2.cloudflarestorage.com', $csp);
         $this->assertStringNotContainsString("img-src 'self' https: data:", $csp);
         $this->assertStringNotContainsString("media-src 'self' https:;", $csp);
     }
