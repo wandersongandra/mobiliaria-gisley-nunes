@@ -35,7 +35,7 @@ class SecurityHeaders
             "media-src 'self' https://*.r2.cloudflarestorage.com; upgrade-insecure-requests"
         );
 
-        if ($request->is('api/admin*') || $request->is('api/auth*') || $request->is('admin*')) {
+        if ($request->is('api/admin*') || $request->is('api/auth*') || $request->is('oauth/google/return') || $request->is('admin*')) {
             $response->headers->set('Cache-Control', 'no-store, private');
             $response->headers->set('Pragma', 'no-cache');
         }
