@@ -59,50 +59,26 @@ class SecurityContractTest extends TestCase
         $path = '/api/admin/leads/'.$leadId;
 
         $this->withSession($session)
-            ->withServerVariables([
-                'HTTP_HOST' => 'test.local',
-                'SERVER_NAME' => 'test.local',
-                'HTTPS' => 'on',
-                'SERVER_PORT' => 443,
-            ])
             ->withHeaders(['X-CSRF-TOKEN' => 'csrf-contract-token'])
-            ->patchJson($path, ['status' => 'em_contato'])
+            ->patchJson('https://test.local'.$path, ['status' => 'em_contato'])
             ->assertForbidden()
             ->assertJson(['error' => 'ORIGIN_REQUIRED']);
 
         $this->withSession($session)
-            ->withServerVariables([
-                'HTTP_HOST' => 'test.local',
-                'SERVER_NAME' => 'test.local',
-                'HTTPS' => 'on',
-                'SERVER_PORT' => 443,
-            ])
             ->withHeaders(['Origin' => 'https://attacker.example', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
-            ->patchJson($path, ['status' => 'em_contato'])
+            ->patchJson('https://test.local'.$path, ['status' => 'em_contato'])
             ->assertForbidden()
             ->assertJson(['error' => 'INVALID_ORIGIN']);
 
         $csrfResponse = $this->withSession($session)
-            ->withServerVariables([
-                'HTTP_HOST' => 'test.local',
-                'SERVER_NAME' => 'test.local',
-                'HTTPS' => 'on',
-                'SERVER_PORT' => 443,
-            ])
             ->withHeaders(['Origin' => 'https://test.local', 'X-CSRF-TOKEN' => ''])
-            ->patchJson($path, ['status' => 'em_contato']);
+            ->patchJson('https://test.local'.$path, ['status' => 'em_contato']);
         $this->assertSame(419, $csrfResponse->status(), $csrfResponse->content());
         $csrfResponse->assertJson(['error' => 'CSRF_TOKEN_MISMATCH']);
 
         $this->withSession($session)
-            ->withServerVariables([
-                'HTTP_HOST' => 'test.local',
-                'SERVER_NAME' => 'test.local',
-                'HTTPS' => 'on',
-                'SERVER_PORT' => 443,
-            ])
             ->withHeaders(['Origin' => 'https://test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
-            ->patchJson($path, ['status' => 'em_contato'])
+            ->patchJson('https://test.local'.$path, ['status' => 'em_contato'])
             ->assertOk();
     }
 
@@ -113,17 +89,11 @@ class SecurityContractTest extends TestCase
         $leadId = $this->createLead();
 
         $this->withSession($session)
-            ->withServerVariables([
-                'HTTP_HOST' => 'test.local',
-                'SERVER_NAME' => 'test.local',
-                'HTTPS' => 'on',
-                'SERVER_PORT' => 443,
-            ])
             ->withHeaders([
                 'Origin' => 'https://test.local:8443',
                 'X-CSRF-TOKEN' => 'csrf-contract-token',
             ])
-            ->patchJson('/api/admin/leads/'.$leadId, ['status' => 'em_contato'])
+            ->patchJson('https://test.local/api/admin/leads/'.$leadId, ['status' => 'em_contato'])
             ->assertForbidden()
             ->assertJson(['error' => 'INVALID_ORIGIN']);
     }
