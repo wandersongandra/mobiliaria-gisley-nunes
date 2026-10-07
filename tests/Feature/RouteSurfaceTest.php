@@ -54,6 +54,7 @@ class RouteSurfaceTest extends TestCase
         'GET imoveis/{slug}',
         'GET llms.txt',
         'GET media/{path}',
+        'GET oauth/google/return',
         'GET privacidade',
         'GET robots.txt',
         'GET servicos',
