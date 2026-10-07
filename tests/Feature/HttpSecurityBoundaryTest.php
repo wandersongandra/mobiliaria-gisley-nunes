@@ -21,8 +21,12 @@ class HttpSecurityBoundaryTest extends TestCase
     {
         $this->app->instance('env', 'production');
 
-        $this->withHeaders(['Host' => 'unknown.example.test'])
-            ->get('/health/live')
+        $this->withServerVariables([
+            'HTTP_HOST' => 'unknown.example.test',
+            'SERVER_NAME' => 'unknown.example.test',
+            'HTTPS' => 'on',
+            'SERVER_PORT' => 443,
+        ])->get('/health/live')
             ->assertStatus(421)
             ->assertJson(['error' => 'MISDIRECTED_REQUEST']);
     }
@@ -31,8 +35,12 @@ class HttpSecurityBoundaryTest extends TestCase
     {
         $this->app->instance('env', 'production');
 
-        $this->withHeaders(['Host' => 'www.example.test'])
-            ->get('/admin')
+        $this->withServerVariables([
+            'HTTP_HOST' => 'www.example.test',
+            'SERVER_NAME' => 'www.example.test',
+            'HTTPS' => 'on',
+            'SERVER_PORT' => 443,
+        ])->get('/admin')
             ->assertStatus(307)
             ->assertRedirect('https://admin.example.test/admin');
     }
@@ -41,8 +49,12 @@ class HttpSecurityBoundaryTest extends TestCase
     {
         $this->app->instance('env', 'production');
 
-        $this->withHeaders(['Host' => 'www.example.test'])
-            ->getJson('/api/admin/session')
+        $this->withServerVariables([
+            'HTTP_HOST' => 'www.example.test',
+            'SERVER_NAME' => 'www.example.test',
+            'HTTPS' => 'on',
+            'SERVER_PORT' => 443,
+        ])->getJson('/api/admin/session')
             ->assertNotFound()
             ->assertJson(['error' => 'NOT_FOUND']);
     }
