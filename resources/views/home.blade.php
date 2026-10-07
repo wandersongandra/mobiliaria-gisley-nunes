@@ -38,7 +38,11 @@
 
       <section class="section shell listings-section home-listings" id="imoveis" aria-labelledby="listings-title">
         <div class="section-heading"><div><p class="eyebrow">imóveis disponíveis</p><h2 id="listings-title">Comprar ou alugar<br /><em>em Belo Horizonte.</em></h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
-        <div class="listing-grid" id="listing-grid"></div>
+        <div class="listing-grid" id="listing-grid">
+          @foreach($properties ?? [] as $index => $property)
+            @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
+          @endforeach
+        </div>
         <div class="empty-state" id="empty-state" hidden></div>
       </section>
 

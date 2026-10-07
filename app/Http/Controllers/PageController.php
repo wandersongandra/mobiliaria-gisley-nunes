@@ -29,11 +29,14 @@ class PageController extends Controller
             return redirect('/admin/', 302);
         }
 
-        return view('home', $this->pageData(
+        $data = $this->pageData(
             'Imóveis em Belo Horizonte e região | Gisley Nunes',
             'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
             '/'
-        ));
+        );
+        $data['properties'] = array_slice($this->properties->publicCatalog(), 0, 6);
+
+        return view('home', $data);
     }
 
     private function isAdminOriginRequest(Request $request): bool
@@ -49,11 +52,55 @@ class PageController extends Controller
 
     public function imoveis(Request $request)
     {
-        return view('imoveis', $this->pageData(
+        $page = max(1, min(100, $request->integer('page', 1)));
+        $catalog = $this->properties->paginatePublicProperties($page, 20, $this->catalogFilters($request));
+        $properties = collect($catalog->items())
+            ->map(fn (array $property): array => $this->properties->publicProperty($property))
+            ->all();
+
+        $data = $this->pageData(
             'Imóveis para comprar ou alugar em Belo Horizonte | Gisley Nunes',
             'Explore imóveis para comprar ou alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
-            '/imoveis'
-        ));
+            '/imoveis',
+            robots: $request->query->count() > 0 ? 'noindex,follow' : 'index,follow,max-image-preview:large'
+        );
+        $data['properties'] = $properties;
+        $data['catalogPagination'] = [
+            'currentPage' => $catalog->currentPage(),
+            'lastPage' => $catalog->lastPage(),
+            'total' => $catalog->total(),
+        ];
+
+        return view('imoveis', $data);
+    }
+
+    /** @return array<string, string|int> */
+    private function catalogFilters(Request $request): array
+    {
+        $filters = [];
+        $purpose = (string) $request->query('purpose', '');
+        $type = (string) $request->query('type', '');
+        $priceBand = (string) $request->query('price_band', $request->query('price', ''));
+        $bedrooms = (string) $request->query('bedrooms', '');
+        $location = trim((string) $request->query('location', ''));
+
+        if (in_array($purpose, ['Comprar', 'Alugar'], true)) {
+            $filters['purpose'] = $purpose;
+        }
+        if (in_array($type, ['Casa', 'Apartamento', 'Cobertura', 'Terreno', 'Comercial', 'Lote'], true)) {
+            $filters['type'] = $type;
+        }
+        if (in_array((string) $priceBand, ['1', '2', '3'], true)) {
+            $filters['price_band'] = (int) $priceBand;
+        }
+        if (in_array((string) $bedrooms, ['1', '2', '3', '4+'], true)) {
+            $filters['bedrooms'] = (string) $bedrooms;
+        }
+        if ($location !== '' && mb_strlen($location) <= 255) {
+            $filters['location'] = $location;
+        }
+
+        return $filters;
     }
 
     public function servicos(Request $request)

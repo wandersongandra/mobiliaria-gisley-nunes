@@ -2,7 +2,7 @@
   <body data-page="imovel">
     @include('partials.header')
     <main id="conteudo">
-      <div id="property-root" class="shell property-page"></div>
+      <div id="property-root" class="shell property-page">@include('partials.property-detail', ['property' => $property])</div>
       <section class="contact-section" id="contato" aria-labelledby="contact-title">
         <div class="shell contact-grid">
           <div><p class="eyebrow">interesse neste imóvel</p><h2 id="contact-title">Quer visitar<br /><em>este imóvel?</em></h2><p class="contact-copy">Envie seus dados para confirmar detalhes, disponibilidade e horário de visita.</p><div class="contact-details"><span>Atendimento em Belo Horizonte e região</span><a href="#contact-form">Enviar uma mensagem ↗</a></div></div>

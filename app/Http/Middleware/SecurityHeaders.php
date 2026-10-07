@@ -40,6 +40,10 @@ class SecurityHeaders
             $response->headers->set('Pragma', 'no-cache');
         }
 
+        if ($request->is('api*') || $request->is('admin*')) {
+            $response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        }
+
         if (app()->environment('production')) {
             // Não inclua subdomínios sem confirmar que todos eles usam HTTPS.
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000');

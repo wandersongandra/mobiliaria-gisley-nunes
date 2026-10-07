@@ -28,8 +28,19 @@
 
       <section class="section shell listings-section catalog-results" id="imoveis" aria-labelledby="listings-title">
         <div class="catalog-results-head"><p class="eyebrow">imóveis disponíveis</p><span>Use os filtros para comparar opções em {{ $site['area'] }}.</span></div>
-        <div class="listing-grid" id="listing-grid"></div>
+        <div class="listing-grid" id="listing-grid">
+          @foreach($properties ?? [] as $index => $property)
+            @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
+          @endforeach
+        </div>
         <div class="empty-state" id="empty-state" hidden></div>
+        @if(($catalogPagination['lastPage'] ?? 1) > 1)
+          <nav class="catalog-pagination catalog-pagination-ssr" data-ssr-pagination aria-label="Paginação do catálogo sem JavaScript">
+            @if(($catalogPagination['currentPage'] ?? 1) > 1)<a href="/imoveis?page={{ $catalogPagination['currentPage'] - 1 }}" rel="prev">Anterior</a>@endif
+            <span>Página {{ $catalogPagination['currentPage'] }} de {{ $catalogPagination['lastPage'] }}</span>
+            @if(($catalogPagination['currentPage'] ?? 1) < ($catalogPagination['lastPage'] ?? 1))<a href="/imoveis?page={{ $catalogPagination['currentPage'] + 1 }}" rel="next">Próxima</a>@endif
+          </nav>
+        @endif
         <nav class="catalog-pagination" id="catalog-pagination" aria-label="Paginação do catálogo" hidden><button id="catalog-page-previous" type="button">Anterior</button><span id="catalog-pagination-label" aria-live="polite"></span><button id="catalog-page-next" type="button">Próxima</button></nav>
       </section>
     </main>

@@ -93,8 +93,39 @@ class PublicPageRenderTest extends TestCase
 
         $response->assertOk();
         $response->assertSee($property['title']);
+        $response->assertSee('<h1>'.$property['title'].'</h1>', false);
+        $response->assertSee('property-description-copy', false);
         $response->assertSee('id="property-data"', false);
         $response->assertSee('"slug":"'.$property['slug'].'"', false);
+    }
+
+    public function test_published_properties_are_rendered_in_the_catalog_html(): void
+    {
+        $property = $this->publishPropertyWithCover();
+
+        $this->get('/imoveis')
+            ->assertOk()
+            ->assertSee($property['title'])
+            ->assertSee('/imoveis/'.rawurlencode($property['slug']), false)
+            ->assertSee('listing-card-server', false);
+    }
+
+    public function test_json_surfaces_are_not_indexable(): void
+    {
+        $this->get('/api/site')
+            ->assertOk()
+            ->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+
+        $this->get('/api/admin/session')
+            ->assertOk()
+            ->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    }
+
+    public function test_catalog_filter_urls_are_not_indexable(): void
+    {
+        $this->get('/imoveis?purpose=Alugar')
+            ->assertOk()
+            ->assertSee('<meta name="robots" content="noindex,follow" />', false);
     }
 
     public function test_neighborhood_page_renders_for_a_published_property(): void

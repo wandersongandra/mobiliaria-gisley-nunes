@@ -5,6 +5,21 @@ function escapeHTML(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]);
 }
 
+function trackEvent(name, params = {}) {
+  if (typeof window === 'undefined') return;
+  const payload = { ...params, page_path: window.location.pathname };
+
+  try {
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', name, payload);
+    } else if (Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({ event: name, ...payload });
+    }
+  } catch {
+    // A falha opcional de mensuração não pode interromper a navegação ou o formulário.
+  }
+}
+
 function priceBand(price, purpose = 'Comprar') {
   const value = Number(price || 0);
   if (purpose === 'Alugar') {
@@ -157,6 +172,7 @@ function initListing() {
   const form = document.querySelector('#search-form');
   const filterSummary = document.querySelector('#filter-summary');
   const paginationNode = document.querySelector('#catalog-pagination');
+  const ssrPagination = document.querySelector('[data-ssr-pagination]');
   const paginationLabel = document.querySelector('#catalog-pagination-label');
   const previousPage = document.querySelector('#catalog-page-previous');
   const nextPage = document.querySelector('#catalog-page-next');
@@ -183,6 +199,7 @@ function initListing() {
 
   function renderFilterSummary(resultCount) {
     if (!filterSummary) return;
+    filterSummary.removeAttribute('role');
     const active = activeFilterLabels();
 
     filterSummary.innerHTML = active.length
@@ -196,11 +213,15 @@ function initListing() {
     if (!empty) return;
     if (hasItems) {
       empty.hidden = true;
+      empty.removeAttribute('role');
+      empty.removeAttribute('aria-live');
       return;
     }
 
     const active = activeFilterLabels();
     empty.hidden = false;
+    empty.setAttribute('role', 'status');
+    empty.setAttribute('aria-live', 'polite');
     empty.innerHTML = active.length
       ? '<span class="empty-state-message">Não encontramos um imóvel com esses filtros.</span> <button type="button" id="clear-filters">Limpar filtros</button>'
       : '<span class="empty-state-message">Ainda não há imóveis publicados. Fale com a equipe para contar o que você procura.</span> <a class="button button-primary empty-state-action" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a>';
@@ -208,6 +229,7 @@ function initListing() {
   }
 
   function renderListings(items = catalog) {
+    ssrPagination?.setAttribute('hidden', '');
     const visibleItems = isHome ? items.slice(0, 6) : items;
     grid.innerHTML = visibleItems.map((item, index) => listingCard(item, index)).join('');
     activateListingCards(grid);
@@ -346,7 +368,11 @@ function initListing() {
     try {
       grid.setAttribute('aria-busy', 'true');
       grid.innerHTML = listingSkeletons(document.body.dataset.page === 'home' ? 6 : 6);
-      if (empty) empty.hidden = true;
+      if (empty) {
+        empty.hidden = true;
+        empty.removeAttribute('role');
+        empty.removeAttribute('aria-live');
+      }
       const params = queryForPage(page);
       const response = await fetch(`/api/v2/properties?${params.toString()}`, { headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error('LOAD_FAILED');
@@ -378,10 +404,18 @@ function initListing() {
       if (!isHome) history.replaceState(null, '', `/imoveis?${params.toString()}`);
       renderListings(catalog);
     } catch {
+      ssrPagination?.removeAttribute('hidden');
       grid.innerHTML = '';
       if (count) count.textContent = '00';
-      if (empty) empty.hidden = true;
+      if (empty) {
+        empty.hidden = false;
+        empty.setAttribute('role', 'alert');
+        empty.removeAttribute('aria-live');
+        empty.innerHTML = '<span class="empty-state-message">Não foi possível carregar os imóveis.</span> <button type="button" id="retry-properties-empty">Tentar novamente</button>';
+        empty.querySelector('#retry-properties-empty')?.addEventListener('click', () => loadProperties(page), { once: true });
+      }
       if (filterSummary) {
+        filterSummary.setAttribute('role', 'alert');
         filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis.</span><button type="button" id="retry-properties">Tentar novamente</button>';
         filterSummary.querySelector('#retry-properties')?.addEventListener('click', () => loadProperties(page), { once: true });
       }
@@ -426,6 +460,7 @@ function initContactForm() {
     form.dataset.state = 'sending';
     if (status) {
       status.dataset.state = 'sending';
+      status.setAttribute('aria-live', 'polite');
       status.textContent = 'Enviando sua mensagem';
     }
 
@@ -446,8 +481,12 @@ function initContactForm() {
       if (!response.ok) throw new Error('CONTACT_FAILED');
       form.reset();
       form.dataset.state = 'success';
+      trackEvent('generate_lead', {
+        interest: String(data.interest || '').slice(0, 100)
+      });
       if (status) {
         status.dataset.state = 'success';
+        status.setAttribute('aria-live', 'polite');
         status.textContent = 'Mensagem enviada. Retornaremos em breve.';
       }
     } catch {
@@ -456,6 +495,7 @@ function initContactForm() {
       form.dataset.state = 'error';
       if (status) {
         status.dataset.state = 'error';
+        status.setAttribute('aria-live', 'assertive');
         status.textContent = 'Não foi possível registrar a mensagem. ';
         if (whatsapp) {
           const link = document.createElement('a');
@@ -505,7 +545,7 @@ function renderPropertyDetail(property) {
 
   const gallery = photos.length ? `
     <div class="gallery-main">
-      <img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" fetchpriority="high" decoding="async" />
+      <img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" width="1600" height="1067" sizes="(max-width: 820px) 100vw, 65vw" fetchpriority="high" decoding="async" />
       <div class="gallery-main-overlay">
         <span class="gallery-count"><strong data-gallery-current>${String(primaryIndex + 1).padStart(2, '0')}</strong> / ${String(photos.length).padStart(2, '0')}</span>
         <div class="gallery-controls"><button type="button" class="gallery-lightbox-trigger" data-gallery-open aria-label="Abrir galeria em tela cheia">⤢</button>${photos.length > 1 ? '<button type="button" data-gallery-prev aria-label="Foto anterior">←</button><button type="button" data-gallery-next aria-label="Próxima foto">→</button>' : ''}</div>
@@ -548,6 +588,34 @@ function renderPropertyDetail(property) {
     </dialog>`;
 }
 
+function initConversionTracking() {
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest?.('a[href]');
+    if (!link) return;
+
+    let url;
+    try { url = new URL(link.href, window.location.origin); } catch { return; }
+
+    if (url.protocol === 'tel:') {
+      trackEvent('phone_click');
+    } else if (url.hostname === 'wa.me' || url.hostname === 'api.whatsapp.com') {
+      trackEvent('whatsapp_click');
+    }
+
+    if (document.body.dataset.page === 'imovel' && (url.hash === '#contato' || link.closest('.property-actions'))) {
+      trackEvent('property_inquiry_click');
+    }
+  });
+
+  const form = document.querySelector('#contact-form');
+  let started = false;
+  form?.addEventListener('input', () => {
+    if (started) return;
+    started = true;
+    trackEvent('contact_form_start');
+  }, { passive: true });
+}
+
 function initPropertyDetail() {
   const root = document.querySelector('#property-root');
   const dataEl = document.querySelector('#property-data');
@@ -560,6 +628,8 @@ function initPropertyDetail() {
     return;
   }
 
+  trackEvent('view_item', { item_type: 'property' });
+
   root.innerHTML = renderPropertyDetail(property);
   const thumbs = [...root.querySelectorAll('.gallery-thumb')];
   const mainImage = root.querySelector('.gallery-main img');
@@ -569,29 +639,32 @@ function initPropertyDetail() {
   const lightboxImage = root.querySelector('[data-gallery-lightbox-image]');
   const lightboxCurrent = root.querySelector('[data-gallery-lightbox-current]');
   const lightboxTrigger = root.querySelector('[data-gallery-open]');
-  let activeIndex = Math.max(0, thumbs.findIndex((thumb) => thumb.classList.contains('is-active')));
+  const photos = Array.isArray(property.photos) && property.photos.length
+    ? property.photos
+    : (property.cover_url ? [{ url: property.cover_url, alt_text: property.title, is_cover: 1 }] : []);
+  let activeIndex = Math.max(0, photos.findIndex((photo) => photo.is_cover));
 
   const syncLightbox = () => {
-    if (!lightboxImage || !thumbs.length) return;
-    const thumb = thumbs[activeIndex];
-    lightboxImage.src = thumb.dataset.image;
-    lightboxImage.alt = thumb.dataset.alt || property.title;
+    if (!lightboxImage || !photos.length) return;
+    const photo = photos[activeIndex];
+    lightboxImage.src = photo.url;
+    lightboxImage.alt = photo.alt_text || property.title;
     if (lightboxCurrent) lightboxCurrent.textContent = String(activeIndex + 1).padStart(2, '0');
   };
 
   const openLightbox = () => {
-    if (!lightbox || !thumbs.length) return;
+    if (!lightbox || !photos.length) return;
     syncLightbox();
     if (!lightbox.open) lightbox.showModal();
   };
 
   const selectPhoto = (index) => {
-    if (!thumbs.length || !mainImage) return;
-    activeIndex = (index + thumbs.length) % thumbs.length;
-    const thumb = thumbs[activeIndex];
+    if (!photos.length || !mainImage) return;
+    activeIndex = (index + photos.length) % photos.length;
+    const photo = photos[activeIndex];
     mainImage.classList.add('is-switching');
-    const nextSrc = thumb.dataset.image;
-    const nextAlt = thumb.dataset.alt || property.title;
+    const nextSrc = photo.url;
+    const nextAlt = photo.alt_text || property.title;
     const preloader = new Image();
     preloader.onload = () => {
       mainImage.src = nextSrc;
@@ -600,9 +673,9 @@ function initPropertyDetail() {
     };
     preloader.src = nextSrc;
     thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
-    thumb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    thumbs[activeIndex]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
-    if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${thumbs.length}: ${nextAlt}`;
+    if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${photos.length}: ${nextAlt}`;
     if (lightbox?.open) syncLightbox();
   };
 
@@ -721,6 +794,7 @@ async function initWhatsAppShortcut() {
 
 markCurrentNavigation();
 initMobileMenu();
+initConversionTracking();
 initListing();
 initPropertyDetail();
 initContactForm();

@@ -1,9 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-const mobileWidths = [320, 375, 414];
-const tabletWidths = [768, 1024];
-const desktopWidths = [1280, 1440];
+const mobileWidths = [320, 360, 375, 390, 414, 430];
+const tabletWidths = [768, 820, 1024];
+const desktopWidths = [1280, 1440, 1920];
 
 async function expectNoHorizontalOverflow(page, width) {
   await page.setViewportSize({ width, height: 900 });
@@ -24,6 +24,27 @@ test('home permanece responsiva e sem violações axe automatizáveis', async ({
   expect(results.violations).toEqual([]);
   await expect(page.locator('#empty-state')).toBeHidden();
   expect(consoleErrors).toEqual([]);
+});
+
+test('hooks de conversão usam dataLayer sem enviar dados do formulário', async ({ page }) => {
+  await page.addInitScript(() => { window.dataLayer = []; });
+  await page.goto('/');
+
+  const nameField = page.locator('#contact-form input[name="name"]');
+  await nameField.scrollIntoViewIfNeeded();
+  await nameField.fill('Visitante de teste');
+  await expect.poll(() => page.evaluate(() => window.dataLayer.map((item) => item.event))).toContain('contact_form_start');
+
+  const events = await page.evaluate(() => {
+    const link = [...document.querySelectorAll('a[href]')].find((item) => new URL(item.href).hostname === 'wa.me');
+    if (!link) return window.dataLayer;
+    link.addEventListener('click', (event) => event.preventDefault(), { once: true });
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return window.dataLayer;
+  });
+
+  expect(events.map((item) => item.event)).toContain('whatsapp_click');
+  expect(JSON.stringify(events)).not.toContain('Visitante de teste');
 });
 
 test('menu mobile abre com foco e fecha com Escape', async ({ page }) => {
@@ -50,6 +71,16 @@ test('catálogo estático mantém filtros na URL e aplica o fixture local', asyn
   await expect(page).toHaveURL(/purpose=Alugar/);
   await expect(page).toHaveURL(/location=Buritis/);
   await expect(page.locator('[data-listing-card] h3')).toHaveText(['Loft Harmonia']);
+});
+
+test('catálogo anuncia falha de carregamento e oferece nova tentativa', async ({ page }) => {
+  await page.route('**/api/v2/properties**', (route) => route.abort());
+  await page.goto('/imoveis/');
+
+  await expect(page.locator('#empty-state')).toHaveAttribute('role', 'alert');
+  await expect(page.locator('#empty-state')).toContainText('Não foi possível carregar os imóveis.');
+  await expect(page.locator('#filter-summary')).toHaveAttribute('role', 'alert');
+  await expect(page.locator('#retry-properties-empty')).toBeVisible();
 });
 
 test('galeria usa dialog nativo, navegação e restauração de foco', async ({ page }) => {
