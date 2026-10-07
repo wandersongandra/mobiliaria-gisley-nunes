@@ -1,9 +1,12 @@
 <?php
 
 use App\Http\Middleware\ConfigureTrustedProxies;
+use App\Http\Middleware\LimitRequestBody;
 use App\Http\Middleware\RequestContext;
 use App\Http\Middleware\RequireAdmin;
+use App\Http\Middleware\RequireAdminOrigin;
 use App\Http\Middleware\RequireCapability;
+use App\Http\Middleware\RequireKnownHost;
 use App\Http\Middleware\RequireSameOrigin;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
@@ -24,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(ConfigureTrustedProxies::class);
         $middleware->append(RequestContext::class);
         $middleware->append(SecurityHeaders::class);
+        $middleware->append(RequireKnownHost::class);
 
         $middleware->validateCsrfTokens(except: [
             'api/contact',
@@ -31,6 +35,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'same-origin' => RequireSameOrigin::class,
+            'body-limit' => LimitRequestBody::class,
+            'admin-origin' => RequireAdminOrigin::class,
             'admin' => RequireAdmin::class,
             'capability' => RequireCapability::class,
         ]);

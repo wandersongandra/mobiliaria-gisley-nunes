@@ -162,6 +162,39 @@ class UploadLifecycleTest extends TestCase
             ->assertJson(['error' => 'INVALID_ASSET']);
     }
 
+    #[DataProvider('invalidStorageKeys')]
+    public function test_storage_key_boundary_rejects_ambiguous_or_unsafe_paths(string $key): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('INVALID_ASSET');
+
+        app(R2Storage::class)->assertKey($key);
+    }
+
+    public static function invalidStorageKeys(): array
+    {
+        return [
+            'leading slash' => ['/gisley/properties/id/photo.jpg'],
+            'traversal segment' => ['gisley/properties/id/../photo.jpg'],
+            'double slash' => ['gisley/properties/id//photo.jpg'],
+            'backslash' => ['gisley/properties/id\\photo.jpg'],
+            'control character' => ["gisley/properties/id/photo\n.jpg"],
+            'unicode key' => ['gisley/properties/id/foto-á.jpg'],
+            'wrong prefix' => ['other/properties/id/photo.jpg'],
+        ];
+    }
+
+    public function test_storage_service_rejects_non_image_presign_even_if_controller_is_bypassed(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('INVALID_FILE');
+
+        app(R2Storage::class)->presignPut(
+            'gisley/properties/property-id/file.txt',
+            'text/plain',
+        );
+    }
+
     public function test_image_inspection_rejects_a_renamed_payload(): void
     {
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);

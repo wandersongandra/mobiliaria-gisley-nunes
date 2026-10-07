@@ -78,6 +78,41 @@ class AuditIntegrityTest extends TestCase
         $this->assertSame('property-123', $result['id']);
     }
 
+    public function test_audit_details_redact_sensitive_material_and_bound_string_size(): void
+    {
+        app(CrmService::class)->recordAudit(
+            ['email' => 'manager@example.test', 'openId' => 'subject-1', 'userId' => null],
+            'security.test',
+            'test',
+            'entity-1',
+            [
+                'status' => 'draft',
+                'password' => 'super-sensitive-password',
+                'oauthCode' => 'temporary-auth-code',
+                'nested' => [
+                    'authorization' => 'Bearer temporary-token',
+                    'note' => str_repeat('A', 2000),
+                ],
+            ],
+        );
+
+        $raw = DB::table('morada_audit_log')
+            ->where('action', 'security.test')
+            ->value('details');
+
+        $this->assertIsString($raw);
+        $details = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame('draft', $details['status']);
+        $this->assertSame('[REDACTED]', $details['password']);
+        $this->assertSame('[REDACTED]', $details['oauthCode']);
+        $this->assertSame('[REDACTED]', $details['nested']['authorization']);
+        $this->assertSame(1024, strlen($details['nested']['note']));
+        $this->assertStringNotContainsString('super-sensitive-password', $raw);
+        $this->assertStringNotContainsString('temporary-auth-code', $raw);
+        $this->assertStringNotContainsString('temporary-token', $raw);
+    }
+
     public function test_audit_log_accepts_inserts_but_rejects_updates_and_deletes(): void
     {
         $id = (string) Str::uuid();

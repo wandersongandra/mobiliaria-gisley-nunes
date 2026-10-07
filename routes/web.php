@@ -16,33 +16,38 @@ Route::get('/health/ready', [HealthController::class, 'ready']);
 
 Route::get('/', [PageController::class, 'home']);
 Route::get('/imoveis', [PageController::class, 'imoveis']);
+Route::get('/imoveis-a-venda', [PageController::class, 'legacyForSale']);
+Route::get('/imoveis-para-alugar', [PageController::class, 'legacyForRent']);
 Route::get('/servicos', [PageController::class, 'servicos']);
 Route::get('/bairros', [PageController::class, 'bairros']);
 Route::get('/bairros/{slug}', [PageController::class, 'bairro']);
 Route::get('/sobre', [PageController::class, 'sobre']);
 Route::get('/contato', [PageController::class, 'contato']);
 Route::get('/privacidade', [PageController::class, 'privacidade']);
+Route::get('/politica-de-privacidade', [PageController::class, 'legacyPrivacy']);
+Route::get('/anuncie-seu-imovel', [PageController::class, 'legacyAdvertise']);
 Route::get('/imoveis/{slug}', [PageController::class, 'imovel']);
 
 Route::get('/robots.txt', [DiscoveryController::class, 'robots']);
 Route::get('/sitemap.xml', [DiscoveryController::class, 'sitemap']);
 Route::get('/llms.txt', [DiscoveryController::class, 'llms']);
 
-Route::get('/api/properties', [PublicApiController::class, 'properties']);
-Route::get('/api/v2/properties', [PublicApiController::class, 'propertiesV2']);
-Route::get('/api/properties/{slug}', [PublicApiController::class, 'property']);
-Route::get('/api/site', [PublicApiController::class, 'site']);
+Route::get('/api/properties', [PublicApiController::class, 'properties'])->middleware('throttle:public-api');
+Route::get('/api/v2/properties', [PublicApiController::class, 'propertiesV2'])->middleware('throttle:public-api');
+Route::get('/api/properties/{slug}', [PublicApiController::class, 'property'])->middleware('throttle:public-api');
+Route::get('/api/site', [PublicApiController::class, 'site'])->middleware('throttle:public-api');
 Route::post('/api/contact', [PublicApiController::class, 'contact'])
-    ->middleware(['same-origin', 'throttle:contact']);
+    ->middleware(['body-limit:64', 'same-origin', 'throttle:contact']);
 
 Route::get('/media/{path}', [MediaController::class, 'media'])->where('path', '.*');
 
-Route::get('/admin', [AdminCrmController::class, 'panel']);
+Route::get('/admin', [AdminCrmController::class, 'panel'])
+    ->middleware('admin-origin');
 
 Route::get('/oauth/google/return', [AuthController::class, 'callback'])
-    ->middleware('throttle:auth-callback');
+    ->middleware(['admin-origin', 'throttle:auth-callback']);
 
-Route::prefix('api/auth')->group(function (): void {
+Route::prefix('api/auth')->middleware(['admin-origin', 'body-limit:32'])->group(function (): void {
     Route::get('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
     Route::get('/callback', [AuthController::class, 'callback'])->middleware('throttle:auth-callback');
     Route::post('/logout', [AuthController::class, 'logout'])
@@ -52,10 +57,10 @@ Route::prefix('api/auth')->group(function (): void {
 });
 
 Route::get('/api/admin/session', [AuthController::class, 'session'])
-    ->middleware('throttle:auth-session');
+    ->middleware(['admin-origin', 'throttle:auth-session']);
 
 Route::prefix('api/admin')
-    ->middleware(['same-origin', 'admin', 'throttle:admin'])
+    ->middleware(['admin-origin', 'body-limit:256', 'same-origin', 'admin', 'throttle:admin'])
     ->group(function (): void {
         Route::get('/properties', [AdminPropertyController::class, 'index'])
             ->middleware('capability:property.read');
@@ -117,5 +122,8 @@ Route::prefix('api/admin')
         Route::delete('/team/{email}', [AdminCrmController::class, 'removeTeamMember'])
             ->middleware(['capability:team.manage', 'throttle:destructive']);
     });
+
+Route::get('/{legacyPropertySlug}', [PageController::class, 'legacyProperty'])
+    ->where('legacyPropertySlug', '[a-z0-9]+(?:-[a-z0-9]+)*-cods-[0-9]+');
 
 Route::fallback([PageController::class, 'notFound']);
