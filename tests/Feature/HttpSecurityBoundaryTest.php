@@ -28,6 +28,8 @@ class HttpSecurityBoundaryTest extends TestCase
 
     public function test_public_host_redirects_admin_entry_to_admin_origin(): void
     {
+        $this->app->instance('env', 'production');
+
         $this->withHeaders(['Host' => 'www.example.test'])
             ->get('/admin')
             ->assertStatus(307)
@@ -36,6 +38,8 @@ class HttpSecurityBoundaryTest extends TestCase
 
     public function test_public_host_does_not_serve_sensitive_admin_api(): void
     {
+        $this->app->instance('env', 'production');
+
         $this->withHeaders(['Host' => 'www.example.test'])
             ->getJson('/api/admin/session')
             ->assertNotFound()
