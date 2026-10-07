@@ -340,7 +340,7 @@ class AuthController extends Controller
 
     private function oauthRedirectUri(Request $request): string
     {
-        $path = trim((string) config('services.google_oauth.redirect_path', '/api/auth/callback'));
+        $path = trim((string) config('services.google_oauth.redirect_path', '/oauth/google/return'));
 
         if (
             $path === ''
@@ -350,7 +350,7 @@ class AuthController extends Controller
             || str_contains($path, '#')
             || preg_match('/[\x00-\x1f\x7f]/', $path)
         ) {
-            $path = '/api/auth/callback';
+            $path = '/oauth/google/return';
         }
 
         return $this->adminOrigin($request).$path;
