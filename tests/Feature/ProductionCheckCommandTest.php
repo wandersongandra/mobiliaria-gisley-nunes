@@ -97,7 +97,7 @@ class ProductionCheckCommandTest extends TestCase
         ]);
 
         $this->artisan('app:production-check')
-            ->expectsOutputToContain('[FAIL] APP_URL and ADMIN_ORIGIN are distinct HTTPS origins')
+            ->expectsOutputToContain('[FAIL] APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts')
             ->assertFailed();
     }
 
