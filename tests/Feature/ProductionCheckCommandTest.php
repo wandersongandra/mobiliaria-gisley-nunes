@@ -13,7 +13,7 @@ class ProductionCheckCommandTest extends TestCase
             'app.debug' => false,
             'app.key' => 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
             'app.url' => 'https://www.example.test',
-            'app.admin_url' => 'https://www.example.test',
+            'app.admin_url' => 'https://admin.example.test',
             'database.default' => 'mysql',
             'database.connections.mysql.host' => 'localhost',
             'database.connections.mysql.database' => 'gisley',
@@ -84,6 +84,31 @@ class ProductionCheckCommandTest extends TestCase
 
         $this->artisan('app:production-check')
             ->expectsOutputToContain('[FAIL] session cookies are host-bound, secure and HttpOnly')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_a_world_trusted_proxy_range(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'gisley.network.trusted_proxies' => ['0.0.0.0/0'],
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] trusted proxy CIDRs are configured')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_insecure_oauth_endpoint(): void
+    {
+        config([
+            'app.env' => 'production',
+            'services.google_oauth.authorization_url' => 'http://accounts.example.test/auth',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] OAuth configuration uses secure endpoints and callback path')
             ->assertFailed();
     }
 
