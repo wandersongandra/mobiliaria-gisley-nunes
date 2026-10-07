@@ -24,9 +24,7 @@ class ProductionCheck extends Command
                 && $this->configured(['database.connections.mysql.host', 'database.connections.mysql.database', 'database.connections.mysql.username', 'database.connections.mysql.password']),
             'required PHP extensions are available' => $this->requiredExtensionsAvailable(),
             'storage and bootstrap cache directories are writable' => is_writable(storage_path()) && is_writable(base_path('bootstrap/cache')),
-            'session cookies are secure and HttpOnly' => (bool) config('session.secure')
-                && (bool) config('session.http_only')
-                && in_array(config('session.same_site'), ['lax', 'strict'], true),
+            'session cookies are host-bound, secure and HttpOnly' => $this->hasSecureSessionCookie(),
             'session and cache drivers do not require a persistent worker' => in_array(config('session.driver'), ['file', 'database'], true)
                 && in_array(config('cache.default'), ['file', 'database'], true),
             'queue driver does not require a persistent worker' => in_array(config('queue.default'), ['sync', 'database'], true),
@@ -66,6 +64,19 @@ class ProductionCheck extends Command
         }
 
         return true;
+    }
+
+    private function hasSecureSessionCookie(): bool
+    {
+        $cookie = (string) config('session.cookie');
+        $domain = config('session.domain');
+
+        return str_starts_with($cookie, '__Host-')
+            && (bool) config('session.secure')
+            && (bool) config('session.http_only')
+            && config('session.path') === '/'
+            && ($domain === null || $domain === '')
+            && in_array(config('session.same_site'), ['lax', 'strict'], true);
     }
 
     private function hasValidAppKey(): bool
