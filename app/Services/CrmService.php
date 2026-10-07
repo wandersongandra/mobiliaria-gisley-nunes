@@ -23,12 +23,12 @@ class CrmService
 
     private const DEFAULT_SITE = [
         'name' => 'Gisley Nunes Imóveis',
-        'crci' => '',
+        'crci' => '52305',
         'area' => 'Belo Horizonte e região',
-        'address' => 'Belo Horizonte, MG',
-        'phoneDisplay' => '(31) 9155-4677',
-        'whatsapp' => '553191554677',
-        'email' => 'Gisleynunesimoveis@gmail.com',
+        'address' => 'Rua Alberto Cintra, 35, União, Belo Horizonte - MG',
+        'phoneDisplay' => '(31) 99155-4677',
+        'whatsapp' => '5531991554677',
+        'email' => 'gisleynunesimoveis@gmail.com',
         'instagramDisplay' => '',
         'instagramUrl' => '',
     ];
@@ -310,9 +310,97 @@ class CrmService
             'action' => substr($action, 0, 80),
             'entity_type' => substr($entityType, 0, 60),
             'entity_id' => $entityId ? substr($entityId, 0, 191) : null,
-            'details' => $details ? json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+            'details' => $this->encodeAuditDetails($details),
             'created_at' => now(),
         ]);
+    }
+
+    private function encodeAuditDetails(?array $details): ?string
+    {
+        if ($details === null) {
+            return null;
+        }
+
+        $sanitized = $this->sanitizeAuditValue($details, 0);
+        $encoded = json_encode(
+            $sanitized,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        );
+
+        if (strlen($encoded) > 16 * 1024) {
+            return json_encode([
+                'truncated' => true,
+                'reason' => 'audit_details_limit',
+            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        }
+
+        return $encoded;
+    }
+
+    private function sanitizeAuditValue(mixed $value, int $depth): mixed
+    {
+        if ($depth >= 5) {
+            return '[TRUNCATED]';
+        }
+
+        if (is_array($value)) {
+            $sanitized = [];
+            $count = 0;
+
+            foreach ($value as $key => $item) {
+                if ($count >= 50) {
+                    $sanitized['__truncated__'] = true;
+                    break;
+                }
+
+                if (is_string($key) && $this->isSensitiveAuditKey($key)) {
+                    $sanitized[$key] = '[REDACTED]';
+                } else {
+                    $sanitized[$key] = $this->sanitizeAuditValue($item, $depth + 1);
+                }
+                $count++;
+            }
+
+            return $sanitized;
+        }
+
+        if (is_string($value)) {
+            return mb_substr($value, 0, 1024);
+        }
+
+        if (is_int($value) || is_float($value) || is_bool($value) || $value === null) {
+            return $value;
+        }
+
+        return '[UNSUPPORTED]';
+    }
+
+    private function isSensitiveAuditKey(string $key): bool
+    {
+        $snake = preg_replace('/(?<!^)[A-Z]/', '_$0', $key) ?? $key;
+        $normalized = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $snake) ?? $snake);
+        $normalized = trim($normalized, '_');
+
+        if ($normalized === 'token_stored_as_hash') {
+            return false;
+        }
+
+        return in_array($normalized, [
+            'password',
+            'secret',
+            'client_secret',
+            'api_key',
+            'access_key',
+            'access_token',
+            'refresh_token',
+            'authorization',
+            'cookie',
+            'session_cookie',
+            'oauth_code',
+            'authorization_code',
+            'pairing_code',
+            'invitation_token',
+        ], true);
     }
 
     public function listAudit(int $limit = 100): array
@@ -512,7 +600,13 @@ class CrmService
 
     public function createPairing(string $codeHash, string $openId, string $email, int $expiresAtMs): void
     {
-        DB::transaction(function () use ($codeHash, $openId, $email, $expiresAtMs): void {
+        $nowMs = Clock::nowMs();
+
+        DB::transaction(function () use ($codeHash, $openId, $email, $expiresAtMs, $nowMs): void {
+            DB::table('morada_identity_pairings')
+                ->where('expires_at_ms', '<=', $nowMs)
+                ->delete();
+
             DB::table('morada_identity_pairings')
                 ->where('open_id', $openId)
                 ->orWhere('email', strtolower($email))
@@ -560,13 +654,21 @@ class CrmService
 
     public function createAuthChallenge(string $stateHash, string $redirectUri, int $expiresAtMs, ?string $invitationHash): void
     {
-        DB::table('morada_auth_challenges')->insert([
-            'state_hash' => $stateHash,
-            'redirect_uri' => $redirectUri,
-            'invitation_hash' => $invitationHash,
-            'expires_at_ms' => $expiresAtMs,
-            'created_at' => now(),
-        ]);
+        $nowMs = Clock::nowMs();
+
+        DB::transaction(function () use ($stateHash, $redirectUri, $expiresAtMs, $invitationHash, $nowMs): void {
+            DB::table('morada_auth_challenges')
+                ->where('expires_at_ms', '<=', $nowMs)
+                ->delete();
+
+            DB::table('morada_auth_challenges')->insert([
+                'state_hash' => $stateHash,
+                'redirect_uri' => $redirectUri,
+                'invitation_hash' => $invitationHash,
+                'expires_at_ms' => $expiresAtMs,
+                'created_at' => now(),
+            ]);
+        });
     }
 
     public function consumeAuthChallenge(string $stateHash): ?array

@@ -99,6 +99,8 @@ class AdminAccessService
         $userId = (string) ($session->user_id ?? '');
         $identityId = (string) ($session->oauth_identity_id ?? '');
         if ($userId === '' || $identityId === '') {
+            $this->revokeJti($jti);
+
             return null;
         }
 
@@ -115,6 +117,8 @@ class AdminAccessService
             ->first();
         $openId = (string) ($identity->provider_subject ?? '');
         if (! $user || ! $identity || ! hash_equals($openId, (string) $session->open_id)) {
+            $this->revokeJti($jti);
+
             return null;
         }
 
@@ -123,11 +127,15 @@ class AdminAccessService
 
         if (! $bootstrap) {
             if (! $access || ! (bool) $access->active) {
+                $this->revokeJti($jti);
+
                 return null;
             }
         }
 
         if ($access && (string) $access->invited_by === 'environment' && ! $bootstrap) {
+            $this->revokeJti($jti);
+
             return null;
         }
 
@@ -190,6 +198,18 @@ class AdminAccessService
             'name' => $resolved['name'],
             'role' => $role === 'manager' ? 'manager' : 'editor',
         ];
+    }
+
+    private function revokeJti(string $jti): void
+    {
+        if ($jti === '') {
+            return;
+        }
+
+        DB::table('morada_admin_sessions')
+            ->where('jti', $jti)
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
     }
 
     public function revokeCurrent(Request $request): void

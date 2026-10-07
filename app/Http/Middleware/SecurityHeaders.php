@@ -18,6 +18,13 @@ class SecurityHeaders
         /** @var Response $response */
         $response = $next($request);
 
+        $r2AccountId = trim((string) config('services.r2.account_id'));
+        $r2Origin = preg_match('/^[A-Za-z0-9]+$/D', $r2AccountId) === 1
+            ? 'https://'.$r2AccountId.'.r2.cloudflarestorage.com'
+            : null;
+        $imageSources = "'self' https://images.unsplash.com data: blob:".($r2Origin ? ' '.$r2Origin : '');
+        $connectSources = "'self'".($r2Origin ? ' '.$r2Origin : '');
+
         $response->headers->remove('X-Powered-By');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-Frame-Options', 'DENY');
@@ -27,17 +34,23 @@ class SecurityHeaders
             'Content-Security-Policy',
             "default-src 'self'; ".
             "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; ".
-            "script-src 'self' 'nonce-{$nonce}'; ".
+            "script-src 'self' 'nonce-{$nonce}'; script-src-attr 'none'; ".
             "style-src 'self' https://fonts.googleapis.com; ".
             "font-src 'self' https://fonts.gstatic.com data:; ".
-            "img-src 'self' https://images.unsplash.com https://*.r2.cloudflarestorage.com data: blob:; ".
-            "connect-src 'self' https://*.r2.cloudflarestorage.com; ".
-            "media-src 'self' https://*.r2.cloudflarestorage.com; upgrade-insecure-requests"
+            "img-src {$imageSources}; ".
+            "connect-src {$connectSources}; ".
+            "media-src {$connectSources}; ".
+            "frame-src 'none'; worker-src 'none'; manifest-src 'self'; upgrade-insecure-requests"
         );
+        $response->headers->set('Cross-Origin-Opener-Policy', 'same-origin');
+        $response->headers->set('Cross-Origin-Resource-Policy', 'same-origin');
+        $response->headers->set('Origin-Agent-Cluster', '?1');
+        $response->headers->set('X-Permitted-Cross-Domain-Policies', 'none');
 
         if ($request->is('api/admin*') || $request->is('api/auth*') || $request->is('oauth/google/return') || $request->is('admin*')) {
             $response->headers->set('Cache-Control', 'no-store, private');
             $response->headers->set('Pragma', 'no-cache');
+            $response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
         }
 
         if ($request->is('api*') || $request->is('admin*')) {

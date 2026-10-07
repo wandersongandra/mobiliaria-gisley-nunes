@@ -20,6 +20,13 @@ class R2Storage
      */
     private const MAX_IMAGE_PIXELS = 40_000_000;
 
+    private const IMAGE_MIME_TYPES = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/avif',
+    ];
+
     private function configured(): bool
     {
         $config = config('services.r2');
@@ -62,10 +69,25 @@ class R2Storage
 
     public function assertKey(string $path): string
     {
-        $key = ltrim(substr($path, 0, 500), '/');
-
-        if (! str_starts_with($key, self::PREFIX) || str_contains($key, '..') || str_contains($key, "\0")) {
+        if ($path === '' || strlen($path) > 500 || str_starts_with($path, '/')) {
             throw new RuntimeException('INVALID_ASSET');
+        }
+
+        $key = $path;
+        if (
+            ! str_starts_with($key, self::PREFIX)
+            || str_contains($key, '\\')
+            || str_contains($key, '//')
+            || preg_match('/[\x00-\x1F\x7F]/', $key) === 1
+            || preg_match('#^[A-Za-z0-9._/-]+$#D', $key) !== 1
+        ) {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
+        foreach (explode('/', $key) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..') {
+                throw new RuntimeException('INVALID_ASSET');
+            }
         }
 
         return $key;
@@ -95,12 +117,17 @@ class R2Storage
     public function presignPut(string $path, string $contentType): string
     {
         $key = $this->assertKey($path);
+        $contentType = strtolower(trim($contentType));
+        if (! in_array($contentType, self::IMAGE_MIME_TYPES, true)) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
         $client = $this->client();
 
         $command = $client->getCommand('PutObject', [
             'Bucket' => config('services.r2.bucket'),
             'Key' => $key,
-            'ContentType' => strtolower(trim($contentType)),
+            'ContentType' => $contentType,
             'IfNoneMatch' => '*',
         ]);
 
@@ -237,7 +264,7 @@ class R2Storage
         $width = $details[0];
         $height = $details[1];
 
-        if (! in_array($actualMime, ['image/jpeg', 'image/png', 'image/webp', 'image/avif'], true)
+        if (! in_array($actualMime, self::IMAGE_MIME_TYPES, true)
             || ! hash_equals($expectedMime, $actualMime)
             || $width < 1 || $width > 20_000 || $height < 1 || $height > 20_000
             || ($width * $height) > self::MAX_IMAGE_PIXELS) {

@@ -14,7 +14,7 @@
       </section>
 
       <section class="search-card shell catalog-search" aria-labelledby="search-title">
-        <div class="catalog-search-head"><div><p class="eyebrow">filtros de busca</p><h2 id="search-title">Escolha bairro, tipo e valor.</h2></div><span class="listing-count"><strong id="listing-count">00</strong> imóveis</span></div>
+        <div class="catalog-search-head"><div><p class="eyebrow">filtros de busca</p><h2 id="search-title">Escolha bairro, tipo e valor.</h2></div><span class="listing-count"><strong id="listing-count">{{ str_pad((string)($initialCatalogTotal ?? 0), 2, '0', STR_PAD_LEFT) }}</strong> imóveis</span></div>
         <form id="search-form" class="search-form">
           <label class="field"><span>Eu quero</span><select id="purpose"><option value="all">Comprar ou alugar</option><option value="Comprar">Comprar</option><option value="Alugar">Alugar</option></select></label>
           <label class="field field-wide"><span>Bairro</span><select id="location"><option value="all">Todos os bairros</option></select></label>
@@ -29,7 +29,7 @@
       <section class="section shell listings-section catalog-results" id="imoveis" aria-labelledby="listings-title">
         <div class="catalog-results-head"><p class="eyebrow">imóveis disponíveis</p><span>Use os filtros para comparar opções em {{ $site['area'] }}.</span></div>
         <div class="listing-grid" id="listing-grid">
-          @foreach($properties ?? [] as $index => $property)
+          @foreach(($initialProperties ?? []) as $index => $property)
             @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
           @endforeach
         </div>

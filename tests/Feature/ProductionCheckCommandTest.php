@@ -13,7 +13,7 @@ class ProductionCheckCommandTest extends TestCase
             'app.debug' => false,
             'app.key' => 'base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
             'app.url' => 'https://www.example.test',
-            'app.admin_url' => 'https://www.example.test',
+            'app.admin_url' => 'https://admin.example.test',
             'database.default' => 'mysql',
             'database.connections.mysql.host' => 'localhost',
             'database.connections.mysql.database' => 'gisley',
@@ -67,6 +67,62 @@ class ProductionCheckCommandTest extends TestCase
         $this->artisan('app:production-check')
             ->expectsOutputToContain('[FAIL] APP_ENV is production')
             ->expectsOutputToContain('[FAIL] APP_DEBUG is disabled')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_a_domain_scoped_admin_cookie(): void
+    {
+        config([
+            'app.env' => 'production',
+            'session.cookie' => '__Host-gisley_session',
+            'session.secure' => true,
+            'session.http_only' => true,
+            'session.path' => '/',
+            'session.domain' => '.example.test',
+            'session.same_site' => 'lax',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] session cookies are host-bound, secure and HttpOnly')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_public_and_admin_on_the_same_host(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'app.url' => 'https://example.test',
+            'app.admin_url' => 'https://example.test:8443',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_a_world_trusted_proxy_range(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'gisley.network.trusted_proxies' => ['0.0.0.0/0'],
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] trusted proxy CIDRs are configured')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_insecure_oauth_endpoint(): void
+    {
+        config([
+            'app.env' => 'production',
+            'services.google_oauth.authorization_url' => 'http://accounts.example.test/auth',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] OAuth configuration uses secure endpoints and callback path')
             ->assertFailed();
     }
 
