@@ -67,6 +67,41 @@ class OAuthIdentityTest extends TestCase
         $this->assertSame('openid email profile', $query['scope'] ?? null);
     }
 
+    public function test_login_can_use_neutral_callback_path_for_host_waf_compatibility(): void
+    {
+        config([
+            'app.admin_url' => 'https://painel.gisleynunesimoveis.com.br',
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'test-client-secret',
+            'services.google_oauth.redirect_path' => '/oauth/google/return',
+        ]);
+
+        $response = $this->get('/api/auth/login');
+        $location = (string) $response->headers->get('Location');
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+
+        $response->assertRedirect();
+        $this->assertSame(
+            'https://painel.gisleynunesimoveis.com.br/oauth/google/return',
+            $query['redirect_uri'] ?? null
+        );
+    }
+
+    public function test_neutral_callback_path_uses_the_same_oauth_flow(): void
+    {
+        config(['services.google_oauth.redirect_path' => '/oauth/google/return']);
+        $this->fakeOAuthIdentity(['email_verified' => true]);
+
+        $state = $this->beginLogin();
+
+        $this->get('/oauth/google/return?'.http_build_query([
+            'code' => 'valid-auth-code',
+            'state' => $state,
+        ]))
+            ->assertForbidden()
+            ->assertSee('Código de vinculação temporário');
+    }
+
     #[DataProvider('invalidIdentityClaims')]
     public function test_callback_rejects_malformed_identity_claims(array $claims): void
     {
