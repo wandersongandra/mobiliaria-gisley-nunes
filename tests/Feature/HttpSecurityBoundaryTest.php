@@ -26,7 +26,7 @@ class HttpSecurityBoundaryTest extends TestCase
             'SERVER_NAME' => 'unknown.example.test',
             'HTTPS' => 'on',
             'SERVER_PORT' => 443,
-        ])->get('/health/live')
+        ])->withHeaders(['Host' => 'unknown.example.test'])->get('/health/live')
             ->assertStatus(421)
             ->assertJson(['error' => 'MISDIRECTED_REQUEST']);
     }
@@ -40,7 +40,7 @@ class HttpSecurityBoundaryTest extends TestCase
             'SERVER_NAME' => 'www.example.test',
             'HTTPS' => 'on',
             'SERVER_PORT' => 443,
-        ])->get('/admin')
+        ])->withHeaders(['Host' => 'www.example.test'])->get('/admin')
             ->assertStatus(307)
             ->assertRedirect('https://admin.example.test/admin');
     }
@@ -54,7 +54,7 @@ class HttpSecurityBoundaryTest extends TestCase
             'SERVER_NAME' => 'www.example.test',
             'HTTPS' => 'on',
             'SERVER_PORT' => 443,
-        ])->getJson('/api/admin/session')
+        ])->withHeaders(['Host' => 'www.example.test'])->getJson('/api/admin/session')
             ->assertNotFound()
             ->assertJson(['error' => 'NOT_FOUND']);
     }
