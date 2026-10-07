@@ -5,7 +5,7 @@ return [
         'provider' => 'google',
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect_path' => env('GOOGLE_OAUTH_CALLBACK_PATH', '/api/auth/callback'),
+        'redirect_path' => env('GOOGLE_OAUTH_CALLBACK_PATH', '/oauth/google/return'),
         'authorization_url' => 'https://accounts.google.com/o/oauth2/v2/auth',
         'token_url' => 'https://oauth2.googleapis.com/token',
         'userinfo_url' => 'https://openidconnect.googleapis.com/v1/userinfo',
