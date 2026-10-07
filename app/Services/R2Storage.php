@@ -76,7 +76,7 @@ class R2Storage
         $key = $path;
         if (
             ! str_starts_with($key, self::PREFIX)
-            || str_contains($key, "\\")
+            || str_contains($key, '\\')
             || str_contains($key, '//')
             || preg_match('/[\x00-\x1F\x7F]/', $key) === 1
             || preg_match('#^[A-Za-z0-9._/-]+$#D', $key) !== 1
