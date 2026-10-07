@@ -23,12 +23,12 @@ class CrmService
 
     private const DEFAULT_SITE = [
         'name' => 'Gisley Nunes Imóveis',
-        'crci' => '',
+        'crci' => '52305',
         'area' => 'Belo Horizonte e região',
-        'address' => 'Belo Horizonte, MG',
-        'phoneDisplay' => '(31) 9155-4677',
-        'whatsapp' => '553191554677',
-        'email' => 'Gisleynunesimoveis@gmail.com',
+        'address' => 'Rua Alberto Cintra, 35, União, Belo Horizonte - MG',
+        'phoneDisplay' => '(31) 99155-4677',
+        'whatsapp' => '5531991554677',
+        'email' => 'gisleynunesimoveis@gmail.com',
         'instagramDisplay' => '',
         'instagramUrl' => '',
     ];
