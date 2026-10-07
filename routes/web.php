@@ -124,6 +124,6 @@ Route::prefix('api/admin')
     });
 
 Route::get('/{legacyPropertySlug}', [PageController::class, 'legacyProperty'])
-    ->where('legacyPropertySlug', '.*-cods-[0-9]+');
+    ->where('legacyPropertySlug', '[a-z0-9]+(?:-[a-z0-9]+)*-cods-[0-9]+');
 
 Route::fallback([PageController::class, 'notFound']);
