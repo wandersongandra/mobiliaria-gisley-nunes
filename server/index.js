@@ -202,10 +202,18 @@ app.get('/contato', (req, res) => res.render('contato', {
   })
 }));
 
+app.get('/termos', (req, res) => res.render('termos', {
+  page: pageMeta(req, {
+    title: 'Termos de uso — Gisley Nunes Imóveis',
+    description: 'Termos de uso do site Gisley Nunes Imóveis.',
+    path: '/termos'
+  })
+}));
+
 app.get('/privacidade', (req, res) => res.render('privacidade', {
   page: pageMeta(req, {
-    title: 'Política de privacidade | Gisley Nunes Imóveis',
-    description: 'Política de privacidade da Gisley Nunes Imóveis, em conformidade com a LGPD.',
+    title: 'Política de privacidade — Gisley Nunes Imóveis',
+    description: 'Política de privacidade do site Gisley Nunes Imóveis e do atendimento realizado por seus canais.',
     path: '/privacidade'
   })
 }));
@@ -249,8 +257,7 @@ app.get('/sitemap.xml', async (req, res, next) => {
       { path: '/imoveis', priority: '0.9', changefreq: 'daily' },
       { path: '/sobre', priority: '0.5', changefreq: 'monthly' },
       { path: '/contato', priority: '0.5', changefreq: 'monthly' },
-      { path: '/servicos', priority: '0.7', changefreq: 'monthly' },
-      { path: '/bairros', priority: '0.7', changefreq: 'weekly' },
+      { path: '/termos', priority: '0.1', changefreq: 'yearly' },
       { path: '/privacidade', priority: '0.1', changefreq: 'yearly' },
       ...neighborhoods.map((neighborhood) => ({ path: `/bairros/${neighborhood.slug}`, priority: '0.7', changefreq: 'weekly' })),
       ...properties.map((property) => ({ path: `/imoveis/${property.slug}`, priority: '0.8', changefreq: 'weekly', lastmod: sitemapDate(property.updated_at) }))
@@ -275,8 +282,7 @@ app.get('/llms.txt', async (req, res, next) => {
       `- [Imóveis](${origin}/imoveis): catálogo completo com filtros.`,
       `- [Sobre](${origin}/sobre): história e valores.`,
       `- [Contato](${origin}/contato): canais de atendimento.`,
-      `- [Serviços](${origin}/servicos): caminhos para comprar, alugar ou anunciar um imóvel.`,
-      `- [Bairros](${origin}/bairros): imóveis agrupados por localização.`,
+      `- [Termos de uso](${origin}/termos): regras de utilização do site.`,
       `- [Privacidade](${origin}/privacidade): política de privacidade.`,
       '',
       '## Imóveis',
