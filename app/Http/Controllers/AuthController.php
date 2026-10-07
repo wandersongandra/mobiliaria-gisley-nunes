@@ -47,7 +47,7 @@ class AuthController extends Controller
         }
 
         $origin = $this->adminOrigin($request);
-        $redirectUri = $origin.'/api/auth/callback';
+        $redirectUri = $this->oauthRedirectUri($request);
         $state = Tokens::random(32);
         $this->crm->createAuthChallenge(
             hash('sha256', $state),
@@ -94,7 +94,7 @@ class AuthController extends Controller
         }
 
         $origin = $this->adminOrigin($request);
-        $redirectUri = $origin.'/api/auth/callback';
+        $redirectUri = $this->oauthRedirectUri($request);
         if (! hash_equals($redirectUri, (string) $challenge['redirect_uri'])) {
             return response('Origem de autenticação inválida.', 400);
         }
@@ -336,6 +336,24 @@ class AuthController extends Controller
     private function auditAuthentication(array $admin, string $action, ?array $details = null): void
     {
         $this->crm->recordAudit($admin, $action, 'admin_user', (string) $admin['openId'], $details);
+    }
+
+    private function oauthRedirectUri(Request $request): string
+    {
+        $path = trim((string) config('services.google_oauth.redirect_path', '/api/auth/callback'));
+
+        if (
+            $path === ''
+            || ! str_starts_with($path, '/')
+            || str_starts_with($path, '//')
+            || str_contains($path, '?')
+            || str_contains($path, '#')
+            || preg_match('/[\x00-\x1f\x7f]/', $path)
+        ) {
+            $path = '/api/auth/callback';
+        }
+
+        return $this->adminOrigin($request).$path;
     }
 
     private function adminOrigin(Request $request): string
