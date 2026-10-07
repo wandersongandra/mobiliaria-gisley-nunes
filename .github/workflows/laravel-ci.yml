@@ -73,7 +73,17 @@ jobs:
       - name: Configure ephemeral MySQL trigger support
         env:
           MYSQL_PWD: root-integration-only
-        run: mysql --host=127.0.0.1 --port=3306 --user=root -e "SET GLOBAL log_bin_trust_function_creators = 1"
+        run: |
+          ready=0
+          for attempt in $(seq 1 30); do
+            if mysql --host=127.0.0.1 --port=3306 --user=root -e "SELECT 1" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = "1"
+          mysql --host=127.0.0.1 --port=3306 --user=root -e "SET GLOBAL log_bin_trust_function_creators = 1"
 
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
