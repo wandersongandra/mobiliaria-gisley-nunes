@@ -18,7 +18,7 @@ class ProductionCheck extends Command
             'APP_DEBUG is disabled' => config('app.debug') === false,
             'PHP version is supported' => version_compare(PHP_VERSION, '8.2.0', '>='),
             'APP_KEY has a supported cipher length' => $this->hasValidAppKey(),
-            'APP_URL and ADMIN_ORIGIN are distinct HTTPS origins' => $this->hasSecureSeparatedOrigins(),
+            'APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts' => $this->hasSecureSeparatedOrigins(),
             'MySQL connection settings are present' => config('database.default') === 'mysql'
                 && $this->configured(['database.connections.mysql.host', 'database.connections.mysql.database', 'database.connections.mysql.username', 'database.connections.mysql.password']),
             'required PHP extensions are available' => $this->requiredExtensionsAvailable(),
