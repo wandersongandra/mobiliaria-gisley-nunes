@@ -1,0 +1,14 @@
+<a class="skip-link" href="#conteudo">Ir para o conteúdo principal</a>
+<header class="site-header" id="topo">
+  <div class="shell header-inner">
+    <a class="brand" href="/" aria-label="{{ $site['name'] }}, voltar ao início">
+      <img class="brand-logo" src="/images/gisley-nunes-imoveis-logo.jpeg" alt="{{ $site['name'] }}" width="440" height="104" />
+    </a>
+    <nav class="desktop-nav" aria-label="Navegação principal">
+      <a href="/imoveis">Imóveis</a><a href="/bairros">Bairros</a><a href="/servicos">Serviços</a><a href="/sobre">Conheça a Gisley Nunes</a>@if(!empty($testimonials))<a href="/#depoimentos">Depoimentos</a>@endif<a href="/contato">Contato</a>
+    </nav>
+    <div class="header-actions"><a class="header-cta" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a></div>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Abrir menu"><span></span><span></span><span></span></button>
+  </div>
+  <nav class="mobile-nav shell" id="mobile-nav" aria-label="Navegação mobile" aria-hidden="true"><a href="/imoveis">Imóveis</a><a href="/bairros">Bairros</a><a href="/servicos">Serviços</a><a href="/sobre">Conheça a Gisley Nunes</a>@if(!empty($testimonials))<a href="/#depoimentos">Depoimentos</a>@endif<a href="/contato">Contato</a></nav>
+</header>

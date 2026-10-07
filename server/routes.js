@@ -33,7 +33,8 @@ import {
   softDeleteProperty,
   updateContactLeadStatus
 } from './db.js';
-import { configuredAdminOrigin, hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
+import { configuredAdminOrigin, hasDatabase, isAllowedIdentity, legacyStorageRouteEnabled } from './config.js';
+import { catalogFacets, filterCatalogProperties, paginateCatalog } from './catalog.js';
 import { STAFF_INVITATION_TTL_MS, authCookieNames, callback, clearSessionCookie, currentAdmin, hashInvitationToken, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
@@ -63,6 +64,7 @@ import {
 } from './storage.js';
 import {
   normalizeAuditQuery,
+  normalizeCatalogQuery,
   normalizeContactLead,
   normalizeEmailAddress,
   normalizeLeadStatusRequest,
@@ -198,6 +200,24 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       res.json({ properties });
     } catch (error) {
       next(error);
+    }
+  });
+
+  app.get('/api/v2/properties', async (req, res, next) => {
+    try {
+      const query = normalizeCatalogQuery(req.query || {});
+      const allProperties = await listProperties({ publicOnly: true });
+      const filtered = filterCatalogProperties(allProperties, query);
+      const { items, pagination } = paginateCatalog(filtered, query);
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+      return res.json({
+        properties: publicProperties(items),
+        pagination,
+        facets: catalogFacets(allProperties)
+      });
+    } catch (error) {
+      if (error?.message === 'INVALID_CATALOG_QUERY') return res.status(422).json({ error: 'VALIDATION_FAILED' });
+      return next(error);
     }
   });
 
@@ -599,7 +619,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     try {
       const team = (await listStaffAccess()).map((member) => staffView({
         ...member,
-        is_bootstrap: Boolean(member.open_id && isAllowedOpenId(member.open_id))
+        is_bootstrap: Boolean(member.open_id && isAllowedIdentity(member.open_id, member.email))
       }, req.admin));
       res.json({ team });
     } catch (error) {
@@ -685,7 +705,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       return res.status(201).json({
         member: staffView({
           ...member,
-          is_bootstrap: Boolean(member.open_id && isAllowedOpenId(member.open_id))
+          is_bootstrap: Boolean(member.open_id && isAllowedIdentity(member.open_id, member.email))
         }, req.admin)
       });
     } catch (error) {
@@ -703,7 +723,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
       const protectedTarget = {
         ...current,
-        is_bootstrap: Boolean(current.open_id && isAllowedOpenId(current.open_id))
+        is_bootstrap: Boolean(current.open_id && isAllowedIdentity(current.open_id, current.email))
       };
       const mutationError = staffMutationError(req.admin, protectedTarget, patch);
       if (mutationError) return res.status(400).json({ error: mutationError });
@@ -711,7 +731,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         email,
         name: patch.name ?? current.name,
         openId: current.open_id,
-        role: current.open_id && isAllowedOpenId(current.open_id)
+        role: current.open_id && isAllowedIdentity(current.open_id, current.email)
           ? 'manager'
           : (patch.role ?? current.role),
         active: patch.active ?? Boolean(current.active),
@@ -722,7 +742,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       return res.json({
         member: staffView({
           ...member,
-          is_bootstrap: Boolean(member.open_id && isAllowedOpenId(member.open_id))
+          is_bootstrap: Boolean(member.open_id && isAllowedIdentity(member.open_id, member.email))
         }, req.admin)
       });
     } catch (error) {
@@ -738,7 +758,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
       const protectedTarget = {
         ...current,
-        is_bootstrap: Boolean(current.open_id && isAllowedOpenId(current.open_id))
+        is_bootstrap: Boolean(current.open_id && isAllowedIdentity(current.open_id, current.email))
       };
       const removalError = staffRemovalError(req.admin, protectedTarget);
       if (removalError) return res.status(400).json({ error: removalError });

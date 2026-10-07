@@ -1,0 +1,110 @@
+name: Laravel CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: laravel-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mysql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: gisley_laravel_ci
+          MYSQL_USER: gisley_ci
+          MYSQL_PASSWORD: integration-only
+          MYSQL_ROOT_PASSWORD: root-integration-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      APP_NAME: Gisley Nunes Imóveis
+      APP_ENV: testing
+      APP_DEBUG: 'false'
+      APP_URL: https://example.test
+      ADMIN_ORIGIN: https://example.test
+      APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: gisley_laravel_ci
+      DB_USERNAME: gisley_ci
+      DB_PASSWORD: integration-only
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      TRUSTED_PROXIES: 203.0.113.0/24
+      GISELY_ADMIN_OPEN_IDS: test-bootstrap-open-id
+      R2_ACCOUNT_ID: test-account
+      R2_BUCKET: test-bucket
+      R2_ACCESS_KEY_ID: test-key
+      R2_SECRET_ACCESS_KEY: test-secret
+      MANUS_OAUTH_PORTAL_URL: https://oauth.example.test
+      MANUS_OAUTH_API_URL: https://oauth-api.example.test
+      MANUS_PROJECT_ID: test-project
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: PHP runtime
+        run: |
+          php -v
+          composer --version
+          php -m | grep -qi pdo_mysql
+
+      - name: Configure ephemeral MySQL trigger support
+        env:
+          MYSQL_PWD: root-integration-only
+        run: mysql --host=127.0.0.1 --port=3306 --user=root -e "SET GLOBAL log_bin_trust_function_creators = 1"
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Validate Composer manifest and lockfile
+        run: composer validate --strict --no-interaction
+
+      - name: PHP syntax
+        run: |
+          find app bootstrap config database/migrations routes tests -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+      - name: Application boot and routes
+        run: |
+          php artisan about
+          php artisan route:list
+
+      - name: Compile Blade views
+        run: php artisan view:cache
+
+      - name: Fresh MySQL schema
+        run: php artisan migrate:fresh --force
+
+      - name: Application contract tests
+        run: vendor/bin/phpunit --testsuite=Feature
+
+      - name: Composer security audit
+        run: composer audit --no-interaction
+
+      - name: Configuration cache
+        run: |
+          php artisan config:cache
+          php artisan route:cache
+
+      - name: Migration rollback smoke check
+        run: php artisan migrate:rollback --step=1 --force

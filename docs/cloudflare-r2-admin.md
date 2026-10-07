@@ -85,7 +85,6 @@ ADMIN_ORIGIN=https://painel.gisleynunesimoveis.com.br
 
 Quando `ADMIN_ORIGIN` estiver configurado:
 
-- `/admin` acessado pelo domínio público redireciona para o painel;
 - `/api/auth/*` e `/api/admin/*` aceitam somente a origem do painel;
 - cookies de sessão continuam host-only e não são compartilhados com o domínio público.
 
@@ -95,7 +94,7 @@ Quando `ADMIN_ORIGIN` estiver configurado:
 2. O navegador mede largura/altura.
 3. O backend valida tipo e tamanho e gera uma URL PUT temporária com o `Content-Type` incluído na assinatura.
 4. O navegador envia a foto diretamente ao R2.
-5. O backend confirma que o objeto existe via HEAD e lê os bytes iniciais para validar se o arquivo é realmente JPEG, PNG, WebP ou AVIF.
+5. O backend confirma o objeto via HEAD e inspeciona o conteúdo para validar MIME e dimensões reais de JPEG, PNG, WebP ou AVIF; valores declarados pelo navegador precisam coincidir.
 6. O banco registra apenas metadados e a rota controlada de leitura.
 7. Imóveis publicados usam `/media/*`; rascunhos são visualizados pela rota autenticada do CRM.
 

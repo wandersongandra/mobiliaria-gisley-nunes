@@ -1,0 +1,60 @@
+@include('partials.head')
+  <body data-page="home">
+    @include('partials.header')
+    <main id="conteudo">
+      <section class="hero shell" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> imóveis em Belo Horizonte</p>
+          <h1 id="hero-title">Encontre seu imóvel<br /><em>em Belo Horizonte.</em></h1>
+          <p class="hero-lead">Veja imóveis para comprar ou alugar e fale com a equipe sobre o que você procura.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#imoveis">Ver imóveis <span aria-hidden="true">↗</span></a>
+            <a class="hero-secondary-link" href="/sobre">Como trabalhamos</a>
+          </div>
+          <div class="hero-meta" aria-label="Diferenciais">
+            <span><strong>BH</strong> atuação local</span>
+            <span><strong>GN</strong> atendimento direto</span>
+            @if(!empty($site['crci']))<span><strong>CRECI</strong> {{ $site['crci'] }}</span>@endif
+          </div>
+        </div>
+        <div class="hero-visual">
+          <div class="hero-image-wrap"><img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=85" alt="Casa contemporânea cercada por jardim ao entardecer" width="1600" height="1067" loading="eager" fetchpriority="high" decoding="async" /><span class="image-caption">Imagem de referência · arquitetura residencial</span></div>
+          <div class="hero-seal" aria-label="Atendimento direto"><span>atendimento</span><strong>direto</strong><small>◆</small></div>
+        </div>
+      </section>
+
+      <section class="search-card shell" aria-labelledby="search-title">
+        <div class="search-head"><div><p class="eyebrow">busca de imóveis</p><h2 id="search-title">Encontre pelo bairro, tipo e valor.</h2></div><span class="listing-count"><strong id="listing-count">00</strong> imóveis</span></div>
+        <form id="search-form" class="search-form">
+          <label class="field"><span>Eu quero</span><select id="purpose"><option value="all">Comprar ou alugar</option><option value="Comprar">Comprar</option><option value="Alugar">Alugar</option></select></label>
+          <label class="field field-wide"><span>Bairro</span><select id="location"><option value="all">Todos os bairros</option></select></label>
+          <label class="field"><span>Tipo de imóvel</span><select id="type"><option value="all">Todos os tipos</option></select></label>
+          <label class="field"><span>Faixa de preço</span><select id="price" disabled><option value="all">Escolha comprar ou alugar</option></select></label>
+          <label class="field"><span>Quartos</span><select id="bedrooms"><option value="all">Qualquer número</option><option value="1">1 quarto</option><option value="2">2 quartos</option><option value="3">3 quartos</option><option value="4+">4 ou mais</option></select></label>
+          <button class="search-button" type="submit" aria-label="Buscar imóveis"><span>Buscar</span><span aria-hidden="true">⌕</span></button>
+        </form>
+        <div class="filter-summary" id="filter-summary" aria-live="polite"><span>carregando imóveis</span></div>
+      </section>
+
+      <section class="section shell listings-section home-listings" id="imoveis" aria-labelledby="listings-title">
+        <div class="section-heading"><div><p class="eyebrow">imóveis disponíveis</p><h2 id="listings-title">Comprar ou alugar<br /><em>em Belo Horizonte.</em></h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
+        <div class="listing-grid" id="listing-grid">
+          @foreach($properties ?? [] as $index => $property)
+            @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
+          @endforeach
+        </div>
+        <div class="empty-state" id="empty-state" hidden></div>
+      </section>
+
+      <section class="experience-section" id="experiencia" aria-labelledby="experience-title"><div class="shell experience-grid"><div class="experience-intro"><p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> como ajudamos</p><h2 id="experience-title">Escolha com<br /><em>mais segurança.</em></h2><p>A equipe organiza as opções, esclarece as dúvidas e acompanha a negociação.</p><a class="button button-light" href="/sobre">Conheça a Gisley Nunes <span aria-hidden="true">↗</span></a></div><div class="stats process-stats"><div class="stat"><strong>01</strong><span>entender sua<br />busca</span></div><div class="stat"><strong>02</strong><span>separar imóveis<br />adequados</span></div><div class="stat"><strong>03</strong><span>agendar visitas<br />e comparar</span></div><div class="stat"><strong>04</strong><span>acompanhar proposta<br />e negociação</span></div></div></div></section>
+
+      <section class="pathways-section shell" aria-labelledby="pathways-title"><div class="pathways-heading"><p class="eyebrow">escolha uma opção</p><h2 id="pathways-title">O que você<br /><em>quer fazer?</em></h2></div><div class="pathways-grid"><a class="pathway-card pathway-card-dark" href="/imoveis"><span>01</span><strong>Comprar ou alugar</strong><p>Veja os imóveis publicados em Belo Horizonte e região.</p><b aria-hidden="true">↗</b></a><a class="pathway-card pathway-card-warm" href="/bairros"><span>02</span><strong>Buscar por bairro</strong><p>Consulte os imóveis pela localização.</p><b aria-hidden="true">↗</b></a><a class="pathway-card pathway-card-paper" href="/servicos"><span>03</span><strong>Anunciar meu imóvel</strong><p>Fale com a equipe sobre cadastro e divulgação.</p><b aria-hidden="true">↗</b></a></div></section>
+
+      @if(!empty($testimonials))<section class="section testimonials-section shell" id="depoimentos" aria-labelledby="testimonials-title"><div class="section-heading"><div><p class="eyebrow">depoimentos</p><h2 id="testimonials-title">O que nossos<br /><em>clientes dizem.</em></h2></div><div class="quote-nav" aria-label="Controles de depoimentos"><button type="button" data-quote-prev aria-label="Depoimento anterior">←</button><button type="button" data-quote-next aria-label="Próximo depoimento">→</button></div></div><div id="testimonials-track">@foreach($testimonials as $index => $item)<div class="testimonial-feature" @if($index !== 0) hidden @endif><div class="quote-mark">“</div><blockquote>{{ $item['quote'] }}</blockquote><div class="quote-author"><strong>{{ $item['author'] }}</strong><span>{{ $item['location'] }}@if(!empty($item['year'])) · {{ $item['year'] }}@endif</span></div></div>@endforeach</div></section>@endif
+
+      <section class="contact-section" id="contato" aria-labelledby="contact-title"><div class="shell contact-grid"><div><p class="eyebrow">fale com a equipe</p><h2 id="contact-title">Fale sobre seu imóvel<br /><em>ou sua busca.</em></h2><p class="contact-copy">Diga se você quer comprar, alugar ou anunciar. A equipe responde pelos canais de atendimento.</p><div class="contact-details"><span>Atendimento em {{ $site['area'] }}</span><a href="#contact-form">Enviar uma mensagem ↗</a></div></div><form class="contact-form" id="contact-form"><label class="contact-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label><div class="form-row"><label>Seu nome<input required name="name" autocomplete="name" maxlength="120" placeholder="Seu nome" /></label><label>Seu e-mail<input required type="email" name="email" autocomplete="email" maxlength="255" placeholder="voce@email.com" /></label></div><label>Como podemos ajudar?<select name="interest"><option>Quero comprar um imóvel</option><option>Quero alugar um imóvel</option><option>Quero anunciar meu imóvel</option><option>Tenho outra dúvida</option></select></label><label>Mensagem<textarea required name="message" rows="3" maxlength="3000" placeholder="Conte o que você procura"></textarea></label><button class="button button-primary" type="submit">Enviar mensagem <span aria-hidden="true">↗</span></button><p class="form-privacy">Ao enviar, seus dados serão usados para responder ao contato e registrados no CRM. <a href="/privacidade">Veja a política de privacidade.</a></p><p class="form-status" id="form-status" role="status"></p></form></div></section>
+    </main>
+    @include('partials.footer')
+    <script type="module" src="{{ $assets['js'] }}"></script>
+  </body>
+</html>

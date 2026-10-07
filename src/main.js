@@ -5,6 +5,21 @@ function escapeHTML(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]);
 }
 
+function trackEvent(name, params = {}) {
+  if (typeof window === 'undefined') return;
+  const payload = { ...params, page_path: window.location.pathname };
+
+  try {
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', name, payload);
+    } else if (Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({ event: name, ...payload });
+    }
+  } catch {
+    // A falha opcional de mensuração não pode interromper a navegação ou o formulário.
+  }
+}
+
 function priceBand(price, purpose = 'Comprar') {
   const value = Number(price || 0);
   if (purpose === 'Alugar') {
@@ -48,7 +63,7 @@ function listingCard(item, index = 0) {
   const delayClass = `listing-delay-${Math.min(Math.max(Number(index) || 0, 0), 7)}`;
   return `<article class="listing-card listing-card-enter ${delayClass}" data-listing-card>
     <a href="${href}" class="listing-image">
-      <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" loading="lazy" decoding="async" />
+      <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" width="1200" height="800" sizes="(max-width: 600px) calc(100vw - 32px), (max-width: 980px) 50vw, 33vw" loading="lazy" decoding="async" />
       <span class="listing-tag">${escapeHTML(item.tag)}</span>
       <span class="listing-arrow" aria-hidden="true">↗</span>
       <span class="listing-image-shade" aria-hidden="true"></span>
@@ -116,6 +131,11 @@ function initMobileMenu() {
 
   mobileNav.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => close()));
 
+  document.addEventListener('click', (event) => {
+    if (toggle.getAttribute('aria-expanded') !== 'true') return;
+    if (!event.target.closest('.site-header')) close();
+  });
+
   document.addEventListener('keydown', (event) => {
     if (toggle.getAttribute('aria-expanded') !== 'true') return;
     if (event.key === 'Escape') {
@@ -146,10 +166,16 @@ function initListing() {
   const grid = document.querySelector('#listing-grid');
   if (!grid) return;
 
+  const isHome = document.body.dataset.page === 'home';
   const empty = document.querySelector('#empty-state');
   const count = document.querySelector('#listing-count');
   const form = document.querySelector('#search-form');
   const filterSummary = document.querySelector('#filter-summary');
+  const paginationNode = document.querySelector('#catalog-pagination');
+  const ssrPagination = document.querySelector('[data-ssr-pagination]');
+  const paginationLabel = document.querySelector('#catalog-pagination-label');
+  const previousPage = document.querySelector('#catalog-page-previous');
+  const nextPage = document.querySelector('#catalog-page-next');
   const filters = {
     purpose: document.querySelector('#purpose'),
     location: document.querySelector('#location'),
@@ -158,16 +184,23 @@ function initListing() {
     bedrooms: document.querySelector('#bedrooms')
   };
   let catalog = [];
+  let pagination = { current_page: 1, last_page: 1, total: 0 };
+  let facetsInitialized = false;
+
+  function activeFilterLabels() {
+    return [
+      filters.purpose?.value !== 'all' && filters.purpose?.options[filters.purpose.selectedIndex]?.text,
+      filters.location?.value !== 'all' && filters.location?.options[filters.location.selectedIndex]?.text,
+      filters.type?.value !== 'all' && filters.type?.options[filters.type.selectedIndex]?.text,
+      filters.price?.value !== 'all' && filters.price?.options[filters.price.selectedIndex]?.text,
+      filters.bedrooms?.value !== 'all' && filters.bedrooms?.options[filters.bedrooms.selectedIndex]?.text
+    ].filter(Boolean);
+  }
 
   function renderFilterSummary(resultCount) {
     if (!filterSummary) return;
-    const active = [
-      filters.purpose.value !== 'all' && filters.purpose.options[filters.purpose.selectedIndex].text,
-      filters.location.value !== 'all' && filters.location.options[filters.location.selectedIndex].text,
-      filters.type.value !== 'all' && filters.type.options[filters.type.selectedIndex].text,
-      filters.price.value !== 'all' && filters.price.options[filters.price.selectedIndex].text,
-      filters.bedrooms.value !== 'all' && filters.bedrooms.options[filters.bedrooms.selectedIndex].text
-    ].filter(Boolean);
+    filterSummary.removeAttribute('role');
+    const active = activeFilterLabels();
 
     filterSummary.innerHTML = active.length
       ? `<span><strong>${resultCount}</strong> ${resultCount === 1 ? 'imóvel encontrado' : 'imóveis encontrados'}</span><div class="active-filters">${active.map((label) => `<span class="filter-chip">${escapeHTML(label)}</span>`).join('')}<button type="button" id="clear-filters-inline">Limpar filtros</button></div>`
@@ -176,35 +209,81 @@ function initListing() {
     document.querySelector('#clear-filters-inline')?.addEventListener('click', clearFilters);
   }
 
+  function renderEmptyState(hasItems) {
+    if (!empty) return;
+    if (hasItems) {
+      empty.hidden = true;
+      empty.removeAttribute('role');
+      empty.removeAttribute('aria-live');
+      return;
+    }
+
+    const active = activeFilterLabels();
+    empty.hidden = false;
+    empty.setAttribute('role', 'status');
+    empty.setAttribute('aria-live', 'polite');
+    empty.innerHTML = active.length
+      ? '<span class="empty-state-message">Não encontramos um imóvel com esses filtros.</span> <button type="button" id="clear-filters">Limpar filtros</button>'
+      : '<span class="empty-state-message">Ainda não há imóveis publicados. Fale com a equipe para contar o que você procura.</span> <a class="button button-primary empty-state-action" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a>';
+    empty.querySelector('#clear-filters')?.addEventListener('click', clearFilters);
+  }
+
   function renderListings(items = catalog) {
-    grid.innerHTML = items.map((item, index) => listingCard(item, index)).join('');
+    ssrPagination?.setAttribute('hidden', '');
+    const visibleItems = isHome ? items.slice(0, 6) : items;
+    grid.innerHTML = visibleItems.map((item, index) => listingCard(item, index)).join('');
     activateListingCards(grid);
-    if (count) count.textContent = String(items.length).padStart(2, '0');
-    if (empty) empty.hidden = items.length > 0;
-    renderFilterSummary(items.length);
+    if (count) count.textContent = String(pagination.total).padStart(2, '0');
+    renderEmptyState(items.length > 0);
+    renderFilterSummary(pagination.total);
+    renderPagination();
     form?.classList.remove('has-pending-filters');
   }
 
   function clearFilters() {
     Object.values(filters).forEach((filter) => { if (filter) filter.value = 'all'; });
     updatePriceOptions();
-    renderListings(catalog);
+    loadProperties(1);
   }
 
-  function fillSelect(select, values, allLabel) {
+  function fillSelect(select, values, allLabel, selected = 'all') {
     if (!select) return;
-    select.innerHTML = `<option value="all">${escapeHTML(allLabel)}</option>` + values.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join('');
-    select.value = 'all';
+    select.innerHTML = `<option value="all">${escapeHTML(allLabel)}</option>` + values.map((item) => {
+      const value = typeof item === 'string' ? item : item.value;
+      const label = typeof item === 'string' ? item : item.label;
+      return `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`;
+    }).join('');
+    select.value = [...select.options].some((option) => option.value === selected) ? selected : 'all';
   }
 
-  function populateFilterOptions() {
-    const neighborhoods = [...new Set(catalog.map((item) => item.neighborhood).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const types = [...new Set(catalog.map((item) => item.type).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    fillSelect(filters.location, neighborhoods, 'Todos os bairros');
-    fillSelect(filters.type, types, 'Todos os tipos');
+  function populateFilterOptions(facets) {
+    const locations = Array.isArray(facets?.locations) ? facets.locations : [];
+    const types = Array.isArray(facets?.types) ? facets.types : [];
+    fillSelect(filters.location, locations.map((value) => ({ value, label: String(value).split(' · ')[0] })), 'Todos os bairros', filters.location?.value || 'all');
+    fillSelect(filters.type, types, 'Todos os tipos', filters.type?.value || 'all');
   }
 
-  function updatePriceOptions() {
+  function filterStaticPreview(items) {
+    if (document.body.dataset.preview !== 'static') return items;
+
+    return items.filter((item) => {
+      const property = normalizeProperty(item);
+      const purpose = filters.purpose?.value || 'all';
+      const location = filters.location?.value || 'all';
+      const type = filters.type?.value || 'all';
+      const price = filters.price?.value || 'all';
+      const bedrooms = filters.bedrooms?.value || 'all';
+
+      return (purpose === 'all' || property.purpose === purpose)
+        && (location === 'all' || property.location === location)
+        && (type === 'all' || property.type === type)
+        && (price === 'all' || String(property.priceValue) === price)
+        && (bedrooms === 'all'
+          || (bedrooms === '4+' ? property.bedrooms >= 4 : String(property.bedrooms) === bedrooms));
+    });
+  }
+
+  function updatePriceOptions(selected = filters.price?.value || 'all') {
     const select = filters.price;
     if (!select) return;
     const purpose = filters.purpose?.value || 'all';
@@ -230,7 +309,7 @@ function initListing() {
           ['3', 'Acima de R$ 3 mi']
         ];
     select.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
-    select.value = 'all';
+    select.value = options.some(([value]) => value === selected) ? selected : 'all';
   }
 
   function applyUrlFilters() {
@@ -245,8 +324,27 @@ function initListing() {
       const value = params.get(key);
       if (value && [...filter.options].some((option) => option.value === value)) filter.value = value;
     }
-    const requestedPrice = params.get('price');
+    const requestedPrice = params.get('price_band') || params.get('price');
     if (requestedPrice && [...filters.price.options].some((option) => option.value === requestedPrice)) filters.price.value = requestedPrice;
+
+    return [...params.keys()].some((key) => ['purpose', 'location', 'type', 'price', 'price_band', 'bedrooms'].includes(key));
+  }
+
+  function queryForPage(page) {
+    const params = new URLSearchParams({ page: String(page), per_page: '20' });
+    const names = { purpose: 'purpose', location: 'location', type: 'type', price: 'price_band', bedrooms: 'bedrooms' };
+    Object.entries(filters).forEach(([key, filter]) => {
+      if (filter?.value && filter.value !== 'all') params.set(names[key], filter.value);
+    });
+    return params;
+  }
+
+  function renderPagination() {
+    if (!paginationNode || isHome) return;
+    paginationNode.hidden = pagination.last_page <= 1;
+    if (paginationLabel) paginationLabel.textContent = `Página ${pagination.current_page} de ${pagination.last_page}`;
+    if (previousPage) previousPage.disabled = pagination.current_page <= 1;
+    if (nextPage) nextPage.disabled = pagination.current_page >= pagination.last_page;
   }
 
   Object.values(filters).forEach((filter) => filter?.addEventListener('change', () => form?.classList.add('has-pending-filters')));
@@ -254,39 +352,72 @@ function initListing() {
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const filtered = catalog.filter((item) => {
-      const purposeOk = filters.purpose.value === 'all' || item.purpose === filters.purpose.value;
-      const locationOk = filters.location.value === 'all' || item.neighborhood === filters.location.value;
-      const typeOk = filters.type.value === 'all' || item.type === filters.type.value;
-      const priceOk = filters.price.value === 'all' || item.priceValue === Number(filters.price.value);
-      const bedroomsOk = filters.bedrooms.value === 'all' || (filters.bedrooms.value === '4+' ? item.bedrooms >= 4 : item.bedrooms === Number(filters.bedrooms.value));
-      return purposeOk && locationOk && typeOk && priceOk && bedroomsOk;
-    });
-    renderListings(filtered);
+    if (isHome) {
+      window.location.assign(`/imoveis?${queryForPage(1).toString()}`);
+      return;
+    }
+    loadProperties(1);
     document.querySelector('#imoveis')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   document.querySelector('#clear-filters')?.addEventListener('click', clearFilters);
+  previousPage?.addEventListener('click', () => loadProperties(pagination.current_page - 1));
+  nextPage?.addEventListener('click', () => loadProperties(pagination.current_page + 1));
 
-  async function loadProperties() {
+  async function loadProperties(page = 1) {
     try {
       grid.setAttribute('aria-busy', 'true');
       grid.innerHTML = listingSkeletons(document.body.dataset.page === 'home' ? 6 : 6);
-      const response = await fetch('/api/properties', { headers: { Accept: 'application/json' } });
+      if (empty) {
+        empty.hidden = true;
+        empty.removeAttribute('role');
+        empty.removeAttribute('aria-live');
+      }
+      const params = queryForPage(page);
+      const response = await fetch(`/api/v2/properties?${params.toString()}`, { headers: { Accept: 'application/json' } });
       if (!response.ok) throw new Error('LOAD_FAILED');
       const payload = await response.json();
-      catalog = Array.isArray(payload?.properties) ? payload.properties.map(normalizeProperty) : [];
-      populateFilterOptions();
-      updatePriceOptions();
-      applyUrlFilters();
+      const rawProperties = Array.isArray(payload?.properties) ? payload.properties : [];
+      catalog = filterStaticPreview(rawProperties).map(normalizeProperty);
+      pagination = payload?.pagination || pagination;
+      if (document.body.dataset.preview === 'static') {
+        pagination = {
+          ...pagination,
+          current_page: 1,
+          last_page: 1,
+          total: catalog.length,
+          from: catalog.length ? 1 : null,
+          to: catalog.length || null
+        };
+      }
+      if (!facetsInitialized) {
+        populateFilterOptions(payload?.facets);
+        updatePriceOptions();
+        const hasUrlFilters = applyUrlFilters();
+        const requestedPage = Math.max(1, Number(new URLSearchParams(window.location.search).get('page') || 1));
+        facetsInitialized = true;
+        if (hasUrlFilters || requestedPage > 1) {
+          await loadProperties(hasUrlFilters ? 1 : requestedPage);
+          return;
+        }
+      }
+      if (!isHome) history.replaceState(null, '', `/imoveis?${params.toString()}`);
       renderListings(catalog);
     } catch {
+      ssrPagination?.removeAttribute('hidden');
       grid.innerHTML = '';
       if (count) count.textContent = '00';
-      if (empty) empty.hidden = true;
+      if (empty) {
+        empty.hidden = false;
+        empty.setAttribute('role', 'alert');
+        empty.removeAttribute('aria-live');
+        empty.innerHTML = '<span class="empty-state-message">Não foi possível carregar os imóveis.</span> <button type="button" id="retry-properties-empty">Tentar novamente</button>';
+        empty.querySelector('#retry-properties-empty')?.addEventListener('click', () => loadProperties(page), { once: true });
+      }
       if (filterSummary) {
+        filterSummary.setAttribute('role', 'alert');
         filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis.</span><button type="button" id="retry-properties">Tentar novamente</button>';
-        filterSummary.querySelector('#retry-properties')?.addEventListener('click', loadProperties, { once: true });
+        filterSummary.querySelector('#retry-properties')?.addEventListener('click', () => loadProperties(page), { once: true });
       }
     } finally {
       grid.removeAttribute('aria-busy');
@@ -329,6 +460,7 @@ function initContactForm() {
     form.dataset.state = 'sending';
     if (status) {
       status.dataset.state = 'sending';
+      status.setAttribute('aria-live', 'polite');
       status.textContent = 'Enviando sua mensagem';
     }
 
@@ -349,8 +481,12 @@ function initContactForm() {
       if (!response.ok) throw new Error('CONTACT_FAILED');
       form.reset();
       form.dataset.state = 'success';
+      trackEvent('generate_lead', {
+        interest: String(data.interest || '').slice(0, 100)
+      });
       if (status) {
         status.dataset.state = 'success';
+        status.setAttribute('aria-live', 'polite');
         status.textContent = 'Mensagem enviada. Retornaremos em breve.';
       }
     } catch {
@@ -359,6 +495,7 @@ function initContactForm() {
       form.dataset.state = 'error';
       if (status) {
         status.dataset.state = 'error';
+        status.setAttribute('aria-live', 'assertive');
         status.textContent = 'Não foi possível registrar a mensagem. ';
         if (whatsapp) {
           const link = document.createElement('a');
@@ -408,10 +545,10 @@ function renderPropertyDetail(property) {
 
   const gallery = photos.length ? `
     <div class="gallery-main">
-      <img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" fetchpriority="high" decoding="async" />
+      <img src="${escapeHTML(primary.url)}" alt="${escapeHTML(primary.alt_text || property.title)}" width="1600" height="1067" sizes="(max-width: 820px) 100vw, 65vw" fetchpriority="high" decoding="async" />
       <div class="gallery-main-overlay">
         <span class="gallery-count"><strong data-gallery-current>${String(primaryIndex + 1).padStart(2, '0')}</strong> / ${String(photos.length).padStart(2, '0')}</span>
-        ${photos.length > 1 ? '<div class="gallery-controls"><button type="button" data-gallery-prev aria-label="Foto anterior">←</button><button type="button" data-gallery-next aria-label="Próxima foto">→</button></div>' : ''}
+        <div class="gallery-controls"><button type="button" class="gallery-lightbox-trigger" data-gallery-open aria-label="Abrir galeria em tela cheia">⤢</button>${photos.length > 1 ? '<button type="button" data-gallery-prev aria-label="Foto anterior">←</button><button type="button" data-gallery-next aria-label="Próxima foto">→</button>' : ''}</div>
       </div>
       <span class="sr-only" data-gallery-status aria-live="polite"></span>
     </div>
@@ -421,7 +558,7 @@ function renderPropertyDetail(property) {
   return `<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Início</a><span aria-hidden="true">›</span><a href="/imoveis">Imóveis</a><span aria-hidden="true">›</span><span aria-current="page">${escapeHTML(property.title)}</span></nav>
     <section class="property-hero">
       <div class="property-gallery">${gallery}</div>
-      <aside class="property-summary">
+      <div class="property-summary">
         <div class="property-summary-topline"><span>${escapeHTML(property.purpose)}</span><span>${escapeHTML(property.type)}</span></div>
         <h1>${escapeHTML(property.title)}</h1>
         <p class="property-location">${escapeHTML(property.location)}</p>
@@ -433,12 +570,50 @@ function renderPropertyDetail(property) {
           <a class="button button-primary" href="#contato">Tenho interesse <span aria-hidden="true">↗</span></a>
           <a class="property-back-link" href="/imoveis">← Ver outros imóveis</a>
         </div>
-      </aside>
+      </div>
     </section>
+    <a class="property-mobile-cta" href="#contato" aria-label="Demonstrar interesse por este imóvel"><span>Tenho interesse</span><span aria-hidden="true">↗</span></a>
     <section class="property-description">
       <div><p class="eyebrow">descrição</p><span class="property-description-index">01</span></div>
       <p class="property-description-copy">${escapeHTML(property.description || '')}</p>
-    </section>`;
+    </section>
+    <dialog class="gallery-lightbox" data-gallery-lightbox aria-label="Galeria de ${escapeHTML(property.title)}">
+      <button class="gallery-lightbox-close" type="button" data-gallery-lightbox-close aria-label="Fechar galeria">×</button>
+      <button class="gallery-lightbox-control gallery-lightbox-prev" type="button" data-gallery-lightbox-prev aria-label="Foto anterior">←</button>
+      <figure>
+        <img data-gallery-lightbox-image alt="" decoding="async" />
+        <figcaption><span data-gallery-lightbox-current>01</span> / ${String(photos.length).padStart(2, '0')}</figcaption>
+      </figure>
+      <button class="gallery-lightbox-control gallery-lightbox-next" type="button" data-gallery-lightbox-next aria-label="Próxima foto">→</button>
+    </dialog>`;
+}
+
+function initConversionTracking() {
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest?.('a[href]');
+    if (!link) return;
+
+    let url;
+    try { url = new URL(link.href, window.location.origin); } catch { return; }
+
+    if (url.protocol === 'tel:') {
+      trackEvent('phone_click');
+    } else if (url.hostname === 'wa.me' || url.hostname === 'api.whatsapp.com') {
+      trackEvent('whatsapp_click');
+    }
+
+    if (document.body.dataset.page === 'imovel' && (url.hash === '#contato' || link.closest('.property-actions'))) {
+      trackEvent('property_inquiry_click');
+    }
+  });
+
+  const form = document.querySelector('#contact-form');
+  let started = false;
+  form?.addEventListener('input', () => {
+    if (started) return;
+    started = true;
+    trackEvent('contact_form_start');
+  }, { passive: true });
 }
 
 function initPropertyDetail() {
@@ -453,20 +628,43 @@ function initPropertyDetail() {
     return;
   }
 
+  trackEvent('view_item', { item_type: 'property' });
+
   root.innerHTML = renderPropertyDetail(property);
   const thumbs = [...root.querySelectorAll('.gallery-thumb')];
   const mainImage = root.querySelector('.gallery-main img');
   const current = root.querySelector('[data-gallery-current]');
   const galleryStatus = root.querySelector('[data-gallery-status]');
-  let activeIndex = Math.max(0, thumbs.findIndex((thumb) => thumb.classList.contains('is-active')));
+  const lightbox = root.querySelector('[data-gallery-lightbox]');
+  const lightboxImage = root.querySelector('[data-gallery-lightbox-image]');
+  const lightboxCurrent = root.querySelector('[data-gallery-lightbox-current]');
+  const lightboxTrigger = root.querySelector('[data-gallery-open]');
+  const photos = Array.isArray(property.photos) && property.photos.length
+    ? property.photos
+    : (property.cover_url ? [{ url: property.cover_url, alt_text: property.title, is_cover: 1 }] : []);
+  let activeIndex = Math.max(0, photos.findIndex((photo) => photo.is_cover));
+
+  const syncLightbox = () => {
+    if (!lightboxImage || !photos.length) return;
+    const photo = photos[activeIndex];
+    lightboxImage.src = photo.url;
+    lightboxImage.alt = photo.alt_text || property.title;
+    if (lightboxCurrent) lightboxCurrent.textContent = String(activeIndex + 1).padStart(2, '0');
+  };
+
+  const openLightbox = () => {
+    if (!lightbox || !photos.length) return;
+    syncLightbox();
+    if (!lightbox.open) lightbox.showModal();
+  };
 
   const selectPhoto = (index) => {
-    if (!thumbs.length || !mainImage) return;
-    activeIndex = (index + thumbs.length) % thumbs.length;
-    const thumb = thumbs[activeIndex];
+    if (!photos.length || !mainImage) return;
+    activeIndex = (index + photos.length) % photos.length;
+    const photo = photos[activeIndex];
     mainImage.classList.add('is-switching');
-    const nextSrc = thumb.dataset.image;
-    const nextAlt = thumb.dataset.alt || property.title;
+    const nextSrc = photo.url;
+    const nextAlt = photo.alt_text || property.title;
     const preloader = new Image();
     preloader.onload = () => {
       mainImage.src = nextSrc;
@@ -475,9 +673,10 @@ function initPropertyDetail() {
     };
     preloader.src = nextSrc;
     thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
-    thumb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    thumbs[activeIndex]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
-    if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${thumbs.length}: ${nextAlt}`;
+    if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${photos.length}: ${nextAlt}`;
+    if (lightbox?.open) syncLightbox();
   };
 
   thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => selectPhoto(index)));
@@ -493,11 +692,15 @@ function initPropertyDetail() {
     pointerStartX = null;
     if (Math.abs(delta) > 44) selectPhoto(activeIndex + (delta < 0 ? 1 : -1));
   });
-  galleryMain?.setAttribute('tabindex', '0');
-  galleryMain?.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowLeft') selectPhoto(activeIndex - 1);
-    if (event.key === 'ArrowRight') selectPhoto(activeIndex + 1);
+  lightboxTrigger?.addEventListener('click', openLightbox);
+
+  lightbox?.querySelector('[data-gallery-lightbox-close]')?.addEventListener('click', () => lightbox.close());
+  lightbox?.querySelector('[data-gallery-lightbox-prev]')?.addEventListener('click', () => selectPhoto(activeIndex - 1));
+  lightbox?.querySelector('[data-gallery-lightbox-next]')?.addEventListener('click', () => selectPhoto(activeIndex + 1));
+  lightbox?.addEventListener('click', (event) => {
+    if (event.target === lightbox) lightbox.close();
   });
+  lightbox?.addEventListener('close', () => lightboxTrigger?.focus());
 }
 
 function initScrollPolish() {
@@ -585,12 +788,13 @@ async function initWhatsAppShortcut() {
     link.rel = 'noopener noreferrer';
     link.setAttribute('aria-label', 'Falar com a Gisley Nunes pelo WhatsApp');
     link.innerHTML = '<span aria-hidden="true">↗</span><strong>WhatsApp</strong>';
-    document.body.append(link);
+    (document.querySelector('.site-footer') || document.body).append(link);
   } catch {}
 }
 
 markCurrentNavigation();
 initMobileMenu();
+initConversionTracking();
 initListing();
 initPropertyDetail();
 initContactForm();

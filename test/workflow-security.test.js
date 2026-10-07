@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-const codeql = await readFile(new URL('../.github/workflows/codeql.yml', import.meta.url), 'utf8');
-const dependabot = await readFile(new URL('../.github/dependabot.yml', import.meta.url), 'utf8');
+const normalizeNewlines = (content) => content.replace(/\r\n/g, '\n');
+const ci = normalizeNewlines(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+const codeql = normalizeNewlines(await readFile(new URL('../.github/workflows/codeql.yml', import.meta.url), 'utf8'));
+const dependabot = normalizeNewlines(await readFile(new URL('../.github/dependabot.yml', import.meta.url), 'utf8'));
 
 test('workflows não concedem escrita de conteúdo nem usam pull_request_target', () => {
   assert.doesNotMatch(`${ci}\n${codeql}`, /pull_request_target/);

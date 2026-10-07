@@ -1,0 +1,31 @@
+@include('partials.head')
+  <body data-page="bairros">
+    @include('partials.header')
+    <main id="conteudo">
+      <section class="page-hero shell neighborhoods-hero">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> imóveis por bairro</p>
+          <h1>Imóveis em Belo Horizonte<br /><em>por bairro.</em></h1>
+        </div>
+        <p class="page-lead">Consulte os bairros com imóveis publicados pela Gisley Nunes em Belo Horizonte e região.</p>
+      </section>
+
+      <section class="neighborhood-directory shell" aria-labelledby="neighborhood-title">
+        <div class="directory-head"><div><p class="eyebrow">bairros com imóveis publicados</p><h2 id="neighborhood-title">{{ count($neighborhoods) }} {{ count($neighborhoods) === 1 ? 'bairro disponível' : 'bairros disponíveis' }}</h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
+        @if(count($neighborhoods))
+          <div class="neighborhood-grid">
+            @foreach($neighborhoods as $index => $neighborhood)
+              <a class="neighborhood-card" href="/bairros/{{ rawurlencode($neighborhood['slug']) }}"><span class="neighborhood-index">{{ str_pad((string)($index + 1), 2, '0', STR_PAD_LEFT) }}</span><strong>{{ $neighborhood['name'] }}</strong><span>{{ $neighborhood['count'] }} {{ $neighborhood['count'] === 1 ? 'imóvel' : 'imóveis' }} <b aria-hidden="true">↗</b></span></a>
+            @endforeach
+          </div>
+        @else
+          <div class="empty-state"><p>Ainda não há imóveis publicados por bairro. Fale com a equipe para informar o que você procura.</p><a class="button button-primary" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a></div>
+        @endif
+      </section>
+
+      <section class="directory-note shell"><p class="eyebrow">não encontrou seu bairro?</p><h2>Envie sua busca<br /><em>para a equipe.</em></h2><a class="button button-primary" href="/contato">Enviar uma mensagem <span aria-hidden="true">↗</span></a></section>
+    </main>
+    @include('partials.footer')
+    <script type="module" src="{{ $assets['js'] }}"></script>
+  </body>
+</html>

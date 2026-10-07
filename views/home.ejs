@@ -1,5 +1,5 @@
 <%- include('partials/head') %>
-  <body data-page="home">
+  <body data-page="home" data-preview="static">
     <%- include('partials/header') %>
     <main id="conteudo">
       <section class="hero shell" aria-labelledby="hero-title">
@@ -18,7 +18,7 @@
           </div>
         </div>
         <div class="hero-visual">
-          <div class="hero-image-wrap"><img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=85" alt="Casa contemporânea cercada por jardim ao entardecer" fetchpriority="high" decoding="async" /><span class="image-caption">Imagem de referência · arquitetura residencial</span></div>
+          <div class="hero-image-wrap"><img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=85" alt="Casa contemporânea cercada por jardim ao entardecer" width="1600" height="1067" loading="eager" fetchpriority="high" decoding="async" /><span class="image-caption">Imagem de referência · arquitetura residencial</span></div>
           <div class="hero-seal" aria-label="Atendimento direto"><span>atendimento</span><strong>direto</strong><small>◆</small></div>
         </div>
       </section>
@@ -39,7 +39,7 @@
       <section class="section shell listings-section home-listings" id="imoveis" aria-labelledby="listings-title">
         <div class="section-heading"><div><p class="eyebrow">imóveis disponíveis</p><h2 id="listings-title">Comprar ou alugar<br /><em>em Belo Horizonte.</em></h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
         <div class="listing-grid" id="listing-grid"></div>
-        <p class="empty-state" id="empty-state" hidden>Não encontramos um imóvel com esses filtros. <button type="button" id="clear-filters">Limpar filtros</button></p>
+        <div class="empty-state" id="empty-state" hidden></div>
       </section>
 
       <section class="experience-section" id="experiencia" aria-labelledby="experience-title"><div class="shell experience-grid"><div class="experience-intro"><p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> como ajudamos</p><h2 id="experience-title">Escolha com<br /><em>mais segurança.</em></h2><p>A equipe organiza as opções, esclarece as dúvidas e acompanha a negociação.</p><a class="button button-light" href="/sobre">Conheça a Gisley Nunes <span aria-hidden="true">↗</span></a></div><div class="stats process-stats"><div class="stat"><strong>01</strong><span>entender sua<br />busca</span></div><div class="stat"><strong>02</strong><span>separar imóveis<br />adequados</span></div><div class="stat"><strong>03</strong><span>agendar visitas<br />e comparar</span></div><div class="stat"><strong>04</strong><span>acompanhar proposta<br />e negociação</span></div></div></div></section>

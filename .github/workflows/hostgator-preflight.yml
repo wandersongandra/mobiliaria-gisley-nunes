@@ -1,0 +1,72 @@
+name: HostGator preparation preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch Laravel permitida para a preparação'
+        required: true
+        default: migration/laravel-backend-2026-10-02
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostgator-preflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_NAME: Gisley Nunes Imóveis
+      APP_ENV: testing
+      APP_DEBUG: 'false'
+      APP_URL: http://127.0.0.1:8080
+      ADMIN_ORIGIN: http://127.0.0.1:8080
+      APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      GISELY_ADMIN_OPEN_IDS: test-bootstrap-open-id
+      R2_ACCOUNT_ID: test-account
+      R2_BUCKET: test-bucket
+      R2_ACCESS_KEY_ID: test-key
+      R2_SECRET_ACCESS_KEY: test-secret
+      MANUS_OAUTH_PORTAL_URL: https://oauth.example.test
+      MANUS_OAUTH_API_URL: https://oauth-api.example.test
+      MANUS_PROJECT_ID: test-project
+
+    steps:
+      - name: Reject non-Laravel branch
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          test "$REQUESTED_REF" = "migration/laravel-backend-2026-10-02"
+          test "$REQUESTED_REF" != "main"
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Validate deploy script syntax
+        run: bash -n scripts/deploy-hostgator.sh
+
+      - name: Install production dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+
+      - name: Boot production package shape
+        run: |
+          php artisan about
+          php artisan route:list
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+
+      - name: Confirm no deploy side effects
+        run: |
+          test ! -e .deploy-state
+          test ! -e .deploy-lock
