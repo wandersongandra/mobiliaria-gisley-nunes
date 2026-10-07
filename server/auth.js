@@ -1,129 +1,584 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
-import { findAdmin, upsertAdmin } from './db.js';
-import { hasDatabase, isAllowedEmail, oauth, sessionSecret } from './config.js';
+import {
+  consumeAuthChallenge,
+  createAdminSession,
+  createAuthChallenge,
+  createIdentityPairing,
+  acceptStaffInvitation,
+  findStaffInvitationByHash,
+  findActiveAdminSession,
+  findAdmin,
+  findStaffAccessByOpenId,
+  revokeAdminSession,
+  revokeAdminSessionsByOpenId,
+  saveStaffAccess,
+  upsertAdmin
+} from './db.js';
+import {
+  adminOpenIds,
+  configuredAdminOrigin,
+  hasDatabase,
+  isAllowedOpenId,
+  oauth,
+  sessionSecret
+} from './config.js';
+import { clearCsrfToken, ensureCsrfToken, requestHostOrigin } from './security.js';
+import { logOperationalError } from './operational-logging.js';
 
-const sessionCookie = 'webdev_app_session';
-const stateCookie = 'morada_oauth_state';
+const sessionCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_admin_session' : 'gisley_admin_session';
+const stateCookie = process.env.NODE_ENV === 'production' ? '__Host-gisley_oauth_state' : 'gisley_oauth_state';
+const sessionIssuer = 'gisley-nunes-imoveis';
+const sessionAudience = 'gisley-admin';
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const IDENTITY_PAIRING_TTL_MS = 15 * 60 * 1000;
+export const STAFF_INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 
 function secureCookie(req) {
-  return process.env.NODE_ENV === 'production' || req.headers['x-forwarded-proto'] === 'https' || req.secure;
+  const trustCloudflare = process.env.TRUST_PROXY_MODE === 'cloudflare';
+  const forwardedProto = trustCloudflare ? String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() : '';
+  return process.env.NODE_ENV === 'production' || forwardedProto === 'https' || req.secure;
 }
 
-function cookieOptions(req, extra = {}) {
-  const secure = secureCookie(req);
-  return { httpOnly: true, secure, sameSite: secure ? 'none' : 'lax', path: '/', ...extra };
+export function cookieOptions(req, extra = {}) {
+  return {
+    httpOnly: true,
+    secure: secureCookie(req),
+    sameSite: 'strict',
+    path: '/',
+    priority: 'high',
+    ...extra
+  };
 }
 
-function originFromRequest(req) {
-  const requested = String(req.query.origin || '').trim();
-  if (/^https?:\/\/localhost(?::\d+)?$/i.test(requested) || /^https:\/\/[a-z0-9.-]+\.manus\.computer$/i.test(requested)) return requested;
-  const forwarded = req.headers['x-forwarded-proto'] ? `${req.headers['x-forwarded-proto']}://${req.headers.host}` : `${req.protocol}://${req.get('host')}`;
-  return forwarded;
-}
-
-function encodeState(value) {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
-
-function decodeState(value) {
-  return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
-}
-
-async function signSession(user) {
-  const secret = new TextEncoder().encode(sessionSecret());
-  if (!secret.length) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
-  return new SignJWT({ openId: user.openId, email: user.email, name: user.name, role: 'admin', appId: oauth.projectId })
-    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('7d').sign(secret);
-}
-
-async function verifySessionToken(token) {
-  if (sessionSecret()) {
-    try {
-      const { payload } = await jwtVerify(token, new TextEncoder().encode(sessionSecret()), { algorithms: ['HS256'] });
-      if (payload.role === 'admin' && payload.openId) return payload;
-    } catch {}
+function validUrl(value, { httpsOnly = false } = {}) {
+  try {
+    const parsed = new URL(String(value || ''));
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (parsed.username || parsed.password) return false;
+    if (httpsOnly && parsed.protocol !== 'https:') return false;
+    return true;
+  } catch {
+    return false;
   }
-  if (oauth.jwtSecret) {
-    try {
-      const { payload } = await jwtVerify(token, new TextEncoder().encode(oauth.jwtSecret), { algorithms: ['HS256'] });
-      const appId = payload.appId || payload.app_id || payload.clientId;
-      if (payload.exp && Number(payload.exp) < Math.floor(Date.now() / 1000)) return null;
-      if (oauth.projectId && appId && appId !== oauth.projectId) return null;
-      const openId = payload.openId || payload.open_id || payload.sub;
-      if (openId) return { ...payload, openId };
-    } catch {}
+}
+
+function weakSessionSecret(value) {
+  const secret = String(value || '');
+  if (Buffer.byteLength(secret, 'utf8') < 32) return true;
+  if (/troque-por|change-me|example/i.test(secret)) return true;
+  const unique = new Set(secret).size;
+  if (unique < 12) return true;
+  if (/^(.)\1+$/.test(secret)) return true;
+  if (/^(.{1,16})\1+$/.test(secret)) return true;
+  return false;
+}
+
+function assertAuthConfig() {
+  if (!hasDatabase()) throw new Error('AUTH_DATABASE_NOT_CONFIGURED');
+  if (!oauth.portalUrl || !oauth.apiUrl || !oauth.projectId) throw new Error('OAUTH_NOT_CONFIGURED');
+
+  const secret = sessionSecret();
+  if (weakSessionSecret(secret)) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
+
+  const production = process.env.NODE_ENV === 'production';
+  if (!validUrl(oauth.portalUrl, { httpsOnly: production }) || !validUrl(oauth.apiUrl, { httpsOnly: production })) {
+    throw new Error('OAUTH_URL_INVALID');
   }
-  return null;
+
+  if (production) {
+    const adminOrigin = configuredAdminOrigin();
+    if (!adminOrigin || !adminOrigin.startsWith('https://')) throw new Error('ADMIN_ORIGIN_NOT_CONFIGURED');
+    const bootstrapOpenIds = adminOpenIds();
+    if (bootstrapOpenIds.length === 0) throw new Error('BOOTSTRAP_IDENTITY_NOT_CONFIGURED');
+    if (bootstrapOpenIds.some((openId) => openId.length > 191 || !/^\S+$/.test(openId))) {
+      throw new Error('BOOTSTRAP_IDENTITY_INVALID');
+    }
+  }
+}
+
+export function assertAuthConfiguration() {
+  assertAuthConfig();
+  return true;
+}
+
+export function hashOAuthState(value) {
+  return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+export function hashPairingCode(value) {
+  return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+export function hashInvitationToken(value) {
+  return createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+export function safeStateEqual(left, right) {
+  const a = Buffer.from(String(left || ''), 'utf8');
+  const b = Buffer.from(String(right || ''), 'utf8');
+  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);
+}
+
+export function isValidOAuthState(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+export function isValidOAuthCode(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 4096
+    && /^[\x21-\x7E]+$/.test(value);
+}
+
+export function isValidInvitationToken(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+export async function createSessionToken({ openId, nowMs = Date.now() }) {
+  const secretValue = sessionSecret();
+  if (weakSessionSecret(secretValue)) throw new Error('SESSION_SECRET_NOT_CONFIGURED');
+
+  const jti = randomUUID();
+  const expiresAtMs = nowMs + SESSION_TTL_MS;
+  const secret = new TextEncoder().encode(secretValue);
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuer(sessionIssuer)
+    .setAudience(sessionAudience)
+    .setSubject(String(openId))
+    .setJti(jti)
+    .setIssuedAt(Math.floor(nowMs / 1000))
+    .setExpirationTime(Math.floor(expiresAtMs / 1000))
+    .sign(secret);
+
+  return { token, jti, expiresAtMs };
+}
+
+export function validSessionClaims(payload, nowMs = Date.now()) {
+  const subject = String(payload?.sub || '');
+  const jti = String(payload?.jti || '');
+  const issuedAt = Number(payload?.iat);
+  const expiresAt = Number(payload?.exp);
+  const nowSeconds = Math.floor(nowMs / 1000);
+
+  if (!subject || subject.length > 191 || /\s/.test(subject)) return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jti)) return false;
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)) return false;
+  if (issuedAt > nowSeconds + 30) return false;
+  if (expiresAt <= nowSeconds) return false;
+  if (expiresAt <= issuedAt || expiresAt - issuedAt > Math.ceil(SESSION_TTL_MS / 1000) + 30) return false;
+  return true;
+}
+
+function canonicalJwtCompact(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+  return parts.every((part) => {
+    if (!part || !/^[A-Za-z0-9_-]+$/.test(part)) return false;
+    try {
+      return Buffer.from(part, 'base64url').toString('base64url') === part;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export async function verifySessionToken(token) {
+  const secretValue = sessionSecret();
+  if (weakSessionSecret(secretValue)) return null;
+  if (typeof token !== 'string' || token.length < 32 || token.length > 4096) return null;
+  if (!canonicalJwtCompact(token)) return null;
+
+  try {
+    const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(secretValue), {
+      algorithms: ['HS256'],
+      issuer: sessionIssuer,
+      audience: sessionAudience,
+      maxTokenAge: '8h',
+      clockTolerance: '30s'
+    });
+
+    if (protectedHeader.typ !== 'JWT') return null;
+    if (!validSessionClaims(payload)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeOAuthIdentity(userInfo = {}) {
+  const email = String(userInfo.email || '').trim().toLowerCase();
+  const openId = String(userInfo.openId || userInfo.open_id || '').trim();
+  const name = String(userInfo.name || email || 'Administrador').trim().slice(0, 255);
+  const emailVerified = userInfo.emailVerified ?? userInfo.email_verified;
+
+  if (
+    email.length === 0
+    || email.length > 255
+    || openId.length === 0
+    || openId.length > 191
+    || /\s/.test(openId)
+    || /[\u0000-\u001f\u007f]/.test(openId)
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    || emailVerified === false
+  ) return null;
+
+  return { email, openId, name };
+}
+
+export function resolveAdminAccess({ openId, email = '', access }) {
+  const normalizedOpenId = String(openId || '').trim();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const bootstrapManager = isAllowedOpenId(normalizedOpenId);
+
+  if (access?.invited_by === 'environment' && !bootstrapManager) return null;
+  if (!bootstrapManager && (!access || !access.active)) return null;
+  if (access?.open_id && String(access.open_id) !== normalizedOpenId) return null;
+  if (!bootstrapManager && normalizedEmail && String(access?.email || '').trim().toLowerCase() !== normalizedEmail) return null;
+
+  return {
+    role: bootstrapManager ? 'manager' : (access?.role === 'manager' ? 'manager' : 'editor'),
+    bootstrapManager
+  };
+}
+
+export function resolveSessionIdentity({ payload, session, user, access }) {
+  const subject = String(payload?.sub || '');
+  const jti = String(payload?.jti || '');
+  if (!subject || !jti || !session || !user) return null;
+  if (String(session.jti || '') !== jti) return null;
+  if (String(session.open_id || '') !== subject) return null;
+  if (String(user.open_id || '') !== subject) return null;
+
+  const email = String(user.email || '').trim().toLowerCase();
+  if (!email || String(session.email || '').trim().toLowerCase() !== email) return null;
+
+  const resolved = resolveAdminAccess({ openId: subject, email, access });
+  if (!resolved) return null;
+
+  return {
+    openId: subject,
+    email,
+    name: String(user.name || email).slice(0, 255),
+    role: resolved.role
+  };
+}
+
+export function authCookieNames() {
+  return { sessionCookie, stateCookie };
+}
+
+export function clearSessionCookie(req, res) {
+  res.clearCookie(sessionCookie, cookieOptions(req, { path: '/' }));
 }
 
 export async function currentAdmin(req) {
   const token = req.cookies?.[sessionCookie];
-  if (!token) return null;
+  if (!token || !hasDatabase()) return null;
+
   const payload = await verifySessionToken(token);
-  if (!payload?.openId || !hasDatabase()) return null;
-  const user = await findAdmin(String(payload.openId));
-  if (!user) return null;
-  return { openId: user.open_id, email: user.email, name: user.name, role: 'admin' };
+  if (!payload?.sub || !payload?.jti) return null;
+
+  const session = await findActiveAdminSession(String(payload.jti));
+  if (!session) return null;
+
+  const user = await findAdmin(String(payload.sub));
+  const access = await findStaffAccessByOpenId(String(payload.sub));
+  const resolved = resolveSessionIdentity({ payload, session, user, access });
+
+  if (!resolved) {
+    await revokeAdminSession(payload.jti);
+    return null;
+  }
+
+  return resolved;
 }
 
 export function requireAdmin() {
   return async (req, res, next) => {
     try {
       const user = await currentAdmin(req);
-      if (!user) return res.status(401).json({ error: 'AUTH_REQUIRED', login: true });
+      if (!user) {
+        clearSessionCookie(req, res);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(401).json({ error: 'AUTH_REQUIRED', login: true });
+      }
       req.admin = user;
-      next();
-    } catch (error) { next(error); }
+      return next();
+    } catch (error) {
+      return next(error);
+    }
   };
 }
 
-export function login(req, res) {
-  const origin = originFromRequest(req);
-  const redirectUri = `${origin}/api/auth/callback`;
-  const nonce = randomUUID();
-  res.cookie(stateCookie, encodeState({ nonce, redirectUri }), cookieOptions(req, { maxAge: 10 * 60 * 1000 }));
-  const state = encodeState({ redirectUri, nonce });
-  const url = new URL(`${oauth.portalUrl}/app-auth`);
-  url.searchParams.set('appId', oauth.projectId);
-  url.searchParams.set('redirectUri', redirectUri);
-  url.searchParams.set('state', state);
-  url.searchParams.set('responseType', 'code');
-  res.redirect(url.toString());
+export function requireManager() {
+  return (req, res, next) => {
+    if (req.admin?.role !== 'manager') return res.status(403).json({ error: 'MANAGER_REQUIRED' });
+    return next();
+  };
+}
+
+export async function login(req, res, next) {
+  try {
+    assertAuthConfig();
+
+    const origin = configuredAdminOrigin() || requestHostOrigin(req);
+    if (!origin) return res.status(400).send('Origem inválida.');
+
+    const inviteParam = req.query?.invite;
+    let invitationHash = null;
+    if (inviteParam !== undefined) {
+      if (!isValidInvitationToken(inviteParam)) {
+        return res.status(400).send('Convite inválido ou expirado.');
+      }
+      invitationHash = hashInvitationToken(inviteParam);
+      const invitation = await findStaffInvitationByHash(invitationHash);
+      if (
+        !invitation
+        || invitation.accepted_at
+        || invitation.revoked_at
+        || Number(invitation.expires_at_ms) <= Date.now()
+      ) {
+        return res.status(400).send('Convite inválido ou expirado.');
+      }
+    }
+
+    const redirectUri = `${origin}/api/auth/callback`;
+    const state = randomBytes(32).toString('base64url');
+    const expiresAtMs = Date.now() + OAUTH_STATE_TTL_MS;
+
+    await createAuthChallenge({
+      stateHash: hashOAuthState(state),
+      redirectUri,
+      expiresAtMs,
+      invitationHash
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.cookie(stateCookie, state, {
+      httpOnly: true,
+      secure: true,
+      maxAge: OAUTH_STATE_TTL_MS,
+      path: '/',
+      priority: 'high',
+      sameSite: 'lax'
+    });
+
+    const url = new URL(`${oauth.portalUrl.replace(/\/$/, '')}/app-auth`);
+    url.searchParams.set('appId', oauth.projectId);
+    url.searchParams.set('redirectUri', redirectUri);
+    url.searchParams.set('state', state);
+    url.searchParams.set('responseType', 'code');
+    return res.redirect(302, url.toString());
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function exchangeCode({ code, redirectUri }) {
-  const response = await fetch(`${oauth.apiUrl}/webdev.v1.WebDevAuthPublicService/ExchangeToken`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'connect-protocol-version': '1' }, body: JSON.stringify({ clientId: oauth.projectId, grantType: 'authorization_code', code, redirectUri }) });
+  const response = await fetch(`${oauth.apiUrl.replace(/\/$/, '')}/webdev.v1.WebDevAuthPublicService/ExchangeToken`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'connect-protocol-version': '1' },
+    body: JSON.stringify({ clientId: oauth.projectId, grantType: 'authorization_code', code, redirectUri }),
+    signal: AbortSignal.timeout(10000)
+  });
   if (!response.ok) throw new Error(`OAUTH_EXCHANGE_${response.status}`);
+
   const result = await response.json();
   if (!result.accessToken) throw new Error('OAUTH_ACCESS_TOKEN_MISSING');
-  const infoResponse = await fetch(`${oauth.apiUrl}/webdev.v1.WebDevAuthPublicService/GetUserInfo`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'connect-protocol-version': '1' }, body: JSON.stringify({ accessToken: result.accessToken }) });
+
+  const infoResponse = await fetch(`${oauth.apiUrl.replace(/\/$/, '')}/webdev.v1.WebDevAuthPublicService/GetUserInfo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'connect-protocol-version': '1' },
+    body: JSON.stringify({ accessToken: result.accessToken }),
+    signal: AbortSignal.timeout(10000)
+  });
   if (!infoResponse.ok) throw new Error(`OAUTH_USERINFO_${infoResponse.status}`);
   return infoResponse.json();
 }
 
 export async function callback(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+
   try {
-    const state = decodeState(String(req.query.state || ''));
-    const saved = decodeState(String(req.cookies?.[stateCookie] || ''));
-    if (!state.nonce || !saved.nonce || state.nonce !== saved.nonce || state.redirectUri !== saved.redirectUri) return res.status(400).send('Sessão de autenticação inválida. Tente novamente.');
-    const userInfo = await exchangeCode({ code: String(req.query.code || ''), redirectUri: saved.redirectUri });
-    const email = String(userInfo.email || '').trim().toLowerCase();
-    const openId = String(userInfo.openId || userInfo.open_id || '');
-    const name = String(userInfo.name || email || 'Administrador');
-    if (!openId || !isAllowedEmail(email)) return res.status(403).send('Este e-mail não está autorizado a administrar a Gisley Nunes Imóveis.');
+    assertAuthConfig();
+
+    const code = req.query?.code;
+    const state = req.query?.state;
+    const savedState = req.cookies?.[stateCookie];
+
+    res.clearCookie(stateCookie, cookieOptions(req, { path: '/', sameSite: 'lax' }));
+
+    if (!isValidOAuthCode(code)) return res.status(400).send('Código de autenticação ausente ou inválido.');
+    if (!isValidOAuthState(state) || !isValidOAuthState(savedState) || !safeStateEqual(state, savedState)) {
+      return res.status(400).send('Sessão de autenticação inválida. Tente novamente.');
+    }
+
+    const challenge = await consumeAuthChallenge(hashOAuthState(state));
+    if (!challenge) return res.status(400).send('Sessão de autenticação expirada ou já utilizada.');
+
+    const expectedOrigin = configuredAdminOrigin() || requestHostOrigin(req);
+    const expectedRedirectUri = expectedOrigin ? `${expectedOrigin}/api/auth/callback` : '';
+    if (!expectedRedirectUri || challenge.redirectUri !== expectedRedirectUri) {
+      return res.status(400).send('Origem de autenticação inválida.');
+    }
+
+    const userInfo = await exchangeCode({ code, redirectUri: challenge.redirectUri });
+    const identity = normalizeOAuthIdentity(userInfo);
+    if (!identity) {
+      return res.status(403).send('Identidade inválida para acesso administrativo.');
+    }
+    const { email, openId, name } = identity;
+
+    let access = null;
+    if (challenge.invitationHash) {
+      const invitation = await findStaffInvitationByHash(challenge.invitationHash);
+      if (
+        !invitation
+        || invitation.accepted_at
+        || invitation.revoked_at
+        || Number(invitation.expires_at_ms) <= Date.now()
+      ) {
+        return res.status(403).send('Este convite expirou, foi revogado ou já foi utilizado.');
+      }
+      if (String(invitation.email || '').trim().toLowerCase() !== email) {
+        return res.status(403).send('Este convite foi destinado a outro e-mail.');
+      }
+      try {
+        access = await acceptStaffInvitation({
+          tokenHash: challenge.invitationHash,
+          openId,
+          email
+        });
+      } catch (error) {
+        if (error?.message === 'INVITATION_EMAIL_MISMATCH') {
+          return res.status(403).send('Este convite foi destinado a outro e-mail.');
+        }
+        if (error?.message === 'TEAM_MEMBER_EXISTS') {
+          return res.status(409).send('Este e-mail ou identidade já possui um acesso administrativo.');
+        }
+        throw error;
+      }
+      if (!access) return res.status(403).send('Este convite expirou, foi revogado ou já foi utilizado.');
+    } else {
+      access = await findStaffAccessByOpenId(openId);
+    }
+
+    const bootstrapManager = isAllowedOpenId(openId);
+    const resolvedAccess = resolveAdminAccess({ openId, email, access });
+    if (!resolvedAccess) {
+      const pairingCode = randomBytes(12).toString('base64url');
+      await createIdentityPairing({
+        codeHash: hashPairingCode(pairingCode),
+        openId,
+        email,
+        expiresAtMs: Date.now() + IDENTITY_PAIRING_TTL_MS
+      });
+
+      return res.status(403)
+        .type('text/plain; charset=utf-8')
+        .send(
+          'Acesso administrativo ainda não liberado.\n\n'
+          + `Código de vinculação temporário: ${pairingCode}\n\n`
+          + 'Validade: 15 minutos. Envie este código ao gestor para concluir o vínculo.'
+        );
+    }
+
+    const role = resolvedAccess.role;
+    if (bootstrapManager) {
+      await saveStaffAccess({ email, openId, name, role: 'manager', active: true, invitedBy: 'environment' });
+    }
+
     await upsertAdmin({ openId, email, name });
-    const token = await signSession({ openId, email, name });
-    res.clearCookie(stateCookie, cookieOptions(req));
-    res.cookie(sessionCookie, token, cookieOptions(req, { maxAge: 7 * 24 * 60 * 60 * 1000 }));
-    res.redirect('/admin');
+
+    const previousToken = req.cookies?.[sessionCookie];
+    if (previousToken) {
+      const previousPayload = await verifySessionToken(previousToken);
+      if (previousPayload?.jti) await revokeAdminSession(previousPayload.jti);
+    }
+
+    const issued = await createSessionToken({ openId });
+    await createAdminSession({
+      jti: issued.jti,
+      openId,
+      email,
+      expiresAtMs: issued.expiresAtMs
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.cookie(sessionCookie, issued.token, cookieOptions(req, { maxAge: SESSION_TTL_MS, path: '/' }));
+    ensureCsrfToken(req, res, { rotate: true });
+    return res.redirect(303, configuredAdminOrigin() ? `${configuredAdminOrigin()}/admin` : '/admin');
   } catch (error) {
-    console.error('[oauth]', error.message);
-    res.status(400).send('Não foi possível concluir o acesso. Tente novamente.');
+    logOperationalError(console.error, 'oauth.callback_failed', error);
+    return res.status(400).send('Não foi possível concluir o acesso. Tente novamente.');
   }
 }
 
-export function logout(req, res) {
-  res.clearCookie(sessionCookie, cookieOptions(req));
-  res.json({ ok: true });
+export async function logout(req, res) {
+  const token = req.cookies?.[sessionCookie];
+  let revocationError = null;
+
+  try {
+    if (token && hasDatabase()) {
+      const payload = await verifySessionToken(token);
+      if (payload?.jti) await revokeAdminSession(payload.jti);
+    }
+  } catch (error) {
+    revocationError = error;
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  clearSessionCookie(req, res);
+  clearCsrfToken(req, res);
+
+  if (revocationError) {
+    return res.status(503).json({
+      ok: false,
+      localLoggedOut: true,
+      error: 'SESSION_REVOCATION_FAILED'
+    });
+  }
+
+  return res.json({ ok: true });
+}
+
+
+export async function logoutAll(req, res) {
+  let user = null;
+  let revocationError = null;
+
+  try {
+    user = req.admin || await currentAdmin(req);
+    if (user?.openId) await revokeAdminSessionsByOpenId(user.openId);
+  } catch (error) {
+    revocationError = error;
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  clearSessionCookie(req, res);
+  clearCsrfToken(req, res);
+
+  if (revocationError) {
+    return res.status(503).json({
+      ok: false,
+      localLoggedOut: true,
+      error: 'SESSION_REVOCATION_FAILED'
+    });
+  }
+
+  if (!user?.openId) {
+    return res.status(401).json({
+      error: 'AUTH_REQUIRED',
+      login: true,
+      localLoggedOut: true
+    });
+  }
+
+  return res.json({ ok: true });
 }

@@ -2,35 +2,45 @@
   <body data-page="sobre">
     <%- include('partials/header') %>
     <main id="conteudo">
-      <section class="page-hero shell">
-        <p class="eyebrow"><span class="eyebrow-dot"></span> a Gisley Nunes</p>
-        <h1>Encontrar lugar é<br /><em>encontrar ritmo de vida.</em></h1>
-        <p class="page-lead">Atendimento próximo e especializado para quem busca um imóvel com intenção em <%= site.area %>.</p>
+      <section class="page-hero shell about-hero">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-dot"></span> a Gisley Nunes</p>
+          <h1>Gisley Nunes Imóveis<br /><em>em Belo Horizonte.</em></h1>
+        </div>
+        <div class="about-hero-note">
+          <span class="about-number">GN</span>
+          <p>Atendimento para compra, locação e anúncio de imóveis em <%= site.area %>.</p>
+        </div>
+      </section>
+
+      <section class="about-visual shell" aria-label="Arquitetura e estilo de vida em Belo Horizonte">
+        <div class="about-visual-image"><img src="https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=85" alt="Interior contemporâneo com luz natural" loading="lazy" decoding="async" /></div>
+        <div class="about-visual-copy"><span>Como trabalhamos</span><p>Apresentamos as informações do imóvel para você comparar as opções e decidir.</p></div>
       </section>
 
       <section class="experience-section" aria-labelledby="experience-title">
         <div class="shell experience-grid">
           <div class="experience-intro">
-            <p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> por trás de cada chave</p>
-            <h2 id="experience-title">A casa é sua.<br /><em>A jornada, nossa.</em></h2>
-            <p>A Gisley Nunes aproxima pessoas de espaços que fazem sentido para o jeito único de viver de cada uma. Sem pressa, sem letra miúda, sem atalhos.</p>
-            <a class="button button-light" href="/contato">Conheça a Gisley Nunes <span aria-hidden="true">↗</span></a>
+            <p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> atendimento imobiliário</p>
+            <h2 id="experience-title">Informação para<br /><em>decidir melhor.</em></h2>
+            <p>A equipe apresenta os imóveis, responde às dúvidas e acompanha o atendimento até a negociação.</p>
+            <a class="button button-light" href="/contato">Fale com a equipe <span aria-hidden="true">↗</span></a>
           </div>
-          <div class="stats">
+          <div class="stats<%= site.crci ? '' : ' stats-three' %>">
             <div class="stat"><strong>BH</strong><span>atuação em<br />Belo Horizonte</span></div>
-            <div class="stat"><strong>01</strong><span>atendimento<br />próximo</span></div>
-            <div class="stat"><strong>◆</strong><span>curadoria<br />com intenção</span></div>
-            <div class="stat stat-last"><span>Registro</span><strong>CRECI</strong><span><%= site.crci %></span></div>
+            <div class="stat"><strong>01</strong><span>atendimento<br />direto</span></div>
+            <div class="stat"><strong>◆</strong><span>imóveis<br />selecionados</span></div>
+            <% if (site.crci) { %><div class="stat stat-last"><span>Registro</span><strong>CRECI</strong><span><%= site.crci %></span></div><% } %>
           </div>
         </div>
       </section>
 
       <section class="section shell about-values">
-        <div class="about-values-head"><p class="eyebrow">como trabalhamos</p><h2>Curadoria, clareza<br /><em>e proximidade.</em></h2></div>
+        <div class="about-values-head"><p class="eyebrow">nosso atendimento</p><h2>Imóveis, informações<br /><em>e contato direto.</em></h2></div>
         <div class="about-values-grid">
-          <article><strong>Curadoria com intenção</strong><p>Poucos imóveis, sempre bem escolhidos. Nada de listas infinitas: só o que tem a ver com o seu momento.</p></article>
-          <article><strong>Clareza do início ao fim</strong><p>Informação transparente sobre valores, documentação e prazos, sem letra miúda.</p></article>
-          <article><strong>Proximidade humana</strong><p>Atendimento por quem conhece Belo Horizonte e entende que cada procura é única.</p></article>
+          <article><strong>Imóveis selecionados</strong><p>Catálogo organizado por tipo, bairro e finalidade, com imóveis para compra e locação.</p></article>
+          <article><strong>Informações objetivas</strong><p>Valores, características e disponibilidade apresentados na página de cada imóvel.</p></article>
+          <article><strong>Atendimento direto</strong><p>Você fala com a equipe por formulário, e-mail ou WhatsApp.</p></article>
         </div>
       </section>
     </main>

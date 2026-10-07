@@ -1,3 +1,12 @@
 node_modules/
 dist/
 .vite/
+node_modules
+dist
+.env
+.env.*
+!.env.example
+coverage
+*.log
+
+dist-preview/

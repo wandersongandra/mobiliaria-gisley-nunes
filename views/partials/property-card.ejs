@@ -1,0 +1,21 @@
+<article class="listing-card listing-card-server">
+  <a href="/imoveis/<%= encodeURIComponent(property.slug) %>" class="listing-image">
+    <% if (property.cover_url) { %>
+      <img src="<%= property.cover_url %>" alt="<%= property.title %>, <%= property.location %>" loading="<%= imageLoading || 'lazy' %>" decoding="async" />
+    <% } else { %>
+      <span class="listing-image-placeholder" aria-hidden="true">GN</span>
+    <% } %>
+    <span class="listing-tag"><%= property.is_featured ? 'destaque' : property.purpose.toLowerCase() %></span>
+    <span class="listing-arrow" aria-hidden="true">↗</span>
+    <span class="listing-image-shade" aria-hidden="true"></span>
+  </a>
+  <div class="listing-info">
+    <div><p class="listing-location"><%= property.location %></p><h3><%= property.title %></h3></div>
+    <strong class="listing-price"><%= property.price_label || 'Consulte' %></strong>
+  </div>
+  <div class="listing-meta">
+    <% if (property.bedrooms) { %><span><%= property.bedrooms %> <%= property.bedrooms === 1 ? 'quarto' : 'quartos' %></span><% } %>
+    <% if (property.bathrooms) { %><span><%= property.bathrooms %> <%= property.bathrooms === 1 ? 'banheiro' : 'banheiros' %></span><% } %>
+    <% if (property.area_m2) { %><span><%= property.area_m2 %> m²</span><% } %>
+  </div>
+</article>
