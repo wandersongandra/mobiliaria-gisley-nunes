@@ -310,9 +310,97 @@ class CrmService
             'action' => substr($action, 0, 80),
             'entity_type' => substr($entityType, 0, 60),
             'entity_id' => $entityId ? substr($entityId, 0, 191) : null,
-            'details' => $details ? json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+            'details' => $this->encodeAuditDetails($details),
             'created_at' => now(),
         ]);
+    }
+
+    private function encodeAuditDetails(?array $details): ?string
+    {
+        if ($details === null) {
+            return null;
+        }
+
+        $sanitized = $this->sanitizeAuditValue($details, 0);
+        $encoded = json_encode(
+            $sanitized,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        );
+
+        if (strlen($encoded) > 16 * 1024) {
+            return json_encode([
+                'truncated' => true,
+                'reason' => 'audit_details_limit',
+            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        }
+
+        return $encoded;
+    }
+
+    private function sanitizeAuditValue(mixed $value, int $depth): mixed
+    {
+        if ($depth >= 5) {
+            return '[TRUNCATED]';
+        }
+
+        if (is_array($value)) {
+            $sanitized = [];
+            $count = 0;
+
+            foreach ($value as $key => $item) {
+                if ($count >= 50) {
+                    $sanitized['__truncated__'] = true;
+                    break;
+                }
+
+                if (is_string($key) && $this->isSensitiveAuditKey($key)) {
+                    $sanitized[$key] = '[REDACTED]';
+                } else {
+                    $sanitized[$key] = $this->sanitizeAuditValue($item, $depth + 1);
+                }
+                $count++;
+            }
+
+            return $sanitized;
+        }
+
+        if (is_string($value)) {
+            return mb_substr($value, 0, 1024);
+        }
+
+        if (is_int($value) || is_float($value) || is_bool($value) || $value === null) {
+            return $value;
+        }
+
+        return '[UNSUPPORTED]';
+    }
+
+    private function isSensitiveAuditKey(string $key): bool
+    {
+        $snake = preg_replace('/(?<!^)[A-Z]/', '_$0', $key) ?? $key;
+        $normalized = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $snake) ?? $snake);
+        $normalized = trim($normalized, '_');
+
+        if ($normalized === 'token_stored_as_hash') {
+            return false;
+        }
+
+        return in_array($normalized, [
+            'password',
+            'secret',
+            'client_secret',
+            'api_key',
+            'access_key',
+            'access_token',
+            'refresh_token',
+            'authorization',
+            'cookie',
+            'session_cookie',
+            'oauth_code',
+            'authorization_code',
+            'pairing_code',
+            'invitation_token',
+        ], true);
     }
 
     public function listAudit(int $limit = 100): array
