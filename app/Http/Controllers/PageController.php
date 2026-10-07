@@ -18,6 +18,8 @@ class PageController extends Controller
 
     private const ASSETS = ['css' => '/assets/main.css', 'js' => '/assets/main.js'];
 
+    private const MIN_INDEXABLE_NEIGHBORHOOD_PROPERTIES = 3;
+
     public function __construct(
         private readonly PropertyService $properties,
         private readonly CrmService $crm,
@@ -29,11 +31,19 @@ class PageController extends Controller
             return redirect('/admin/', 302);
         }
 
-        return view('home', $this->pageData(
+        $data = $this->pageData(
             'Imóveis em Belo Horizonte e região | Gisley Nunes',
             'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
             '/'
-        ));
+        );
+        $catalog = $this->properties->paginatePublicProperties(1, 6);
+        $data['initialProperties'] = array_map(
+            fn (array $property): array => $this->properties->publicProperty($property),
+            $catalog->items()
+        );
+        $data['initialCatalogTotal'] = $catalog->total();
+
+        return view('home', $data);
     }
 
     private function isAdminOriginRequest(Request $request): bool
@@ -49,11 +59,25 @@ class PageController extends Controller
 
     public function imoveis(Request $request)
     {
-        return view('imoveis', $this->pageData(
+        $data = $this->pageData(
             'Imóveis para comprar ou alugar em Belo Horizonte | Gisley Nunes',
             'Explore imóveis para comprar ou alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
             '/imoveis'
-        ));
+        );
+        $catalog = $this->properties->paginatePublicProperties(1, 20);
+        $data['initialProperties'] = array_map(
+            fn (array $property): array => $this->properties->publicProperty($property),
+            $catalog->items()
+        );
+        $data['initialCatalogTotal'] = $catalog->total();
+        $data['pageLd'] = $this->collectionPageLd(
+            'Imóveis para comprar ou alugar em Belo Horizonte',
+            $data['page']['canonical'],
+            $data['initialProperties'],
+            $data['initialCatalogTotal']
+        );
+
+        return view('imoveis', $data);
     }
 
     public function servicos(Request $request)
@@ -83,6 +107,26 @@ class PageController extends Controller
             '/bairros'
         );
         $data['neighborhoods'] = $this->properties->neighborhoods($this->properties->publicCatalog());
+        $data['pageLd'] = $this->jsonLd([
+            '@context' => 'https://schema.org',
+            '@type' => 'CollectionPage',
+            'name' => 'Bairros com imóveis publicados',
+            'url' => $data['page']['canonical'],
+            'mainEntity' => [
+                '@type' => 'ItemList',
+                'numberOfItems' => count($data['neighborhoods']),
+                'itemListElement' => array_map(
+                    fn (array $neighborhood, int $index): array => [
+                        '@type' => 'ListItem',
+                        'position' => $index + 1,
+                        'name' => $neighborhood['name'],
+                        'url' => $this->origin().'/bairros/'.$neighborhood['slug'],
+                    ],
+                    $data['neighborhoods'],
+                    array_keys($data['neighborhoods'])
+                ),
+            ],
+        ]);
 
         return view('bairros', $data);
     }
@@ -101,12 +145,48 @@ class PageController extends Controller
             ), 404);
         }
 
+        $robots = $neighborhood['count'] >= self::MIN_INDEXABLE_NEIGHBORHOOD_PROPERTIES
+            ? 'index,follow,max-image-preview:large'
+            : 'noindex,follow';
         $data = $this->pageData(
             'Imóveis em '.$neighborhood['name'].', Belo Horizonte | Gisley Nunes',
             'Veja imóveis publicados em '.$neighborhood['name'].', Belo Horizonte, para comprar ou alugar com a Gisley Nunes.',
-            '/bairros/'.$neighborhood['slug']
+            '/bairros/'.$neighborhood['slug'],
+            robots: $robots
         );
         $data['neighborhood'] = $neighborhood;
+        $data['pageLd'] = $this->jsonLd([
+            '@context' => 'https://schema.org',
+            '@graph' => [
+                [
+                    '@type' => 'BreadcrumbList',
+                    'itemListElement' => [
+                        ['@type' => 'ListItem', 'position' => 1, 'name' => 'Início', 'item' => $this->origin().'/'],
+                        ['@type' => 'ListItem', 'position' => 2, 'name' => 'Bairros', 'item' => $this->origin().'/bairros'],
+                        ['@type' => 'ListItem', 'position' => 3, 'name' => $neighborhood['name']],
+                    ],
+                ],
+                [
+                    '@type' => 'CollectionPage',
+                    'name' => 'Imóveis em '.$neighborhood['name'].', Belo Horizonte',
+                    'url' => $data['page']['canonical'],
+                    'mainEntity' => [
+                        '@type' => 'ItemList',
+                        'numberOfItems' => $neighborhood['count'],
+                        'itemListElement' => array_map(
+                            fn (array $property, int $index): array => [
+                                '@type' => 'ListItem',
+                                'position' => $index + 1,
+                                'name' => $property['title'],
+                                'url' => $this->origin().'/imoveis/'.$property['slug'],
+                            ],
+                            $neighborhood['properties'],
+                            array_keys($neighborhood['properties'])
+                        ),
+                    ],
+                ],
+            ],
+        ]);
 
         return view('bairro', $data);
     }
@@ -134,7 +214,8 @@ class PageController extends Controller
         return view('privacidade', $this->pageData(
             'Política de privacidade | Gisley Nunes Imóveis',
             'Política de privacidade da Gisley Nunes Imóveis, em conformidade com a LGPD.',
-            '/privacidade'
+            '/privacidade',
+            robots: 'noindex,follow'
         ));
     }
 
@@ -190,6 +271,36 @@ class PageController extends Controller
         return view('imovel', $data);
     }
 
+    public function legacyForSale()
+    {
+        return redirect('/imoveis?purpose=Comprar', 301);
+    }
+
+    public function legacyForRent()
+    {
+        return redirect('/imoveis?purpose=Alugar', 301);
+    }
+
+    public function legacyPrivacy()
+    {
+        return redirect('/privacidade', 301);
+    }
+
+    public function legacyAdvertise()
+    {
+        return redirect('/servicos', 301);
+    }
+
+    public function legacyProperty(Request $request, string $legacyPropertySlug)
+    {
+        $property = $this->properties->getPropertyBySlug($legacyPropertySlug);
+        if ($property) {
+            return redirect('/imoveis/'.$property['slug'], 301);
+        }
+
+        return $this->notFound($request);
+    }
+
     public function notFound(Request $request)
     {
         if ($request->is('api/*')) {
@@ -230,16 +341,72 @@ class PageController extends Controller
                 'ogType' => $ogType,
                 'robots' => $robots,
             ],
-            'siteLd' => $this->jsonLd([
-                '@context' => 'https://schema.org', '@type' => 'RealEstateAgent',
-                'name' => $site['name'], 'url' => $this->origin(), 'email' => $site['email'],
-                'telephone' => $site['phoneDisplay'], 'areaServed' => $site['area'],
-            ]),
+            'siteLd' => $this->jsonLd($this->realEstateAgentLd($site)),
             'websiteLd' => $this->jsonLd([
                 '@context' => 'https://schema.org', '@type' => 'WebSite', 'name' => $site['name'], 'url' => $this->origin(),
             ]),
             'pageLd' => null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $site
+     * @return array<string, mixed>
+     */
+    private function realEstateAgentLd(array $site): array
+    {
+        $agent = [
+            '@context' => 'https://schema.org',
+            '@type' => 'RealEstateAgent',
+            'name' => $site['name'],
+            'url' => $this->origin(),
+            'email' => $site['email'],
+            'telephone' => $site['phoneDisplay'],
+            'areaServed' => $site['area'],
+        ];
+
+        if (! empty($site['address'])) {
+            $agent['address'] = $site['address'];
+        }
+        if (! empty($site['crci'])) {
+            $agent['identifier'] = [
+                '@type' => 'PropertyValue',
+                'propertyID' => 'CRECI-MG',
+                'value' => $site['crci'],
+            ];
+        }
+        if (! empty($site['instagramUrl'])) {
+            $agent['sameAs'] = [$site['instagramUrl']];
+        }
+
+        return $agent;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $properties
+     */
+    private function collectionPageLd(string $name, string $url, array $properties, int $total): string
+    {
+        return $this->jsonLd([
+            '@context' => 'https://schema.org',
+            '@type' => 'CollectionPage',
+            'name' => $name,
+            'url' => $url,
+            'mainEntity' => [
+                '@type' => 'ItemList',
+                'numberOfItems' => $total,
+                'itemListElement' => array_map(
+                    fn (array $property, int $index): array => [
+                        '@type' => 'ListItem',
+                        'position' => $index + 1,
+                        'name' => $property['title'],
+                        'url' => $this->origin().'/imoveis/'.$property['slug'],
+                    ],
+                    $properties,
+                    array_keys($properties)
+                ),
+            ],
+        ]);
     }
 
     /**

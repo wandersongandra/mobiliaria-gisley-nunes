@@ -16,12 +16,16 @@ Route::get('/health/ready', [HealthController::class, 'ready']);
 
 Route::get('/', [PageController::class, 'home']);
 Route::get('/imoveis', [PageController::class, 'imoveis']);
+Route::get('/imoveis-a-venda', [PageController::class, 'legacyForSale']);
+Route::get('/imoveis-para-alugar', [PageController::class, 'legacyForRent']);
 Route::get('/servicos', [PageController::class, 'servicos']);
 Route::get('/bairros', [PageController::class, 'bairros']);
 Route::get('/bairros/{slug}', [PageController::class, 'bairro']);
 Route::get('/sobre', [PageController::class, 'sobre']);
 Route::get('/contato', [PageController::class, 'contato']);
 Route::get('/privacidade', [PageController::class, 'privacidade']);
+Route::get('/politica-de-privacidade', [PageController::class, 'legacyPrivacy']);
+Route::get('/anuncie-seu-imovel', [PageController::class, 'legacyAdvertise']);
 Route::get('/imoveis/{slug}', [PageController::class, 'imovel']);
 
 Route::get('/robots.txt', [DiscoveryController::class, 'robots']);
@@ -118,5 +122,8 @@ Route::prefix('api/admin')
         Route::delete('/team/{email}', [AdminCrmController::class, 'removeTeamMember'])
             ->middleware(['capability:team.manage', 'throttle:destructive']);
     });
+
+Route::get('/{legacyPropertySlug}', [PageController::class, 'legacyProperty'])
+    ->where('legacyPropertySlug', '[a-z0-9]+(?:-[a-z0-9]+)*-cods-[0-9]+');
 
 Route::fallback([PageController::class, 'notFound']);

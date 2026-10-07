@@ -65,7 +65,7 @@ class SecurityContractTest extends TestCase
                 'HTTPS' => 'on',
                 'SERVER_PORT' => 443,
             ])
-            ->withHeaders(['X-CSRF-TOKEN' => 'csrf-contract-token'])
+            ->withHeaders(['Host' => 'test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
             ->patchJson($path, ['status' => 'em_contato'])
             ->assertForbidden()
             ->assertJson(['error' => 'ORIGIN_REQUIRED']);
@@ -77,7 +77,7 @@ class SecurityContractTest extends TestCase
                 'HTTPS' => 'on',
                 'SERVER_PORT' => 443,
             ])
-            ->withHeaders(['Origin' => 'https://attacker.example', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
+            ->withHeaders(['Host' => 'test.local', 'Origin' => 'https://attacker.example', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
             ->patchJson($path, ['status' => 'em_contato'])
             ->assertForbidden()
             ->assertJson(['error' => 'INVALID_ORIGIN']);
@@ -89,7 +89,7 @@ class SecurityContractTest extends TestCase
                 'HTTPS' => 'on',
                 'SERVER_PORT' => 443,
             ])
-            ->withHeaders(['Origin' => 'https://test.local', 'X-CSRF-TOKEN' => ''])
+            ->withHeaders(['Host' => 'test.local', 'Origin' => 'https://test.local', 'X-CSRF-TOKEN' => ''])
             ->patchJson($path, ['status' => 'em_contato']);
         $this->assertSame(419, $csrfResponse->status(), $csrfResponse->content());
         $csrfResponse->assertJson(['error' => 'CSRF_TOKEN_MISMATCH']);
@@ -101,7 +101,7 @@ class SecurityContractTest extends TestCase
                 'HTTPS' => 'on',
                 'SERVER_PORT' => 443,
             ])
-            ->withHeaders(['Origin' => 'https://test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
+            ->withHeaders(['Host' => 'test.local', 'Origin' => 'https://test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
             ->patchJson($path, ['status' => 'em_contato'])
             ->assertOk();
     }
@@ -120,6 +120,7 @@ class SecurityContractTest extends TestCase
                 'SERVER_PORT' => 443,
             ])
             ->withHeaders([
+                'Host' => 'test.local',
                 'Origin' => 'https://test.local:8443',
                 'X-CSRF-TOKEN' => 'csrf-contract-token',
             ])
