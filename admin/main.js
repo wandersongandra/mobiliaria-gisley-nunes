@@ -17,7 +17,10 @@ const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
 const dialog = $('#property-dialog');
+const confirmDialog = $('#confirm-dialog');
 const form = $('#property-form');
+const skipLink = document.querySelector('.skip-link');
+const dashboardMain = dashboard?.querySelector('main');
 
 loginScreen?.setAttribute('role', 'main');
 
@@ -33,6 +36,19 @@ if (dashboardHeading && dashboardHeading.tagName !== 'H1') {
 function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]); }
 function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(value)) : 'agora'; }
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }
+
+function confirmAction({ title = 'Confirmar ação', message = 'Deseja continuar?' } = {}) {
+  if (!confirmDialog) return Promise.resolve(false);
+  const titleNode = $('#confirm-dialog-title');
+  const messageNode = $('#confirm-dialog-message');
+  if (titleNode) titleNode.textContent = title;
+  if (messageNode) messageNode.textContent = message;
+
+  return new Promise((resolve) => {
+    confirmDialog.addEventListener('close', () => resolve(confirmDialog.returnValue === 'confirm'), { once: true });
+    confirmDialog.showModal();
+  });
+}
 
 function setButtonPending(button, pending, label = '') {
   if (!button) return;
@@ -114,6 +130,7 @@ function showLogin() {
   clearSensitiveState();
   dashboard.hidden = true;
   loginScreen.hidden = false;
+  skipLink?.setAttribute('href', '#login-title');
   $('#login-button').href = loginUrl();
 }
 
@@ -161,6 +178,8 @@ async function performLogout({ all = false } = {}) {
 function showDashboard() {
   loginScreen.hidden = true;
   dashboard.hidden = false;
+  if (dashboardMain) dashboardMain.id = 'admin-main';
+  skipLink?.setAttribute('href', '#admin-main');
   $('#user-name').textContent = state.user?.name?.split(' ')[0] || 'equipe';
   const manager = state.user?.role === 'manager';
   document.querySelectorAll('[data-manager-only]').forEach((element) => { element.hidden = !manager; });
@@ -395,7 +414,10 @@ async function saveProperty(event) {
 
 async function archiveProperty() {
   if (!state.editing) return;
-  const confirmed = window.confirm(`Arquivar "${state.editing.title}"? Ele deixará de aparecer no site público.`);
+  const confirmed = await confirmAction({
+    title: 'Arquivar imóvel?',
+    message: `"${state.editing.title}" deixará de aparecer no site público.`
+  });
   if (!confirmed) return;
   const button = $('#archive-property');
   setButtonPending(button, true, 'Arquivando…');
@@ -496,7 +518,11 @@ async function uploadPendingFiles(propertyId) {
 
 async function removePhoto(id) {
   if (!state.editing) return;
-  if (!window.confirm('Remover esta foto? Esta ação não pode ser desfeita.')) return;
+  const confirmed = await confirmAction({
+    title: 'Remover foto?',
+    message: 'Esta ação não pode ser desfeita.'
+  });
+  if (!confirmed) return;
   const button = document.querySelector(`[data-photo-remove="${CSS.escape(id)}"]`);
   setButtonPending(button, true, '…');
   try {
@@ -637,7 +663,11 @@ async function addTestimonial(event) {
 }
 
 async function removeTestimonial(id) {
-  if (!window.confirm('Remover este depoimento? Esta ação não pode ser desfeita.')) return;
+  const confirmed = await confirmAction({
+    title: 'Remover depoimento?',
+    message: 'Esta ação não pode ser desfeita.'
+  });
+  if (!confirmed) return;
   const button = document.querySelector(`[data-testimonial-remove="${CSS.escape(id)}"]`);
   setButtonPending(button, true, 'Removendo…');
   siteNotify('Removendo depoimento…');
@@ -726,7 +756,11 @@ function renderTeam() {
 
   list.querySelectorAll('[data-team-role]').forEach((button) => button.addEventListener('click', async () => {
     const nextRole = button.dataset.nextRole === 'manager' ? 'gestor' : 'editor';
-    if (!window.confirm(`Tornar este membro ${nextRole}?`)) return;
+    const confirmed = await confirmAction({
+      title: 'Alterar permissão?',
+      message: `Este membro será tornado ${nextRole}.`
+    });
+    if (!confirmed) return;
     setButtonPending(button, true, 'Salvando…');
     try {
       const email = button.dataset.teamRole;
@@ -741,7 +775,11 @@ function renderTeam() {
   }));
 
   list.querySelectorAll('[data-team-remove]').forEach((button) => button.addEventListener('click', async () => {
-    if (!window.confirm('Remover este acesso da equipe? A pessoa deixará de entrar no painel.')) return;
+    const confirmed = await confirmAction({
+      title: 'Remover acesso?',
+      message: 'A pessoa deixará de entrar no painel.'
+    });
+    if (!confirmed) return;
     setButtonPending(button, true, 'Removendo…');
     try {
       await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamRemove)}`, { method: 'DELETE' });
@@ -765,7 +803,11 @@ function renderTeamInvitations() {
   }).join('') : '<div class="empty-properties compact"><p>Nenhum convite pendente.</p></div>';
 
   list.querySelectorAll('[data-team-invite-revoke]').forEach((button) => button.addEventListener('click', async () => {
-    if (!window.confirm('Revogar este convite? O link deixará de funcionar.')) return;
+    const confirmed = await confirmAction({
+      title: 'Revogar convite?',
+      message: 'O link deixará de funcionar.'
+    });
+    if (!confirmed) return;
     setButtonPending(button, true, 'Revogando…');
     try {
       await request(`/api/admin/team/invitations/${encodeURIComponent(button.dataset.teamInviteRevoke)}`, { method: 'DELETE' });
@@ -912,7 +954,10 @@ function renderLeads() {
 
   list.querySelectorAll('[data-lead-delete]').forEach((button) => button.addEventListener('click', async () => {
     const lead = state.leads.find((item) => item.id === button.dataset.leadDelete);
-    const confirmed = window.confirm(`Apagar permanentemente os dados de ${lead?.name || 'este contato'}? Esta ação não pode ser desfeita.`);
+    const confirmed = await confirmAction({
+      title: 'Apagar dados do contato?',
+      message: `Os dados de ${lead?.name || 'este contato'} serão apagados permanentemente.`
+    });
     if (!confirmed) return;
 
     setButtonPending(button, true, 'Apagando…');
