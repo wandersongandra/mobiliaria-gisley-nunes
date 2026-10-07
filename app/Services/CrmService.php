@@ -512,7 +512,13 @@ class CrmService
 
     public function createPairing(string $codeHash, string $openId, string $email, int $expiresAtMs): void
     {
-        DB::transaction(function () use ($codeHash, $openId, $email, $expiresAtMs): void {
+        $nowMs = Clock::nowMs();
+
+        DB::transaction(function () use ($codeHash, $openId, $email, $expiresAtMs, $nowMs): void {
+            DB::table('morada_identity_pairings')
+                ->where('expires_at_ms', '<=', $nowMs)
+                ->delete();
+
             DB::table('morada_identity_pairings')
                 ->where('open_id', $openId)
                 ->orWhere('email', strtolower($email))
@@ -560,13 +566,21 @@ class CrmService
 
     public function createAuthChallenge(string $stateHash, string $redirectUri, int $expiresAtMs, ?string $invitationHash): void
     {
-        DB::table('morada_auth_challenges')->insert([
+        $nowMs = Clock::nowMs();
+
+        DB::transaction(function () use ($stateHash, $redirectUri, $expiresAtMs, $invitationHash, $nowMs): void {
+            DB::table('morada_auth_challenges')
+                ->where('expires_at_ms', '<=', $nowMs)
+                ->delete();
+
+            DB::table('morada_auth_challenges')->insert([
             'state_hash' => $stateHash,
             'redirect_uri' => $redirectUri,
             'invitation_hash' => $invitationHash,
             'expires_at_ms' => $expiresAtMs,
-            'created_at' => now(),
-        ]);
+                'created_at' => now(),
+            ]);
+        });
     }
 
     public function consumeAuthChallenge(string $stateHash): ?array
