@@ -130,6 +130,12 @@ Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. A comparação do c
 - `GET /_app/health`: alias compatível de liveness para o monitoramento anterior.
 - `GET /oauth/google/return`: callback OAuth alternativo e neutro para ambientes em que o WAF do provedor bloqueia o callback legado; ativado somente quando `GOOGLE_OAUTH_CALLBACK_PATH=/oauth/google/return`.
 
+- `GET /imoveis-a-venda`: compatibilidade SEO; redireciona permanentemente para `/imoveis?purpose=Comprar`.
+- `GET /imoveis-para-alugar`: compatibilidade SEO; redireciona permanentemente para `/imoveis?purpose=Alugar`.
+- `GET /anuncie-seu-imovel`: compatibilidade SEO; redireciona permanentemente para `/servicos`.
+- `GET /politica-de-privacidade`: compatibilidade SEO; redireciona permanentemente para `/privacidade`.
+- `GET /{legacyPropertySlug}` para slugs terminados em `-cods-<id>`: se o imóvel importado preservar o slug legado, redireciona permanentemente para `/imoveis/{slug}`; se não houver correspondência publicada, responde 404 real. Antes do deploy, o inventário legado precisa de um mapa de redirects para evitar perda de URLs indexadas.
+
 ## Gates locais e CI
 
 ```bash
