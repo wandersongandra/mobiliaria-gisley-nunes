@@ -62,7 +62,7 @@ class OAuthIdentityTest extends TestCase
         $response->assertRedirect();
         $this->assertSame('accounts.google.com', parse_url($location, PHP_URL_HOST));
         $this->assertSame('client-id.apps.googleusercontent.com', $query['client_id'] ?? null);
-        $this->assertSame('https://www.gisleynunesimoveis.com.br/api/auth/callback', $query['redirect_uri'] ?? null);
+        $this->assertSame('https://www.gisleynunesimoveis.com.br/oauth/google/return', $query['redirect_uri'] ?? null);
         $this->assertSame('code', $query['response_type'] ?? null);
         $this->assertSame('openid email profile', $query['scope'] ?? null);
     }
