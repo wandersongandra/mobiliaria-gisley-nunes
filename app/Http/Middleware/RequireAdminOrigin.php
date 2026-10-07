@@ -10,6 +10,10 @@ class RequireAdminOrigin
 {
     public function handle(Request $request, Closure $next): Response
     {
+        if (! app()->environment('production')) {
+            return $next($request);
+        }
+
         $expected = $this->canonicalOrigin((string) config('app.admin_url'));
         if ($expected === null) {
             return app()->environment('production')
