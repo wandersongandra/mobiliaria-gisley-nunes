@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\ConfigureTrustedProxies;
+use App\Http\Middleware\LimitRequestBody;
 use App\Http\Middleware\RequestContext;
 use App\Http\Middleware\RequireAdminOrigin;
 use App\Http\Middleware\RequireKnownHost;
@@ -34,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'same-origin' => RequireSameOrigin::class,
+            'body-limit' => LimitRequestBody::class,
             'admin-origin' => RequireAdminOrigin::class,
             'admin' => RequireAdmin::class,
             'capability' => RequireCapability::class,
