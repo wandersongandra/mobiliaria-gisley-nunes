@@ -187,6 +187,9 @@ class OAuthIdentityTest extends TestCase
 
         DB::table('morada_users')->where('id', $admin['userId'])->update(['blocked_at' => now()]);
         $this->assertNull($access->current($request));
+        $this->assertNotNull(
+            DB::table('morada_admin_sessions')->where('jti', $session->jti)->value('revoked_at')
+        );
     }
 
     public function test_sessions_cannot_reference_a_nonexistent_user(): void
