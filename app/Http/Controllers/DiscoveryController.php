@@ -14,6 +14,8 @@ class DiscoveryController extends Controller
 {
     use ResolvesPublicOrigin;
 
+    private const MIN_INDEXABLE_NEIGHBORHOOD_PROPERTIES = 3;
+
     public function __construct(
         private readonly PropertyService $properties,
     ) {}
@@ -26,6 +28,8 @@ class DiscoveryController extends Controller
             'Disallow: /api/',
             'Disallow: /admin',
             'Disallow: /_app/',
+            'Disallow: /health/',
+            'Disallow: /oauth/',
             'Sitemap: '.$this->origin().'/sitemap.xml',
         ]);
 
@@ -42,11 +46,12 @@ class DiscoveryController extends Controller
             ['path' => '/contato', 'priority' => '0.5', 'changefreq' => 'monthly'],
             ['path' => '/servicos', 'priority' => '0.7', 'changefreq' => 'monthly'],
             ['path' => '/bairros', 'priority' => '0.7', 'changefreq' => 'weekly'],
-            ['path' => '/privacidade', 'priority' => '0.1', 'changefreq' => 'yearly'],
         ];
 
         foreach ($this->properties->neighborhoods($properties) as $n) {
-            $entries[] = ['path' => '/bairros/'.$n['slug'], 'priority' => '0.7', 'changefreq' => 'weekly'];
+            if ($n['count'] >= self::MIN_INDEXABLE_NEIGHBORHOOD_PROPERTIES) {
+                $entries[] = ['path' => '/bairros/'.$n['slug'], 'priority' => '0.7', 'changefreq' => 'weekly'];
+            }
         }
         foreach ($properties as $property) {
             $entries[] = [
