@@ -28,12 +28,12 @@ Route::get('/robots.txt', [DiscoveryController::class, 'robots']);
 Route::get('/sitemap.xml', [DiscoveryController::class, 'sitemap']);
 Route::get('/llms.txt', [DiscoveryController::class, 'llms']);
 
-Route::get('/api/properties', [PublicApiController::class, 'properties']);
-Route::get('/api/v2/properties', [PublicApiController::class, 'propertiesV2']);
-Route::get('/api/properties/{slug}', [PublicApiController::class, 'property']);
-Route::get('/api/site', [PublicApiController::class, 'site']);
+Route::get('/api/properties', [PublicApiController::class, 'properties'])->middleware('throttle:public-api');
+Route::get('/api/v2/properties', [PublicApiController::class, 'propertiesV2'])->middleware('throttle:public-api');
+Route::get('/api/properties/{slug}', [PublicApiController::class, 'property'])->middleware('throttle:public-api');
+Route::get('/api/site', [PublicApiController::class, 'site'])->middleware('throttle:public-api');
 Route::post('/api/contact', [PublicApiController::class, 'contact'])
-    ->middleware(['same-origin', 'throttle:contact']);
+    ->middleware(['body-limit:64', 'same-origin', 'throttle:contact']);
 
 Route::get('/media/{path}', [MediaController::class, 'media'])->where('path', '.*');
 
@@ -43,7 +43,7 @@ Route::get('/admin', [AdminCrmController::class, 'panel'])
 Route::get('/oauth/google/return', [AuthController::class, 'callback'])
     ->middleware(['admin-origin', 'throttle:auth-callback']);
 
-Route::prefix('api/auth')->middleware('admin-origin')->group(function (): void {
+Route::prefix('api/auth')->middleware(['admin-origin', 'body-limit:32'])->group(function (): void {
     Route::get('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
     Route::get('/callback', [AuthController::class, 'callback'])->middleware('throttle:auth-callback');
     Route::post('/logout', [AuthController::class, 'logout'])
@@ -56,7 +56,7 @@ Route::get('/api/admin/session', [AuthController::class, 'session'])
     ->middleware(['admin-origin', 'throttle:auth-session']);
 
 Route::prefix('api/admin')
-    ->middleware(['admin-origin', 'same-origin', 'admin', 'throttle:admin'])
+    ->middleware(['admin-origin', 'body-limit:256', 'same-origin', 'admin', 'throttle:admin'])
     ->group(function (): void {
         Route::get('/properties', [AdminPropertyController::class, 'index'])
             ->middleware('capability:property.read');
