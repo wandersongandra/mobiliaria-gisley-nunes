@@ -82,6 +82,20 @@ export async function migrate() {
     if (!['ER_DUP_KEYNAME', 'ER_MULTIPLE_PRI_KEY'].includes(error?.code)) throw error;
   }
 
+  await db.query(`CREATE TABLE IF NOT EXISTS morada_staff_invitations (
+    token_hash CHAR(64) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'editor',
+    invited_by VARCHAR(255) NOT NULL,
+    expires_at_ms BIGINT UNSIGNED NOT NULL,
+    accepted_at TIMESTAMP NULL DEFAULT NULL,
+    revoked_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_morada_staff_invitation_email (email, expires_at_ms),
+    INDEX idx_morada_staff_invitation_expiry (expires_at_ms)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
   await db.query(`CREATE TABLE IF NOT EXISTS morada_identity_pairings (
     code_hash CHAR(64) PRIMARY KEY,
     open_id VARCHAR(191) NOT NULL,
@@ -116,10 +130,17 @@ export async function migrate() {
   await db.query(`CREATE TABLE IF NOT EXISTS morada_auth_challenges (
     state_hash CHAR(64) PRIMARY KEY,
     redirect_uri VARCHAR(500) NOT NULL,
+    invitation_hash CHAR(64) NULL,
     expires_at_ms BIGINT UNSIGNED NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_morada_auth_challenges_expiry (expires_at_ms)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  try {
+    await db.query('ALTER TABLE morada_auth_challenges ADD COLUMN invitation_hash CHAR(64) NULL');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
 
   await db.query(`CREATE TABLE IF NOT EXISTS morada_admin_sessions (
     jti CHAR(36) PRIMARY KEY,
@@ -806,13 +827,183 @@ export async function bindStaffAccessFromPairing({
   }
 }
 
-export async function createAuthChallenge({ stateHash, redirectUri, expiresAtMs }) {
+export async function createStaffInvitation({ tokenHash, email, name, role = 'editor', invitedBy, expiresAtMs }) {
+  const db = getPool();
+  const normalizedHash = String(tokenHash || '').trim().slice(0, 64);
+  const normalizedEmail = String(email || '').trim().toLowerCase().slice(0, 255);
+  const normalizedName = String(name || '').trim().slice(0, 255);
+  const normalizedRole = role === 'manager' ? 'manager' : 'editor';
+  const normalizedInvitedBy = String(invitedBy || '').trim().slice(0, 255);
+  const expiry = Number(expiresAtMs);
+
+  if (
+    normalizedHash.length !== 64
+    || !normalizedEmail
+    || !normalizedName
+    || !normalizedInvitedBy
+    || !Number.isSafeInteger(expiry)
+    || expiry <= Date.now()
+  ) {
+    throw new Error('INVALID_INVITATION');
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [[existingMember]] = await connection.execute(
+      'SELECT email FROM morada_staff_access WHERE email=? LIMIT 1 FOR UPDATE',
+      [normalizedEmail]
+    );
+    if (existingMember) throw new Error('TEAM_MEMBER_EXISTS');
+
+    await connection.execute(
+      `UPDATE morada_staff_invitations
+       SET revoked_at=COALESCE(revoked_at, CURRENT_TIMESTAMP)
+       WHERE email=? AND accepted_at IS NULL AND revoked_at IS NULL`,
+      [normalizedEmail]
+    );
+
+    await connection.execute(
+      `INSERT INTO morada_staff_invitations
+       (token_hash,email,name,role,invited_by,expires_at_ms)
+       VALUES (?,?,?,?,?,?)`,
+      [normalizedHash, normalizedEmail, normalizedName, normalizedRole, normalizedInvitedBy, expiry]
+    );
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    if (error?.code === 'ER_DUP_ENTRY') throw new Error('INVITATION_EXISTS');
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function findStaffInvitationByHash(tokenHash) {
+  const db = getPool();
+  const normalizedHash = String(tokenHash || '').trim().slice(0, 64);
+  if (normalizedHash.length !== 64) return null;
+  const [rows] = await db.execute(
+    `SELECT token_hash,email,name,role,invited_by,expires_at_ms,accepted_at,revoked_at,created_at
+     FROM morada_staff_invitations WHERE token_hash=? LIMIT 1`,
+    [normalizedHash]
+  );
+  return rows[0] || null;
+}
+
+export async function listStaffInvitations() {
+  const db = getPool();
+  const [rows] = await db.execute(
+    `SELECT email,name,role,invited_by,expires_at_ms,created_at
+     FROM morada_staff_invitations
+     WHERE accepted_at IS NULL AND revoked_at IS NULL AND expires_at_ms>?
+     ORDER BY expires_at_ms ASC, created_at DESC`,
+    [Date.now()]
+  );
+  return rows;
+}
+
+export async function revokeStaffInvitationsByEmail(email) {
+  const db = getPool();
+  const normalizedEmail = String(email || '').trim().toLowerCase().slice(0, 255);
+  if (!normalizedEmail) return 0;
+  const [result] = await db.execute(
+    `UPDATE morada_staff_invitations
+     SET revoked_at=COALESCE(revoked_at, CURRENT_TIMESTAMP)
+     WHERE email=? AND accepted_at IS NULL AND revoked_at IS NULL`,
+    [normalizedEmail]
+  );
+  return Number(result.affectedRows || 0);
+}
+
+export async function acceptStaffInvitation({ tokenHash, openId, email }) {
+  const db = getPool();
+  const normalizedHash = String(tokenHash || '').trim().slice(0, 64);
+  const normalizedOpenId = String(openId || '').trim().slice(0, 191);
+  const normalizedEmail = String(email || '').trim().toLowerCase().slice(0, 255);
+
+  if (normalizedHash.length !== 64 || !normalizedOpenId || !normalizedEmail) {
+    throw new Error('INVALID_INVITATION');
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[invitation]] = await connection.execute(
+      `SELECT token_hash,email,name,role,invited_by,expires_at_ms,accepted_at,revoked_at
+       FROM morada_staff_invitations WHERE token_hash=? LIMIT 1 FOR UPDATE`,
+      [normalizedHash]
+    );
+
+    if (!invitation) {
+      await connection.rollback();
+      return null;
+    }
+
+    if (
+      invitation.accepted_at
+      || invitation.revoked_at
+      || Number(invitation.expires_at_ms) <= Date.now()
+    ) {
+      await connection.rollback();
+      return null;
+    }
+
+    const invitationEmail = String(invitation.email || '').trim().toLowerCase();
+    if (invitationEmail !== normalizedEmail) throw new Error('INVITATION_EMAIL_MISMATCH');
+
+    const [[emailConflict]] = await connection.execute(
+      'SELECT email FROM morada_staff_access WHERE email=? LIMIT 1 FOR UPDATE',
+      [normalizedEmail]
+    );
+    if (emailConflict) throw new Error('TEAM_MEMBER_EXISTS');
+
+    const [[openIdConflict]] = await connection.execute(
+      'SELECT email FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',
+      [normalizedOpenId]
+    );
+    if (openIdConflict) throw new Error('TEAM_MEMBER_EXISTS');
+
+    await connection.execute(
+      `INSERT INTO morada_staff_access (email,open_id,name,role,active,invited_by)
+       VALUES (?,?,?,?,1,?)`,
+      [
+        normalizedEmail,
+        normalizedOpenId,
+        String(invitation.name || normalizedEmail).slice(0, 255),
+        invitation.role === 'manager' ? 'manager' : 'editor',
+        String(invitation.invited_by || '').slice(0, 255)
+      ]
+    );
+
+    await connection.execute(
+      'UPDATE morada_staff_invitations SET accepted_at=CURRENT_TIMESTAMP WHERE token_hash=?',
+      [normalizedHash]
+    );
+    await connection.commit();
+    return findStaffAccessByOpenId(normalizedOpenId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function createAuthChallenge({ stateHash, redirectUri, expiresAtMs, invitationHash = null }) {
   const db = getPool();
   const now = Date.now();
   await db.execute('DELETE FROM morada_auth_challenges WHERE expires_at_ms<=?', [now]);
   await db.execute(
-    'INSERT INTO morada_auth_challenges (state_hash,redirect_uri,expires_at_ms) VALUES (?,?,?)',
-    [String(stateHash).slice(0, 64), String(redirectUri).slice(0, 500), Number(expiresAtMs)]
+    'INSERT INTO morada_auth_challenges (state_hash,redirect_uri,invitation_hash,expires_at_ms) VALUES (?,?,?,?)',
+    [
+      String(stateHash).slice(0, 64),
+      String(redirectUri).slice(0, 500),
+      invitationHash ? String(invitationHash).slice(0, 64) : null,
+      Number(expiresAtMs)
+    ]
   );
 }
 
@@ -822,7 +1013,7 @@ export async function consumeAuthChallenge(stateHash) {
   try {
     await connection.beginTransaction();
     const [[challenge]] = await connection.execute(
-      'SELECT state_hash,redirect_uri,expires_at_ms FROM morada_auth_challenges WHERE state_hash=? LIMIT 1 FOR UPDATE',
+      'SELECT state_hash,redirect_uri,invitation_hash,expires_at_ms FROM morada_auth_challenges WHERE state_hash=? LIMIT 1 FOR UPDATE',
       [String(stateHash).slice(0, 64)]
     );
     if (!challenge) {
@@ -836,6 +1027,7 @@ export async function consumeAuthChallenge(stateHash) {
     if (Number(challenge.expires_at_ms) <= Date.now()) return null;
     return {
       redirectUri: String(challenge.redirect_uri),
+      invitationHash: challenge.invitation_hash ? String(challenge.invitation_hash) : null,
       expiresAtMs: Number(challenge.expires_at_ms)
     };
   } catch (error) {
@@ -848,20 +1040,21 @@ export async function consumeAuthChallenge(stateHash) {
 
 export async function createAdminSession({ jti, openId, email, expiresAtMs }) {
   const db = getPool();
-  const connection = await db.getConnection();
   const now = Date.now();
   const normalizedEmail = String(email).trim().toLowerCase().slice(0, 255);
 
+  // Keep table-wide retention sweeps outside the identity-locked transaction to avoid gap-lock cycles with session inserts.
+  await db.execute(
+    'DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?',
+    [now]
+  );
+  await db.execute(
+    'DELETE FROM morada_admin_sessions WHERE revoked_at IS NOT NULL AND revoked_at < (CURRENT_TIMESTAMP - INTERVAL 7 DAY)'
+  );
+
+  const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-
-    await connection.execute(
-      'DELETE FROM morada_admin_sessions WHERE expires_at_ms<=?',
-      [now]
-    );
-    await connection.execute(
-      'DELETE FROM morada_admin_sessions WHERE revoked_at IS NOT NULL AND revoked_at < (CURRENT_TIMESTAMP - INTERVAL 7 DAY)'
-    );
 
     const [[boundIdentity]] = await connection.execute(
       'SELECT open_id,active FROM morada_staff_access WHERE open_id=? LIMIT 1 FOR UPDATE',

@@ -44,6 +44,17 @@ export function publicProperties(rows = []) {
   return rows.map(publicProperty);
 }
 
+export function staffInvitationView(row = {}) {
+  return {
+    email: String(row.email || ''),
+    name: String(row.name || ''),
+    role: row.role === 'manager' ? 'manager' : 'editor',
+    invited_by: String(row.invited_by || ''),
+    expires_at_ms: Number(row.expires_at_ms || 0),
+    created_at: row.created_at || null
+  };
+}
+
 
 function adminPhotoUrl(photo = {}) {
   const id = String(photo.id || '');

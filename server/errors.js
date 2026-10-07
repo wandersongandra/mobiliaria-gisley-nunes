@@ -1,4 +1,4 @@
-import { isProduction } from './config.js';
+import { logOperationalError } from './operational-logging.js';
 
 const HTTP_ERRORS = Object.freeze({
   CAPABILITY_REQUIRED: [403, 'CAPABILITY_REQUIRED'],
@@ -27,11 +27,14 @@ const HTTP_ERRORS = Object.freeze({
   INVALID_LIMIT: [400, 'INVALID_LIMIT'],
   INVALID_TEAM_MEMBER: [400, 'INVALID_TEAM_MEMBER'],
   INVALID_PAIRING: [400, 'INVALID_PAIRING'],
+  INVALID_INVITATION: [400, 'INVALID_INVITATION'],
+  INVITATION_EMAIL_MISMATCH: [403, 'INVITATION_EMAIL_MISMATCH'],
 
   PHOTO_LIMIT_REACHED: [409, 'PHOTO_LIMIT_REACHED'],
   ASSET_ALREADY_REGISTERED: [409, 'ASSET_ALREADY_REGISTERED'],
   SLUG_CONFLICT: [409, 'SLUG_CONFLICT'],
   TEAM_MEMBER_EXISTS: [409, 'TEAM_MEMBER_EXISTS'],
+  INVITATION_EXISTS: [409, 'INVITATION_EXISTS'],
 
   DATABASE_NOT_CONFIGURED: [503, 'DATABASE_NOT_CONFIGURED'],
   AUTH_DATABASE_NOT_CONFIGURED: [503, 'AUTH_DATABASE_NOT_CONFIGURED'],
@@ -65,7 +68,7 @@ export function classifyHttpError(error) {
 
 export function apiErrorHandler(error, req, res, next) {
   const contract = classifyHttpError(error);
-  console.error('[api]', isProduction ? contract.code : (error?.stack || error?.message));
+  logOperationalError(console.error, 'api.error', error);
   if (res.headersSent) return next(error);
   return res.status(contract.status).json({ error: contract.code });
 }

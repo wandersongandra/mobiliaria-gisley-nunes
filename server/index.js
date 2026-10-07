@@ -9,7 +9,7 @@ import { registerRoutes } from './routes.js';
 import { assertAuthConfiguration } from './auth.js';
 import { assertAssetsReady, assets } from './assets.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { escapeJsonForHtml, escapeLd, escapeXml, organizationLd, propertyLd, sitemapDate } from './seo.js';
+import { escapeJsonForHtml, escapeLd, escapeXml, breadcrumbLd, collectionPageLd, organizationLd, propertyLd, sitemapDate, websiteLd } from './seo.js';
 import {
   assertSecurityConfiguration,
   requestHostOrigin,
@@ -18,7 +18,9 @@ import {
   securityHeaders
 } from './security.js';
 import { publicProperty } from './presenters.js';
+import { catalogNeighborhood, catalogNeighborhoods, slugifyCatalogName } from './catalog.js';
 import { apiErrorHandler } from './errors.js';
+import { logOperationalError } from './operational-logging.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -74,52 +76,128 @@ app.use(async (req, res, next) => {
     res.locals.site = await getSiteInfo();
     res.locals.testimonials = await getTestimonials();
     res.locals.siteLd = escapeLd(organizationLd(res.locals.site, originFrom(req)));
+    res.locals.websiteLd = escapeLd(websiteLd(res.locals.site, originFrom(req)));
     return next();
   } catch (error) { return next(error); }
 });
 
 registerRoutes(app);
 
-function pageMeta(req, { title, description, path: pathname, ogImage, robots = 'index,follow,max-image-preview:large' }) {
+function pageMeta(req, { title, description, path: pathname, ogImage, ogImageAlt, ogType = 'website', robots = 'index,follow,max-image-preview:large' }) {
   const origin = originFrom(req);
   return {
     title,
     description,
     canonical: `${origin}${pathname}`,
     ogImage: ogImage ? (ogImage.startsWith('http') ? ogImage : `${origin}${ogImage}`) : `${origin}/images/gisley-nunes-imoveis-logo.jpeg`,
-    ogType: 'website',
+    ogImageAlt: ogImageAlt || title,
+    ogType,
     robots
   };
 }
 
 app.get('/', (req, res) => res.render('home', {
   page: pageMeta(req, {
-    title: 'Gisley Nunes Imóveis — encontre seu próximo lugar',
-    description: 'Imóveis selecionados em Belo Horizonte e região, com atendimento próximo, transparente e especializado.',
+    title: 'Imóveis em Belo Horizonte e região | Gisley Nunes',
+    description: 'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
     path: '/'
   })
 }));
 
 app.get(['/imoveis', '/imoveis/'], (req, res) => res.render('imoveis', {
   page: pageMeta(req, {
-    title: 'Imóveis — Gisley Nunes Imóveis',
-    description: 'Catálogo completo de imóveis selecionados em Belo Horizonte e região, para comprar ou alugar.',
+    title: 'Imóveis para comprar ou alugar em Belo Horizonte | Gisley Nunes',
+    description: 'Explore imóveis para comprar ou alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
     path: '/imoveis'
   })
 }));
 
+app.get('/servicos', (req, res) => res.render('servicos', {
+  page: pageMeta(req, {
+    title: 'Comprar, alugar ou anunciar imóveis | Gisley Nunes',
+    description: 'Veja como a Gisley Nunes pode ajudar você a comprar, alugar ou anunciar um imóvel em Belo Horizonte e região.',
+    path: '/servicos'
+  }),
+  pageLd: escapeLd(breadcrumbLd([
+    { name: 'Início', url: `${originFrom(req)}/` },
+    { name: 'Serviços' }
+  ]))
+}));
+
+app.get('/bairros', async (req, res, next) => {
+  try {
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const neighborhoods = catalogNeighborhoods(properties);
+    const origin = originFrom(req);
+    res.render('bairros', {
+      neighborhoods,
+      page: pageMeta(req, {
+        title: 'Bairros com imóveis em Belo Horizonte | Gisley Nunes',
+        description: 'Explore bairros com imóveis publicados em Belo Horizonte e região. Encontre opções por localização e fale com a equipe.',
+        path: '/bairros'
+      }),
+      pageLd: escapeLd(collectionPageLd({
+        name: 'Bairros com imóveis em Belo Horizonte',
+        description: 'Bairros com imóveis publicados pela Gisley Nunes.',
+        url: `${origin}/bairros`,
+        items: neighborhoods.map((item) => ({ title: item.name, url: `${origin}/bairros/${item.slug}` }))
+      }))
+    });
+  } catch (error) { next(error); }
+});
+
+app.get('/bairros/:slug', async (req, res, next) => {
+  try {
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const requestedSlug = slugifyCatalogName(req.params.slug);
+    const neighborhood = catalogNeighborhood(properties, requestedSlug);
+    if (!neighborhood) return res.status(404).render('404', {
+      page: pageMeta(req, {
+        title: 'Bairro não encontrado | Gisley Nunes Imóveis',
+        description: 'O bairro procurado não está disponível. Veja outros bairros e imóveis publicados.',
+        path: req.path,
+        robots: 'noindex,nofollow'
+      })
+    });
+
+    const origin = originFrom(req);
+    const neighborhoodUrl = `${origin}/bairros/${neighborhood.slug}`;
+    res.render('bairro', {
+      neighborhood,
+      page: pageMeta(req, {
+        title: `Imóveis em ${neighborhood.name}, Belo Horizonte | Gisley Nunes`,
+        description: `Veja imóveis publicados em ${neighborhood.name}, Belo Horizonte, para comprar ou alugar com a Gisley Nunes.`,
+        path: `/bairros/${neighborhood.slug}`
+      }),
+      pageLd: escapeLd([
+        breadcrumbLd([
+          { name: 'Início', url: `${origin}/` },
+          { name: 'Bairros', url: `${origin}/bairros` },
+          { name: neighborhood.name, url: neighborhoodUrl }
+        ]),
+        collectionPageLd({
+          name: `Imóveis em ${neighborhood.name}`,
+          description: `Imóveis para comprar ou alugar em ${neighborhood.name}, Belo Horizonte.`,
+          url: neighborhoodUrl,
+          items: neighborhood.properties.map((property) => ({ title: property.title, url: `${origin}/imoveis/${property.slug}` }))
+        })
+      ])
+    });
+  } catch (error) { next(error); }
+});
+
 app.get('/sobre', (req, res) => res.render('sobre', {
   page: pageMeta(req, {
-    title: 'Sobre — Gisley Nunes Imóveis',
-    description: 'Conheça a Gisley Nunes: atendimento próximo e curadoria de imóveis em Belo Horizonte e região.',
+    title: 'Sobre | Gisley Nunes Imóveis',
+    description: 'Conheça a Gisley Nunes e sua forma de trabalhar com imóveis em Belo Horizonte e região.',
     path: '/sobre'
   })
 }));
 
 app.get('/contato', (req, res) => res.render('contato', {
   page: pageMeta(req, {
-    title: 'Contato — Gisley Nunes Imóveis',
-    description: 'Fale com a Gisley Nunes: WhatsApp, e-mail e atendimento em Belo Horizonte e região.',
+    title: 'Contato | Gisley Nunes Imóveis',
+    description: 'Fale com a Gisley Nunes por WhatsApp, e-mail ou formulário sobre comprar, alugar ou anunciar um imóvel.',
     path: '/contato'
   })
 }));
@@ -144,12 +222,12 @@ app.get('/imoveis/:slug', async (req, res, next) => {
   try {
     const property = await getPropertyBySlug(req.params.slug);
     if (!property) return res.status(404).render('404', {
-      page: pageMeta(req, { title: 'Imóvel não encontrado — Gisley Nunes Imóveis', description: 'O imóvel procurado não está disponível. Veja outros imóveis selecionados pela Gisley Nunes.', path: req.path, robots: 'noindex,nofollow' })
+      page: pageMeta(req, { title: 'Imóvel não encontrado | Gisley Nunes Imóveis', description: 'O imóvel procurado não está disponível. Veja outros imóveis publicados pela Gisley Nunes.', path: req.path, robots: 'noindex,nofollow' })
     });
     const visibleProperty = publicProperty(property);
     const description = visibleProperty.description || `Conheça ${visibleProperty.title} em ${visibleProperty.location}.`;
     res.render('imovel', {
-      page: pageMeta(req, { title: `${visibleProperty.title} — Gisley Nunes Imóveis`, description, path: `/imoveis/${visibleProperty.slug}`, ogImage: visibleProperty.cover_url }),
+      page: pageMeta(req, { title: `${visibleProperty.title} | Gisley Nunes Imóveis`, description, path: `/imoveis/${visibleProperty.slug}`, ogImage: visibleProperty.cover_url }),
       property: visibleProperty,
       propertyJson: escapeJsonForHtml(visibleProperty),
       pageLd: escapeLd(propertyLd(visibleProperty, originFrom(req)))
@@ -172,7 +250,8 @@ app.get('/robots.txt', (req, res) => {
 app.get('/sitemap.xml', async (req, res, next) => {
   try {
     const origin = originFrom(req);
-    const properties = await listProperties({ publicOnly: true });
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const neighborhoods = catalogNeighborhoods(properties);
     const entries = [
       { path: '/', priority: '1.0', changefreq: 'weekly' },
       { path: '/imoveis', priority: '0.9', changefreq: 'daily' },
@@ -180,6 +259,7 @@ app.get('/sitemap.xml', async (req, res, next) => {
       { path: '/contato', priority: '0.5', changefreq: 'monthly' },
       { path: '/termos', priority: '0.1', changefreq: 'yearly' },
       { path: '/privacidade', priority: '0.1', changefreq: 'yearly' },
+      ...neighborhoods.map((neighborhood) => ({ path: `/bairros/${neighborhood.slug}`, priority: '0.7', changefreq: 'weekly' })),
       ...properties.map((property) => ({ path: `/imoveis/${property.slug}`, priority: '0.8', changefreq: 'weekly', lastmod: sitemapDate(property.updated_at) }))
     ];
     const urls = entries.map((entry) => `  <url><loc>${escapeXml(`${origin}${entry.path}`)}</loc>${entry.lastmod ? `<lastmod>${escapeXml(entry.lastmod)}</lastmod>` : ''}<changefreq>${escapeXml(entry.changefreq)}</changefreq><priority>${escapeXml(entry.priority)}</priority></url>`).join('\n');
@@ -190,11 +270,12 @@ app.get('/sitemap.xml', async (req, res, next) => {
 app.get('/llms.txt', async (req, res, next) => {
   try {
     const origin = originFrom(req);
-    const properties = await listProperties({ publicOnly: true });
+    const properties = (await listProperties({ publicOnly: true })).map(publicProperty);
+    const neighborhoods = catalogNeighborhoods(properties);
     const lines = [
       '# Gisley Nunes Imóveis',
       '',
-      '> Imobiliária em Belo Horizonte e região. Curadoria de imóveis para comprar e alugar, com atendimento próximo e especializado.',
+      '> Imóveis para comprar e alugar em Belo Horizonte e região. Consulte o catálogo e entre em contato.',
       '',
       '## Páginas',
       `- [Início](${origin}/): apresentação e imóveis em destaque.`,
@@ -205,7 +286,8 @@ app.get('/llms.txt', async (req, res, next) => {
       `- [Privacidade](${origin}/privacidade): política de privacidade.`,
       '',
       '## Imóveis',
-      ...properties.map((property) => `- ${property.title} — ${property.location} — ${property.price_label || ''} — ${origin}/imoveis/${property.slug}`)
+      ...neighborhoods.map((neighborhood) => `- Bairro ${neighborhood.name}: ${neighborhood.count} imóveis. ${origin}/bairros/${neighborhood.slug}`),
+      ...properties.map((property) => `- ${property.title}: ${property.location}, ${property.price_label || 'consulte'}. ${origin}/imoveis/${property.slug}`)
     ];
     res.type('text/plain; charset=utf-8').send(lines.join('\n'));
   } catch (error) { next(error); }
@@ -227,7 +309,7 @@ async function start() {
     if (isProduction && !migration.configured) throw new Error('DATABASE_NOT_CONFIGURED');
   } catch (error) {
     if (isProduction) throw error;
-    console.warn('[db] migration deferred:', error.message);
+    logOperationalError(console.warn, 'db.migration_deferred', error);
     migration = { configured: false };
   }
   if (isProduction) {
@@ -252,8 +334,8 @@ async function start() {
     if (req.accepts('html')) {
       return res.status(404).render('404', {
         page: pageMeta(req, {
-          title: 'Página não encontrada — Gisley Nunes Imóveis',
-          description: 'A página procurada não foi encontrada. Continue navegando pelos imóveis da Gisley Nunes.',
+          title: 'Página não encontrada | Gisley Nunes Imóveis',
+          description: 'A página procurada não foi encontrada. Volte ao catálogo e continue a busca por um imóvel.',
           path: req.path,
           robots: 'noindex,nofollow'
         })
@@ -286,7 +368,7 @@ async function start() {
       try {
         await closePool();
       } catch (dbError) {
-        console.error('[db] shutdown:', dbError.message);
+        logOperationalError(console.error, 'db.shutdown_failed', dbError);
       }
       clearTimeout(forceExit);
       process.exit(error ? 1 : 0);
@@ -300,6 +382,6 @@ async function start() {
 }
 
 start().catch((error) => {
-  console.error('[startup]', isProduction ? error.message : (error.stack || error.message));
+  logOperationalError(console.error, 'startup.failed', error);
   process.exit(1);
 });

@@ -97,6 +97,9 @@ Todas as rotas abaixo passam, antes da lógica de negócio, por:
 | DELETE | `/api/admin/leads/:id` | Gestor |
 | GET | `/api/admin/audit` | Gestor |
 | GET | `/api/admin/team` | Gestor |
+| GET | `/api/admin/team/invitations` | Gestor |
+| POST | `/api/admin/team/invitations` | Gestor |
+| DELETE | `/api/admin/team/invitations/:email` | Gestor |
 | POST | `/api/admin/team` | Gestor |
 | PATCH | `/api/admin/team/:email` | Gestor |
 | DELETE | `/api/admin/team/:email` | Gestor |

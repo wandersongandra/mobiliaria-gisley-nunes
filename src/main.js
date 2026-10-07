@@ -39,7 +39,7 @@ function normalizeProperty(item) {
       areaM2 > 0 ? `${areaM2} m²` : null
     ].filter(Boolean),
     image: String(item.cover_url ?? item.coverUrl ?? ''),
-    tag: item.is_featured ? 'destaque' : 'curadoria'
+    tag: item.is_featured ? 'destaque' : String(item.purpose || 'Comprar').toLowerCase()
   };
 }
 
@@ -171,7 +171,7 @@ function initListing() {
 
     filterSummary.innerHTML = active.length
       ? `<span><strong>${resultCount}</strong> ${resultCount === 1 ? 'imóvel encontrado' : 'imóveis encontrados'}</span><div class="active-filters">${active.map((label) => `<span class="filter-chip">${escapeHTML(label)}</span>`).join('')}<button type="button" id="clear-filters-inline">Limpar filtros</button></div>`
-      : `<span><strong>${resultCount}</strong> imóveis na curadoria Gisley Nunes</span>`;
+      : `<span><strong>${resultCount}</strong> imóveis disponíveis</span>`;
 
     document.querySelector('#clear-filters-inline')?.addEventListener('click', clearFilters);
   }
@@ -219,9 +219,9 @@ function initListing() {
     const options = purpose === 'Alugar'
       ? [
           ['all', 'Qualquer valor'],
-          ['1', 'Até R$ 5 mil / mês'],
-          ['2', 'R$ 5 mil a R$ 10 mil / mês'],
-          ['3', 'Acima de R$ 10 mil / mês']
+          ['1', 'Até R$ 5 mil/mês'],
+          ['2', 'R$ 5 mil a R$ 10 mil/mês'],
+          ['3', 'Acima de R$ 10 mil/mês']
         ]
       : [
           ['all', 'Qualquer valor'],
@@ -231,6 +231,22 @@ function initListing() {
         ];
     select.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
     select.value = 'all';
+  }
+
+  function applyUrlFilters() {
+    const params = new URLSearchParams(window.location.search);
+    const requestedPurpose = params.get('purpose');
+    if (requestedPurpose && [...filters.purpose.options].some((option) => option.value === requestedPurpose)) {
+      filters.purpose.value = requestedPurpose;
+      updatePriceOptions();
+    }
+    for (const [key, filter] of Object.entries(filters)) {
+      if (!filter || key === 'purpose' || key === 'price') continue;
+      const value = params.get(key);
+      if (value && [...filter.options].some((option) => option.value === value)) filter.value = value;
+    }
+    const requestedPrice = params.get('price');
+    if (requestedPrice && [...filters.price.options].some((option) => option.value === requestedPrice)) filters.price.value = requestedPrice;
   }
 
   Object.values(filters).forEach((filter) => filter?.addEventListener('change', () => form?.classList.add('has-pending-filters')));
@@ -262,13 +278,14 @@ function initListing() {
       catalog = Array.isArray(payload?.properties) ? payload.properties.map(normalizeProperty) : [];
       populateFilterOptions();
       updatePriceOptions();
+      applyUrlFilters();
       renderListings(catalog);
     } catch {
       grid.innerHTML = '';
       if (count) count.textContent = '00';
       if (empty) empty.hidden = true;
       if (filterSummary) {
-        filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis agora.</span><button type="button" id="retry-properties">Tentar novamente</button>';
+        filterSummary.innerHTML = '<span>Não foi possível carregar os imóveis.</span><button type="button" id="retry-properties">Tentar novamente</button>';
         filterSummary.querySelector('#retry-properties')?.addEventListener('click', loadProperties, { once: true });
       }
     } finally {
@@ -306,9 +323,14 @@ function initContactForm() {
     if (button) {
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
-      button.textContent = 'Enviando…';
+      button.classList.add('is-loading');
+      button.textContent = 'Enviando';
     }
-    if (status) status.textContent = 'Enviando sua mensagem com segurança…';
+    form.dataset.state = 'sending';
+    if (status) {
+      status.dataset.state = 'sending';
+      status.textContent = 'Enviando sua mensagem';
+    }
 
     try {
       const response = await fetch('/api/contact', {
@@ -326,18 +348,24 @@ function initContactForm() {
 
       if (!response.ok) throw new Error('CONTACT_FAILED');
       form.reset();
-      if (status) status.textContent = 'Mensagem enviada. A equipe Gisley Nunes recebeu seu contato e retornará em breve.';
+      form.dataset.state = 'success';
+      if (status) {
+        status.dataset.state = 'success';
+        status.textContent = 'Mensagem enviada. Retornaremos em breve.';
+      }
     } catch {
       const fallbackText = `Olá! Meu nome é ${String(data.name || '').trim()}. ${String(data.message || '').trim()}`.slice(0, 1200);
       const whatsapp = await buildWhatsAppFallback(fallbackText);
+      form.dataset.state = 'error';
       if (status) {
-        status.textContent = 'Não foi possível registrar a mensagem agora. ';
+        status.dataset.state = 'error';
+        status.textContent = 'Não foi possível registrar a mensagem. ';
         if (whatsapp) {
           const link = document.createElement('a');
           link.href = whatsapp;
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
-          link.textContent = 'Fale conosco pelo WhatsApp.';
+          link.textContent = 'Tentar pelo WhatsApp.';
           status.append(link);
         } else {
           status.append('Tente novamente em alguns instantes.');
@@ -347,6 +375,7 @@ function initContactForm() {
       if (button) {
         button.disabled = false;
         button.removeAttribute('aria-busy');
+        button.classList.remove('is-loading');
         button.innerHTML = originalText;
       }
     }
@@ -398,16 +427,16 @@ function renderPropertyDetail(property) {
         <p class="property-location">${escapeHTML(property.location)}</p>
         <strong class="property-price">${escapeHTML(property.price_label)}</strong>
         <div class="property-summary-divider"></div>
-        <p class="property-section-label">Detalhes essenciais</p>
+        <p class="property-section-label">Detalhes do imóvel</p>
         <div class="property-features">${features}</div>
         <div class="property-actions">
-          <a class="button button-primary" href="#contato">Agendar uma conversa <span aria-hidden="true">↗</span></a>
-          <a class="property-back-link" href="/imoveis">← Voltar à curadoria</a>
+          <a class="button button-primary" href="#contato">Tenho interesse <span aria-hidden="true">↗</span></a>
+          <a class="property-back-link" href="/imoveis">← Ver outros imóveis</a>
         </div>
       </aside>
     </section>
     <section class="property-description">
-      <div><p class="eyebrow">sobre este imóvel</p><span class="property-description-index">01</span></div>
+      <div><p class="eyebrow">descrição</p><span class="property-description-index">01</span></div>
       <p class="property-description-copy">${escapeHTML(property.description || '')}</p>
     </section>`;
 }
@@ -420,7 +449,7 @@ function initPropertyDetail() {
   let property = null;
   try { property = JSON.parse(dataEl.textContent); } catch {}
   if (!property) {
-    root.innerHTML = '<p class="empty-state">Imóvel não encontrado.</p>';
+    root.innerHTML = '<p class="empty-state">Não foi possível carregar este imóvel.</p>';
     return;
   }
 
@@ -477,7 +506,25 @@ function initScrollPolish() {
   updateHeader();
   window.addEventListener('scroll', updateHeader, { passive: true });
 
-  const targets = document.querySelectorAll('.section-heading, .brand-statement, .experience-intro, .stats, .testimonial-feature, .contact-grid, .about-visual, .about-values-grid, .catalog-results-head, .property-description');
+  const targetGroups = [
+    ['.section-heading', 'motion-rise'],
+    ['.brand-statement', 'motion-rule'],
+    ['.experience-intro', 'motion-drift'],
+    ['.stats', 'motion-grid'],
+    ['.testimonial-feature', 'motion-quote'],
+    ['.contact-grid', 'motion-form'],
+    ['.about-visual', 'motion-drift'],
+    ['.about-values-grid', 'motion-rise'],
+    ['.catalog-results-head', 'motion-rule'],
+    ['.property-description', 'motion-quote']
+  ];
+  const targets = [];
+  targetGroups.forEach(([selector, motionClass]) => {
+    document.querySelectorAll(selector).forEach((target) => {
+      target.classList.add('motion-target', motionClass);
+      targets.push(target);
+    });
+  });
   if (!('IntersectionObserver' in window)) {
     targets.forEach((target) => target.classList.add('is-revealed'));
     return;
@@ -504,12 +551,21 @@ function initTestimonials() {
   const next = document.querySelector('[data-quote-next]');
   let index = 0;
 
-  const show = (i) => {
-    features.forEach((feature, j) => { feature.hidden = j !== i; });
+  const show = (i, direction = 1) => {
+    features.forEach((feature, j) => {
+      feature.hidden = j !== i;
+      if (j === i) {
+        feature.dataset.direction = direction > 0 ? 'next' : 'previous';
+        feature.classList.remove('is-active');
+        requestAnimationFrame(() => feature.classList.add('is-active'));
+      } else {
+        feature.classList.remove('is-active');
+      }
+    });
   };
 
-  prev?.addEventListener('click', () => { index = (index - 1 + features.length) % features.length; show(index); });
-  next?.addEventListener('click', () => { index = (index + 1) % features.length; show(index); });
+  prev?.addEventListener('click', () => { index = (index - 1 + features.length) % features.length; show(index, -1); });
+  next?.addEventListener('click', () => { index = (index + 1) % features.length; show(index, 1); });
   show(0);
 }
 

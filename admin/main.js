@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, properties: [], leads: [], team: [], audit: [], editing: null, pendingFiles: [], pendingPreviewUrls: [], search: '' };
+const state = { user: null, csrfToken: '', properties: [], leads: [], team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0, search: '' };
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -24,7 +24,11 @@ function toast(message, tone = 'success') { const status = $('#editor-status'); 
 
 async function request(url, options = {}) {
   const headers = { Accept: 'application/json', ...(options.headers || {}) };
+  const method = String(options.method || 'GET').toUpperCase();
   if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrfToken) {
+    headers['X-CSRF-Token'] = state.csrfToken;
+  }
   const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (response.status === 401) { showLogin(); throw new Error('AUTH_REQUIRED'); }
   if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || 'REQUEST_FAILED'); }
@@ -33,9 +37,11 @@ async function request(url, options = {}) {
 
 function clearSensitiveState() {
   state.user = null;
+  state.csrfToken = '';
   state.properties = [];
   state.leads = [];
   state.team = [];
+  state.invitations = [];
   state.audit = [];
   state.editing = null;
   state.search = '';
@@ -44,18 +50,32 @@ function clearSensitiveState() {
   const propertyList = $('#property-list');
   const leadList = $('#lead-list');
   const teamList = $('#team-list');
+  const invitationList = $('#team-invitations');
+  const invitationResult = $('#team-invite-result');
   const auditList = $('#audit-list');
   if (propertyList) propertyList.innerHTML = '';
   if (leadList) leadList.innerHTML = '';
   if (teamList) teamList.innerHTML = '';
+  if (invitationList) invitationList.innerHTML = '';
+  if (invitationResult) invitationResult.hidden = true;
   if (auditList) auditList.innerHTML = '';
+}
+
+function invitationTokenFromUrl() {
+  const value = new URLSearchParams(window.location.search).get('invite');
+  return /^[A-Za-z0-9_-]{43}$/.test(value || '') ? value : '';
+}
+
+function loginUrl() {
+  const token = invitationTokenFromUrl();
+  return token ? `/api/auth/login?invite=${encodeURIComponent(token)}` : '/api/auth/login';
 }
 
 function showLogin() {
   clearSensitiveState();
   dashboard.hidden = true;
   loginScreen.hidden = false;
-  $('#login-button').href = '/api/auth/login';
+  $('#login-button').href = loginUrl();
 }
 
 function sessionStatus(message = '', tone = '') {
@@ -75,7 +95,7 @@ async function performLogout({ all = false } = {}) {
   try {
     const response = await fetch(all ? '/api/auth/logout-all' : '/api/auth/logout', {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(state.csrfToken ? { 'X-CSRF-Token': state.csrfToken } : {}) },
       credentials: 'same-origin'
     });
     const body = await response.json().catch(() => ({}));
@@ -146,13 +166,12 @@ function fillForm(property = {}) {
 }
 function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
 
-function clearPendingPreviewUrls() {
-  state.pendingPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
-  state.pendingPreviewUrls = [];
+function clearPendingPreviews() {
+  state.pendingPreviewGeneration += 1;
 }
 
 function clearPendingFiles() {
-  clearPendingPreviewUrls();
+  clearPendingPreviews();
   state.pendingFiles = [];
   const input = $('#photo-input');
   if (input) input.value = '';
@@ -162,25 +181,63 @@ function renderEditorPhotos() {
   renderPhotos(state.editing?.photos || []);
   if (!state.pendingFiles.length) return;
 
-  clearPendingPreviewUrls();
+  clearPendingPreviews();
+  const previewGeneration = state.pendingPreviewGeneration;
   const grid = $('#photo-grid');
   const existingPhotoCount = state.editing?.photos?.length || 0;
-  const pendingMarkup = state.pendingFiles.map((file, index) => {
-    const url = URL.createObjectURL(file);
-    state.pendingPreviewUrls.push(url);
+  const pendingPhotos = document.createDocumentFragment();
+  state.pendingFiles.forEach((file, index) => {
     const becomesCover = existingPhotoCount === 0 && index === 0;
-    return `<div class="photo-tile pending"><img src="${url}" alt="${escapeHTML(file.name)}" /><span>${becomesCover ? 'nova capa' : 'nova'}</span><div class="photo-tile-actions"><button data-pending-remove="${index}" type="button" aria-label="Remover foto pendente">×</button></div></div>`;
-  }).join('');
+    const tile = document.createElement('div');
+    tile.className = 'photo-tile pending';
 
-  if (existingPhotoCount === 0) grid.innerHTML = pendingMarkup;
-  else grid.insertAdjacentHTML('beforeend', pendingMarkup);
+    const preview = document.createElement('canvas');
+    preview.width = 1;
+    preview.height = 1;
+    preview.setAttribute('role', 'img');
+    preview.setAttribute('aria-label', 'Pré-visualização da foto pendente');
+    preview.style.width = '100%';
+    preview.style.height = '100%';
+    preview.style.objectFit = 'cover';
+    preview.style.display = 'block';
+    void createImageBitmap(file).then((bitmap) => {
+      try {
+        if (previewGeneration !== state.pendingPreviewGeneration) return;
+        const scale = Math.min(1, 640 / bitmap.width, 640 / bitmap.height);
+        preview.width = Math.max(1, Math.round(bitmap.width * scale));
+        preview.height = Math.max(1, Math.round(bitmap.height * scale));
+        preview.getContext('2d')?.drawImage(bitmap, 0, 0, preview.width, preview.height);
+      } finally {
+        bitmap.close();
+      }
+    }).catch(() => {
+      if (previewGeneration === state.pendingPreviewGeneration) {
+        preview.setAttribute('aria-label', 'Pré-visualização indisponível');
+      }
+    });
+    tile.append(preview);
 
-  grid.querySelectorAll('[data-pending-remove]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.pendingFiles.splice(Number(button.dataset.pendingRemove), 1);
+    const label = document.createElement('span');
+    label.textContent = becomesCover ? 'nova capa' : 'nova';
+    tile.append(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'photo-tile-actions';
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.setAttribute('aria-label', 'Remover foto pendente');
+    removeButton.textContent = '×';
+    removeButton.addEventListener('click', () => {
+      state.pendingFiles.splice(index, 1);
       renderEditorPhotos();
     });
+    actions.append(removeButton);
+    tile.append(actions);
+    pendingPhotos.append(tile);
   });
+
+  if (existingPhotoCount === 0) grid.replaceChildren(pendingPhotos);
+  else grid.append(pendingPhotos);
 }
 function openEditor(property = null) {
   const isManager = state.user?.role === 'manager';
@@ -452,6 +509,8 @@ const auditLabels = {
   'lead.status': 'Status do contato alterado',
   'lead.delete': 'Dados de contato apagados',
   'team.create': 'Acesso de equipe criado',
+  'team.invite': 'Convite de equipe gerado',
+  'team.invite.revoke': 'Convite de equipe revogado',
   'team.update': 'Acesso de equipe atualizado',
   'team.remove': 'Acesso de equipe removido'
 };
@@ -525,32 +584,65 @@ function renderTeam() {
   }));
 }
 
+function renderTeamInvitations() {
+  const list = $('#team-invitations');
+  if (!list) return;
+  list.innerHTML = state.invitations.length ? state.invitations.map((invitation) => {
+    const roleLabel = invitation.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
+    const expires = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(invitation.expires_at_ms));
+    return `<article class="team-invitation-row"><div><strong>${escapeHTML(invitation.name)}</strong><span>${escapeHTML(invitation.email)} · ${roleLabel} · expira ${escapeHTML(expires)}</span></div><button class="danger" type="button" data-team-invite-revoke="${escapeHTML(invitation.email)}">Revogar</button></article>`;
+  }).join('') : '<div class="empty-properties compact"><p>Nenhum convite pendente.</p></div>';
+
+  list.querySelectorAll('[data-team-invite-revoke]').forEach((button) => button.addEventListener('click', async () => {
+    try {
+      await request(`/api/admin/team/invitations/${encodeURIComponent(button.dataset.teamInviteRevoke)}`, { method: 'DELETE' });
+      await loadTeam();
+      teamNotify('Convite revogado.');
+    } catch {
+      teamNotify('Não foi possível revogar este convite.', 'error');
+    }
+  }));
+}
+
 async function loadTeam() {
   try {
     state.team = (await request('/api/admin/team')).team || [];
+    state.invitations = (await request('/api/admin/team/invitations')).invitations || [];
     renderTeam();
+    renderTeamInvitations();
   } catch {
     const list = $('#team-list');
     if (list) list.innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar a equipe agora.</p></div>';
+    const invitations = $('#team-invitations');
+    if (invitations) invitations.innerHTML = '';
   }
 }
 
-async function addTeamMember(event) {
+async function createTeamInvitation(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(teamForm));
   try {
-    await request('/api/admin/team', { method: 'POST', body: JSON.stringify(data) });
+    const result = await request('/api/admin/team/invitations', { method: 'POST', body: JSON.stringify(data) });
     teamForm.reset();
+    const invitation = result.invitation;
+    const resultBox = $('#team-invite-result');
+    const urlInput = $('#team-invite-url');
+    const expiry = $('#team-invite-expiry');
+    if (resultBox && urlInput && expiry) {
+      urlInput.value = invitation.url;
+      expiry.textContent = `Válido até ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(invitation.expiresAtMs))}.`;
+      resultBox.hidden = false;
+    }
     await loadTeam();
-    teamNotify('Acesso vinculado. O código temporário foi consumido e não pode ser reutilizado.');
+    teamNotify('Convite gerado. Copie o link e envie somente à pessoa convidada.');
   } catch (error) {
     teamNotify(
-      error.message === 'INVALID_TEAM_MEMBER'
-        ? 'Confira nome, e-mail e o código temporário de vinculação.'
-        : error.message === 'INVALID_PAIRING_CODE'
-          ? 'Código expirado, inválido ou pertencente a outro e-mail.'
+      error.message === 'INVALID_INVITATION'
+        ? 'Confira nome, e-mail e permissão.'
           : error.message === 'TEAM_MEMBER_EXISTS'
             ? 'Esse e-mail ou identidade já está vinculado a outro acesso.'
+          : error.message === 'INVITATION_EXISTS'
+            ? 'Não foi possível gerar outro convite agora. Tente novamente.'
           : 'Não foi possível adicionar este acesso.',
       'error'
     );
@@ -641,6 +733,7 @@ async function loadLeads() {
 async function init() {
   try {
     const session = await request('/api/admin/session');
+    state.csrfToken = String(session.csrfToken || '');
     if (!session.authenticated) return showLogin();
     state.user = session.user;
     showDashboard();
@@ -675,7 +768,19 @@ dialog.addEventListener('close', clearPendingFiles);
 document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); switchView(link.dataset.view); }));
 siteForm?.addEventListener('submit', saveSite);
 testimonialForm?.addEventListener('submit', addTestimonial);
-teamForm?.addEventListener('submit', addTeamMember);
+teamForm?.addEventListener('submit', createTeamInvitation);
+$('#copy-team-invite')?.addEventListener('click', async () => {
+  const input = $('#team-invite-url');
+  if (!input?.value) return;
+  try {
+    await navigator.clipboard.writeText(input.value);
+    teamNotify('Link copiado. Envie-o somente à pessoa convidada.');
+  } catch {
+    input.focus();
+    input.select();
+    teamNotify('Selecione e copie o link manualmente.', 'error');
+  }
+});
 $('#refresh-audit')?.addEventListener('click', loadAudit);
 $('#property-search')?.addEventListener('input', (event) => { state.search = event.target.value; renderProperties(); });
 init();

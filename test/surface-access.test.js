@@ -46,6 +46,9 @@ const protectedAdminRoutes = [
   ['DELETE', '/api/admin/leads/lead-id'],
   ['GET', '/api/admin/audit'],
   ['GET', '/api/admin/team'],
+  ['GET', '/api/admin/team/invitations'],
+  ['POST', '/api/admin/team/invitations'],
+  ['DELETE', '/api/admin/team/invitations/editor%40example.com'],
   ['POST', '/api/admin/team'],
   ['PATCH', '/api/admin/team/editor%40example.com'],
   ['DELETE', '/api/admin/team/editor%40example.com']
@@ -97,11 +100,12 @@ test('sonda de sessão é a única exceção anônima sob /api/admin', async () 
     });
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      authenticated: false,
-      user: null
-    });
+    const body = await response.json();
+    assert.equal(body.authenticated, false);
+    assert.equal(body.user, null);
+    assert.match(body.csrfToken, /^[A-Za-z0-9_-]{43}$/);
     assert.match(response.headers.get('cache-control') || '', /no-store/i);
+    assert.match(response.headers.get('set-cookie') || '', /gisley_csrf=/i);
   });
 });
 
@@ -126,24 +130,58 @@ test('métodos não suportados em API não executam comportamento alternativo', 
 });
 
 
-test('logout administrativo exige mesma origem e é idempotente', async () => {
+test('logout administrativo exige mesma origem e token CSRF válido', async () => {
   await withServer(async (origin) => {
+    const probe = await fetch(`${origin}/api/admin/session`, { headers: { Accept: 'application/json' } });
+    const probeBody = await probe.json();
+    const csrfToken = probeBody.csrfToken;
+    const csrfCookie = (probe.headers.get('set-cookie') || '').split(';')[0];
+
     const blocked = await fetch(`${origin}/api/auth/logout`, {
       method: 'POST',
       headers: {
         Origin: 'https://evil.example',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        Cookie: csrfCookie,
+        'X-CSRF-Token': csrfToken
       },
       body: '{}'
     });
     assert.equal(blocked.status, 403);
     assert.deepEqual(await blocked.json(), { error: 'CROSS_SITE_REQUEST_BLOCKED' });
 
+    const missingToken = await fetch(`${origin}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        'Content-Type': 'application/json',
+        Cookie: csrfCookie
+      },
+      body: '{}'
+    });
+    assert.equal(missingToken.status, 403);
+    assert.deepEqual(await missingToken.json(), { error: 'CSRF_TOKEN_INVALID' });
+
+    const mismatch = await fetch(`${origin}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        'Content-Type': 'application/json',
+        Cookie: csrfCookie,
+        'X-CSRF-Token': 'B'.repeat(43)
+      },
+      body: '{}'
+    });
+    assert.equal(mismatch.status, 403);
+    assert.deepEqual(await mismatch.json(), { error: 'CSRF_TOKEN_INVALID' });
+
     const allowed = await fetch(`${origin}/api/auth/logout`, {
       method: 'POST',
       headers: {
         Origin: origin,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        Cookie: csrfCookie,
+        'X-CSRF-Token': csrfToken
       },
       body: '{}'
     });

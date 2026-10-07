@@ -20,7 +20,51 @@ export function organizationLd(site, origin) {
     email: site.email,
     telephone: site.phoneDisplay,
     areaServed: site.area,
-    address: { '@type': 'PostalAddress', addressLocality: 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' }
+    address: { '@type': 'PostalAddress', addressLocality: 'Belo Horizonte', addressRegion: 'MG', addressCountry: 'BR' },
+    ...(site.instagramUrl ? { sameAs: [site.instagramUrl] } : {})
+  };
+}
+
+export function websiteLd(site, origin) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: site.name,
+    url: `${origin}/`,
+    publisher: { '@type': 'RealEstateAgent', name: site.name }
+  };
+}
+
+export function breadcrumbLd(items) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      ...(item.url ? { item: item.url } : {})
+    }))
+  };
+}
+
+export function collectionPageLd({ name, description, url, items = [] }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name,
+    description,
+    url,
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: items.length,
+      itemListElement: items.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: item.title,
+        url: item.url
+      }))
+    }
   };
 }
 

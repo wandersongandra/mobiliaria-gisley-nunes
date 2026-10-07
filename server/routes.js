@@ -1,8 +1,10 @@
 import crypto from 'node:crypto';
+import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 import {
   addPhoto,
   addTestimonial,
   createContactLead,
+  createStaffInvitation,
   bindStaffAccessFromPairing,
   databaseReady,
   deleteContactLead,
@@ -15,9 +17,11 @@ import {
   listAuditLog,
   listContactLeads,
   listProperties,
+  listStaffInvitations,
   listStaffAccess,
   removePhoto,
   removeStaffAccess,
+  revokeStaffInvitationsByEmail,
   removeTestimonial,
   recordAudit,
   reorderPhotos,
@@ -29,8 +33,8 @@ import {
   softDeleteProperty,
   updateContactLeadStatus
 } from './db.js';
-import { hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
-import { authCookieNames, callback, clearSessionCookie, currentAdmin, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
+import { configuredAdminOrigin, hasDatabase, isAllowedOpenId, legacyStorageRouteEnabled } from './config.js';
+import { STAFF_INVITATION_TTL_MS, authCookieNames, callback, clearSessionCookie, currentAdmin, hashInvitationToken, hashPairingCode, login, logout, logoutAll, requireAdmin } from './auth.js';
 import {
   auditView,
   canArchiveProperty,
@@ -45,7 +49,7 @@ import {
   staffView
 } from './authorization.js';
 import { getSiteInfo, getTestimonials } from './site.js';
-import { createRateLimiter, requireAdminOrigin, requireAdminRequestContext, requireSameOrigin } from './security.js';
+import { clientAddress, createRateLimiter, ensureCsrfToken, requestHostOrigin, requireAdminOrigin, requireAdminRequestContext, requireCsrfToken, requireSameOrigin } from './security.js';
 import {
   safeFileName,
   storageAssetUrl,
@@ -66,14 +70,34 @@ import {
   normalizePhotoOrder,
   normalizeResourceId,
   normalizeTeamCreate,
+  normalizeTeamInvitation,
   normalizeTeamPatch,
   normalizeTestimonial,
   normalizeUploadRequest
 } from './validation.js';
-import { adminProperties, adminProperty, publicProperties, publicProperty } from './presenters.js';
+import { adminProperties, adminProperty, publicProperties, publicProperty, staffInvitationView } from './presenters.js';
+import { logOperationalError } from './operational-logging.js';
+
+const apiSafetyLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 5000,
+  standardHeaders: 'draft-6',
+  legacyHeaders: false,
+  identifier: 'api-safety',
+  keyGenerator: (req) => ipKeyGenerator(clientAddress(req), 56),
+  handler: (req, res, _next, options) => {
+    const resetTime = req.rateLimit?.resetTime;
+    const retryAfter = resetTime instanceof Date
+      ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+      : Math.max(1, Math.ceil(options.windowMs / 1000));
+    res.setHeader('Retry-After', String(retryAfter));
+    return res.status(options.statusCode).json({ error: 'RATE_LIMITED', retryAfter });
+  }
+});
 
 const loginLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-login' });
 const callbackLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, namespace: 'auth-callback' });
+const logoutLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 60, namespace: 'auth-logout' });
 const sessionProbeLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 120, namespace: 'auth-session' });
 const contactLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 8, namespace: 'contact' });
 const adminLimiter = createRateLimiter({ windowMs: 5 * 60 * 1000, max: 300, namespace: 'admin' });
@@ -122,12 +146,12 @@ async function writeAudit(req, action, entityType, entityId, details = null) {
       details
     });
   } catch (error) {
-    console.warn('[audit] write failed:', error.message);
+    logOperationalError(console.warn, 'audit.write_failed', error);
   }
 }
 
 export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
-  app.use('/api', requireJsonApiBody);
+  app.use('/api', apiSafetyLimiter, requireJsonApiBody);
   app.use(['/api/auth', '/api/admin'], requireAdminOrigin);
   app.use('/api/admin', requireAdminRequestContext);
   app.use('/api/auth', (req, res, next) => {
@@ -149,16 +173,18 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
 
   app.get('/api/auth/login', loginLimiter, login);
   app.get('/api/auth/callback', callbackLimiter, callback);
-  app.post('/api/auth/logout', requireSameOrigin, logout);
-  app.post('/api/auth/logout-all', requireSameOrigin, requireAdmin(), logoutAll);
+  app.post('/api/auth/logout', requireSameOrigin, requireCsrfToken, logoutLimiter, logout);
+  app.post('/api/auth/logout-all', requireSameOrigin, logoutLimiter, requireAdmin(), requireCsrfToken, logoutAll);
   app.get('/api/admin/session', sessionProbeLimiter, async (req, res, next) => {
     try {
       res.setHeader('Cache-Control', 'no-store');
       const user = await currentAdmin(req);
       if (!user && req.cookies?.[authCookieNames().sessionCookie]) clearSessionCookie(req, res);
+      const csrfToken = ensureCsrfToken(req, res);
       res.json({
         authenticated: Boolean(user),
-        user: user ? { email: user.email, name: user.name, role: user.role } : null
+        user: user ? { email: user.email, name: user.name, role: user.role } : null,
+        csrfToken
       });
     } catch (error) {
       next(error);
@@ -206,8 +232,10 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
         if (!key.startsWith('morada/properties/') || key.includes('..') || key.includes('\\0')) {
           return res.status(400).json({ error: 'INVALID_ASSET' });
         }
+        const publishedPhoto = await findPublishedPhotoByStoragePath(key);
+        if (!publishedPhoto) return res.status(404).json({ error: 'NOT_FOUND' });
         const signedUrl = await storageGetSignedUrl(key);
-        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.setHeader('Cache-Control', 'no-store');
         return res.redirect(307, signedUrl);
       } catch (error) {
         return next(error);
@@ -240,7 +268,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
     next();
-  }, requireSameOrigin, adminApiGuard, adminMiddleware);
+  }, requireSameOrigin, adminApiGuard, adminMiddleware, requireCsrfToken);
 
   app.get('/api/admin/properties', requireCapability('property.read'), async (req, res, next) => {
     try { res.json({ properties: adminProperties(await listProperties()) }); } catch (error) { next(error); }
@@ -404,7 +432,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       } catch (error) {
         if (error?.message !== 'ASSET_ALREADY_REGISTERED') {
           try { await storageDelete(storagePath); } catch (cleanupError) {
-            console.warn('[storage] failed to clean unpersisted upload:', cleanupError.message);
+            logOperationalError(console.warn, 'storage.upload_cleanup_failed', cleanupError);
           }
         }
         throw error;
@@ -446,7 +474,7 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       try {
         await storageDelete(removed.storage_path);
       } catch (error) {
-        console.warn('[storage] orphan cleanup deferred:', error.message);
+        logOperationalError(console.warn, 'storage.orphan_cleanup_deferred', error);
       }
       await writeAudit(req, 'photo.remove', 'photo', photoId, { propertyId: removed.property_id });
       return res.status(204).end();
@@ -576,6 +604,64 @@ export function registerRoutes(app, { adminMiddleware = requireAdmin() } = {}) {
       res.json({ team });
     } catch (error) {
       next(error);
+    }
+  });
+
+  app.get('/api/admin/team/invitations', requireCapability('team.manage'), async (req, res, next) => {
+    try {
+      const invitations = (await listStaffInvitations()).map(staffInvitationView);
+      return res.json({ invitations });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post('/api/admin/team/invitations', requireCapability('team.manage'), async (req, res, next) => {
+    try {
+      const { email, name, role } = normalizeTeamInvitation(req.body || {});
+      const origin = configuredAdminOrigin() || requestHostOrigin(req);
+      if (!origin) return res.status(400).json({ error: 'ADMIN_ORIGIN_NOT_CONFIGURED' });
+
+      const token = crypto.randomBytes(32).toString('base64url');
+      const expiresAtMs = Date.now() + STAFF_INVITATION_TTL_MS;
+      await createStaffInvitation({
+        tokenHash: hashInvitationToken(token),
+        email,
+        name,
+        role,
+        invitedBy: req.admin.email,
+        expiresAtMs
+      });
+
+      await writeAudit(req, 'team.invite', 'staff', email, {
+        role,
+        expiresAtMs,
+        tokenStoredAsHash: true
+      });
+
+      return res.status(201).json({
+        invitation: {
+          email,
+          name,
+          role,
+          expiresAtMs,
+          url: `${origin}/admin?invite=${encodeURIComponent(token)}`
+        }
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.delete('/api/admin/team/invitations/:email', requireCapability('team.manage'), destructiveLimiter, async (req, res, next) => {
+    try {
+      const email = normalizeEmailAddress(req.params.email, { error: 'INVALID_EMAIL' });
+      const revoked = await revokeStaffInvitationsByEmail(email);
+      if (!revoked) return res.status(404).json({ error: 'NOT_FOUND' });
+      await writeAudit(req, 'team.invite.revoke', 'staff', email, { invitationsRevoked: revoked });
+      return res.status(204).end();
+    } catch (error) {
+      return next(error);
     }
   });
 

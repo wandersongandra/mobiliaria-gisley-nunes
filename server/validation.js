@@ -287,6 +287,14 @@ export function normalizeTeamCreate(input = {}) {
   return { email, pairingCode, name, role };
 }
 
+export function normalizeTeamInvitation(input = {}) {
+  input = contract(input, ['email', 'name', 'role'], 'INVALID_INVITATION');
+  const email = normalizeEmailAddress(input.email, { error: 'INVALID_INVITATION' });
+  const name = text(input.name, 255, { required: true, error: 'INVALID_INVITATION' });
+  const role = enumField(input.role, TEAM_ROLES, { defaultValue: 'editor', error: 'INVALID_INVITATION' });
+  return { email, name, role };
+}
+
 export function normalizeTeamPatch(input = {}) {
   input = contract(input, ['name', 'role', 'active'], 'INVALID_TEAM_MEMBER');
   const result = {};

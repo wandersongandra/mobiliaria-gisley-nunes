@@ -1,6 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { adminProperty, publicProperty } from '../server/presenters.js';
+import { adminProperty, publicProperty, staffInvitationView } from '../server/presenters.js';
+
+test('staffInvitationView não expõe token ou hash de convite', () => {
+  const result = staffInvitationView({
+    token_hash: 'a'.repeat(64),
+    email: 'editor@example.com',
+    name: 'Editor',
+    role: 'editor',
+    invited_by: 'gestor@example.com',
+    expires_at_ms: '1790000000000',
+    created_at: '2026-10-02T12:00:00.000Z'
+  });
+
+  assert.equal(result.email, 'editor@example.com');
+  assert.equal(result.expires_at_ms, 1790000000000);
+  assert.equal(Object.hasOwn(result, 'token_hash'), false);
+  assert.equal(Object.hasOwn(result, 'invitation_token'), false);
+});
 
 test('publicProperty remove identificadores e caminhos internos', () => {
   const result = publicProperty({

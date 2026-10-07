@@ -23,22 +23,27 @@
   <div class="section-bar"><div><p class="admin-kicker">gestão de acesso</p><h3>Equipe e <em>permissões.</em></h3></div></div>
   <div class="team-layout">
     <form id="team-form" class="site-card team-form">
-      <span class="metric-label">novo acesso</span>
-      <strong class="site-card-title">Adicionar pessoa à equipe</strong>
-      <p class="team-help">A permissão é vinculada por um código temporário de uso único. Peça à pessoa para tentar entrar uma vez; se ainda não tiver acesso, ela verá um código com validade de 15 minutos.</p>
+      <span class="metric-label">convite de equipe</span>
+      <strong class="site-card-title">Enviar acesso pelo gestor</strong>
+      <p class="team-help">Gere um link individual e envie por WhatsApp ou e-mail. A pessoa só entra com o e-mail convidado; o link expira em 72 horas e só pode ser aceito uma vez.</p>
       <div class="site-fields">
         <label>Nome<input name="name" required maxlength="255" placeholder="Nome da pessoa" /></label>
-        <label>E-mail <small>apenas contato</small><input name="email" required type="email" maxlength="255" placeholder="corretor@email.com" /></label>
-        <label>Código de vinculação<input name="pairingCode" required minlength="12" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Cole o código temporário" /></label>
+        <label>E-mail <small>será conferido no login</small><input name="email" required type="email" maxlength="255" autocomplete="email" placeholder="corretor@email.com" /></label>
         <label>Permissão<select name="role"><option value="editor">Corretor / Editor</option><option value="manager">Gestor</option></select></label>
       </div>
-      <button class="admin-button admin-button-primary" type="submit">Adicionar acesso <span>＋</span></button>
+      <button class="admin-button admin-button-primary" type="submit">Gerar convite <span>↗</span></button>
+      <div id="team-invite-result" class="team-invite-result" hidden>
+        <label>Link temporário<input id="team-invite-url" type="text" readonly spellcheck="false" /></label>
+        <div class="team-invite-actions"><small id="team-invite-expiry"></small><button id="copy-team-invite" class="outline-button" type="button">Copiar link</button></div>
+      </div>
       <p id="team-status" role="status"></p>
     </form>
     <div class="site-card team-members-card">
       <span class="metric-label">acessos ativos</span>
       <strong class="site-card-title">Quem pode entrar no CRM</strong>
       <div id="team-list" class="team-list"></div>
+      <div class="team-pending-head"><span class="metric-label">convites pendentes</span><small>links ainda não aceitos</small></div>
+      <div id="team-invitations" class="team-list team-invitations"></div>
     </div>
   </div>
 </section><section id="audit-view" class="admin-view" hidden>

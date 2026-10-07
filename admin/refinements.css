@@ -9,6 +9,21 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 .team-help{margin:-7px 0 20px;color:#718182;font-size:11px;line-height:1.65}
 .team-form #team-status{margin-top:12px;font-size:10px;color:#4f8b70;line-height:1.5}
 .team-form #team-status[data-tone="error"]{color:#b16f5e}
+.team-invite-result{margin-top:18px;padding:14px;border:1px solid rgba(18,60,70,.10);border-radius:14px;background:#f8f7f3}
+.team-invite-result label{font-size:9px!important;color:#718182}
+.team-invite-result input{margin-top:7px!important;font:10px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;color:#123c46!important;background:#fff!important}
+.team-invite-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.team-invite-actions small{color:#7a898a;font-size:9px;line-height:1.4}
+.team-invite-actions .outline-button{padding:8px 11px;font-size:8px}
+.team-pending-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:25px;padding-top:19px;border-top:1px solid rgba(18,60,70,.08)}
+.team-pending-head small{color:#8a9697;font-size:9px}
+.team-invitations{margin-top:8px}
+.team-invitation-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 0;border-bottom:1px solid rgba(18,60,70,.08)}
+.team-invitation-row:last-child{border-bottom:0}
+.team-invitation-row strong{display:block;color:#123c46;font-size:12px}
+.team-invitation-row span{display:block;margin-top:3px;color:#7a898a;font-size:9px}
+.team-invitation-row button{border:1px solid rgba(167,96,82,.28);border-radius:999px;background:transparent;color:#a76052;padding:7px 9px;font-size:8px;font-weight:800;white-space:nowrap}
+.team-invitation-row button:hover{background:#a76052;color:#fff}
 .team-list{display:flex;flex-direction:column;border-top:1px solid rgba(18,60,70,.08)}
 .team-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:18px;align-items:center;padding:17px 0;border-bottom:1px solid rgba(18,60,70,.08)}
 .team-row:last-child{border-bottom:0}
@@ -27,6 +42,7 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 @media(max-width:1050px){.team-layout{grid-template-columns:1fr}.team-members-card{order:-1}}
 @media(max-width:760px){.role-chip{display:none}.team-row{grid-template-columns:1fr;gap:10px}.team-actions{justify-content:flex-start}.team-permission{justify-content:flex-start}}
 @media(max-width:460px){.team-actions{flex-wrap:wrap}.team-actions button{flex:1 1 auto}}
+@media(max-width:460px){.team-invite-actions{align-items:flex-start;flex-direction:column}.team-invite-actions .outline-button{width:100%}.team-invitation-row{grid-template-columns:1fr}.team-invitation-row button{justify-self:start}}
 
 .danger-button{margin-right:auto;color:#a76052;border-color:rgba(167,96,82,.3)}.danger-button:hover{background:#a76052!important;border-color:#a76052!important;color:#fff!important}.danger-button:disabled{opacity:.5;cursor:wait}
 
