@@ -7,7 +7,8 @@ const patterns = [
   { name: 'github-fine-grained-token', re: /\bgithub_pat_[A-Za-z0-9_]{40,}\b/g },
   { name: 'openai-key', re: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/g },
   { name: 'aws-access-key', re: /\bAKIA[0-9A-Z]{16}\b/g },
-  { name: 'sensitive-env', re: /\b(?:R2_SECRET_ACCESS_KEY|MANUS_API_KEY|GISELY_SESSION_SECRET)\s*=\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9+/_=-]{20,}))/g },
+  { name: 'google-oauth-secret', re: /\bGOCSPX-[A-Za-z0-9_-]{20,}\b/g },
+  { name: 'sensitive-env', re: /\b(?:R2_SECRET_ACCESS_KEY|R2_ACCESS_KEY_ID|GOOGLE_CLIENT_SECRET|DB_PASSWORD|APP_KEY|MANUS_API_KEY|GISELY_SESSION_SECRET)\s*=\s*(?:"([^"]+)"|'([^']+)'|([A-Za-z0-9+/_=-]{20,}))/g },
   { name: 'database-url', re: /\bDATABASE_URL\s*=\s*mysql:\/\/([^:\s]+):([^@\s]+)@/g }
 ];
 
