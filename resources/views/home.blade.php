@@ -24,7 +24,7 @@
       </section>
 
       <section class="search-card shell" aria-labelledby="search-title">
-        <div class="search-head"><div><p class="eyebrow">busca de imóveis</p><h2 id="search-title">Encontre pelo bairro, tipo e valor.</h2></div><span class="listing-count"><strong id="listing-count">00</strong> imóveis</span></div>
+        <div class="search-head"><div><p class="eyebrow">busca de imóveis</p><h2 id="search-title">Encontre pelo bairro, tipo e valor.</h2></div><span class="listing-count"><strong id="listing-count">{{ str_pad((string)($initialCatalogTotal ?? 0), 2, '0', STR_PAD_LEFT) }}</strong> imóveis</span></div>
         <form id="search-form" class="search-form">
           <label class="field"><span>Eu quero</span><select id="purpose"><option value="all">Comprar ou alugar</option><option value="Comprar">Comprar</option><option value="Alugar">Alugar</option></select></label>
           <label class="field field-wide"><span>Bairro</span><select id="location"><option value="all">Todos os bairros</option></select></label>
@@ -33,12 +33,16 @@
           <label class="field"><span>Quartos</span><select id="bedrooms"><option value="all">Qualquer número</option><option value="1">1 quarto</option><option value="2">2 quartos</option><option value="3">3 quartos</option><option value="4+">4 ou mais</option></select></label>
           <button class="search-button" type="submit" aria-label="Buscar imóveis"><span>Buscar</span><span aria-hidden="true">⌕</span></button>
         </form>
-        <div class="filter-summary" id="filter-summary" aria-live="polite"><span>carregando imóveis</span></div>
+        <div class="filter-summary" id="filter-summary" aria-live="polite"><span><strong>{{ $initialCatalogTotal ?? 0 }}</strong> imóveis disponíveis</span></div>
       </section>
 
       <section class="section shell listings-section home-listings" id="imoveis" aria-labelledby="listings-title">
         <div class="section-heading"><div><p class="eyebrow">imóveis disponíveis</p><h2 id="listings-title">Comprar ou alugar<br /><em>em Belo Horizonte.</em></h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
-        <div class="listing-grid" id="listing-grid"></div>
+        <div class="listing-grid" id="listing-grid">
+          @foreach(($initialProperties ?? []) as $index => $property)
+            @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
+          @endforeach
+        </div>
         <div class="empty-state" id="empty-state" hidden></div>
       </section>
 
