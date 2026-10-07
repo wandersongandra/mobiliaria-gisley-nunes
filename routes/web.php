@@ -39,6 +39,9 @@ Route::get('/media/{path}', [MediaController::class, 'media'])->where('path', '.
 
 Route::get('/admin', [AdminCrmController::class, 'panel']);
 
+Route::get('/oauth/google/return', [AuthController::class, 'callback'])
+    ->middleware('throttle:auth-callback');
+
 Route::prefix('api/auth')->group(function (): void {
     Route::get('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
     Route::get('/callback', [AuthController::class, 'callback'])->middleware('throttle:auth-callback');
