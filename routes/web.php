@@ -37,12 +37,13 @@ Route::post('/api/contact', [PublicApiController::class, 'contact'])
 
 Route::get('/media/{path}', [MediaController::class, 'media'])->where('path', '.*');
 
-Route::get('/admin', [AdminCrmController::class, 'panel']);
+Route::get('/admin', [AdminCrmController::class, 'panel'])
+    ->middleware('admin-origin');
 
 Route::get('/oauth/google/return', [AuthController::class, 'callback'])
-    ->middleware('throttle:auth-callback');
+    ->middleware(['admin-origin', 'throttle:auth-callback']);
 
-Route::prefix('api/auth')->group(function (): void {
+Route::prefix('api/auth')->middleware('admin-origin')->group(function (): void {
     Route::get('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
     Route::get('/callback', [AuthController::class, 'callback'])->middleware('throttle:auth-callback');
     Route::post('/logout', [AuthController::class, 'logout'])
@@ -52,10 +53,10 @@ Route::prefix('api/auth')->group(function (): void {
 });
 
 Route::get('/api/admin/session', [AuthController::class, 'session'])
-    ->middleware('throttle:auth-session');
+    ->middleware(['admin-origin', 'throttle:auth-session']);
 
 Route::prefix('api/admin')
-    ->middleware(['same-origin', 'admin', 'throttle:admin'])
+    ->middleware(['admin-origin', 'same-origin', 'admin', 'throttle:admin'])
     ->group(function (): void {
         Route::get('/properties', [AdminPropertyController::class, 'index'])
             ->middleware('capability:property.read');
