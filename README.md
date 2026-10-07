@@ -128,6 +128,7 @@ Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. A comparação do c
 - `GET /health/live`: confirma que o processo Laravel iniciou.
 - `GET /health/ready`: confirma que o runtime e o banco estão disponíveis.
 - `GET /_app/health`: alias compatível de liveness para o monitoramento anterior.
+- `GET /oauth/google/return`: callback OAuth alternativo e neutro para ambientes em que o WAF do provedor bloqueia o callback legado; ativado somente quando `GOOGLE_OAUTH_CALLBACK_PATH=/oauth/google/return`.
 
 ## Gates locais e CI
 
