@@ -87,6 +87,20 @@ class ProductionCheckCommandTest extends TestCase
             ->assertFailed();
     }
 
+    public function test_production_check_rejects_public_and_admin_on_the_same_host(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'app.url' => 'https://example.test',
+            'app.admin_url' => 'https://example.test:8443',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] APP_URL and ADMIN_ORIGIN are distinct HTTPS origins')
+            ->assertFailed();
+    }
+
     public function test_production_check_rejects_a_world_trusted_proxy_range(): void
     {
         config([
