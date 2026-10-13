@@ -774,11 +774,11 @@ function renderTeam() {
     const isSelf = Boolean(member.is_self);
     const isBootstrap = Boolean(member.is_bootstrap);
     const roleLabel = member.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
-    return `<article class="team-row">
+    return `<article class="team-row${member.active ? '' : ' is-inactive'}">
       <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a></div></div>
-      <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${isSelf ? '<small>você</small>' : ''}${isBootstrap ? '<small>principal</small>' : ''}</div>
+      <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${!member.active ? '<small>Acesso pausado</small>' : ''}${isSelf ? '<small>você</small>' : ''}${isBootstrap ? '<small>principal</small>' : ''}</div>
       <div class="team-actions">
-        ${!isSelf && !isBootstrap ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
+        ${!isSelf && !isBootstrap ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button type="button" data-team-active="${escapeHTML(member.email)}" data-next-active="${member.active ? 'false' : 'true'}">${member.active ? 'Pausar acesso' : 'Reativar'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
       </div>
     </article>`;
   }).join('') : '<div class="empty-properties compact"><span>◎</span><h4>Nenhum acesso adicional.</h4><p>Adicione um corretor ou outro gestor para começar.</p></div>';
@@ -799,6 +799,30 @@ function renderTeam() {
     } catch (error) {
       teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser rebaixado.' : 'Não foi possível alterar a permissão.', 'error');
     } finally {
+      setButtonPending(button, false);
+    }
+  }));
+
+  // Revoking access should immediately revoke active backend sessions.
+  list.querySelectorAll('[data-team-active]').forEach((button) => button.addEventListener('click', async () => {
+    const willActivate = button.dataset.nextActive === 'true';
+    const confirmed = await confirmAction({
+      title: willActivate ? 'Reativar acesso?' : 'Pausar acesso?',
+      message: willActivate
+        ? 'A pessoa poderá entrar novamente com sua conta Google.'
+        : 'As sessões atuais serão revogadas e a pessoa deixará de entrar no painel.'
+    });
+    if (!confirmed) return;
+    setButtonPending(button, true, 'Salvando…');
+    try {
+      await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamActive)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: willActivate })
+      });
+      await loadTeam();
+      teamNotify(willActivate ? 'Acesso reativado.' : 'Acesso pausado e sessões revogadas.');
+    } catch {
+      teamNotify('Não foi possível alterar o acesso. Tente novamente.', 'error');
       setButtonPending(button, false);
     }
   }));
