@@ -13,6 +13,10 @@ ensureAdminStyles();
 
 const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
 let propertySearchTimer = 0;
+let propertyLoadSequence = 0;
+let leadLoadSequence = 0;
+let propertyRequestController = null;
+let leadRequestController = null;
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -86,6 +90,10 @@ async function request(url, options = {}) {
 }
 
 function clearSensitiveState() {
+  propertyRequestController?.abort();
+  leadRequestController?.abort();
+  propertyLoadSequence += 1;
+  leadLoadSequence += 1;
   state.user = null;
   state.csrfToken = '';
   state.properties = [];
@@ -1003,6 +1011,10 @@ function renderLeads() {
 }
 
 async function loadLeads() {
+  leadRequestController?.abort();
+  const controller = new AbortController();
+  leadRequestController = controller;
+  const generation = ++leadLoadSequence;
   const panel = ensureLeadsPanel();
   const list = panel?.querySelector('#lead-list');
   panel?.setAttribute('aria-busy', 'true');
@@ -1014,12 +1026,14 @@ async function loadLeads() {
     for (const [key, value] of Object.entries(state.leadFilters)) {
       if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
     }
-    const result = await request(`/api/admin/leads?${params.toString()}`);
+    const result = await request(`/api/admin/leads?${params.toString()}`, { signal: controller.signal });
+    if (generation !== leadLoadSequence || !state.user) return;
     state.leads = result.leads || [];
     state.leadPagination = result.pagination || null;
     state.leadSummary = result.summary || { new: 0 };
     renderLeads();
   } catch (error) {
+    if (generation !== leadLoadSequence || error?.name === 'AbortError') return;
     ensureLeadsPanel();
     if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p></div>';
     const status = $('#lead-status');
@@ -1037,21 +1051,29 @@ async function loadLeads() {
       panel.querySelectorAll('#lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
         .forEach((control) => { control.disabled = false; });
     }
+  } finally {
+    if (generation === leadLoadSequence) leadRequestController = null;
   }
 }
 
 async function loadProperties() {
+  propertyRequestController?.abort();
+  const controller = new AbortController();
+  propertyRequestController = controller;
+  const generation = ++propertyLoadSequence;
   const list = $('#property-list');
-  const controls = document.querySelectorAll('.property-filters input, .property-filters select, #property-page-previous, #property-page-next');
+  const controls = document.querySelectorAll('#property-page-previous, #property-page-next');
   controls.forEach((control) => { control.disabled = true; });
   document.querySelector('.properties-table-wrap')?.setAttribute('aria-busy', 'true');
-  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando imóveis…</div>';
+  // Do not wipe the list or disable the text field while the manager is typing.
+  if (list && !list.children.length) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando imóveis…</div>';
   try {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(state.propertyFilters)) {
       if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
     }
-    const result = await request(`/api/admin/properties?${params.toString()}`);
+    const result = await request(`/api/admin/properties?${params.toString()}`, { signal: controller.signal });
+    if (generation !== propertyLoadSequence || !state.user) return;
     state.properties = result.properties || [];
     state.propertyPagination = result.pagination || null;
     state.propertySummary = result.summary || { total: 0, active: 0, published: 0, draft: 0 };
@@ -1060,8 +1082,10 @@ async function loadProperties() {
       return loadProperties();
     }
     renderProperties();
-  } catch {
-    if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora.</p></div>';
+  } catch (error) {
+    if (generation !== propertyLoadSequence || error?.name === 'AbortError') return;
+    if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora. Confira a conexão e tente novamente.</p><button id="retry-admin-properties" class="outline-button" type="button">Tentar novamente</button></div>';
+    $('#retry-admin-properties')?.addEventListener('click', () => { void loadProperties(); }, { once: true });
     document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
     controls.forEach((control) => {
       if (control.matches('#property-page-previous')) {
@@ -1072,6 +1096,8 @@ async function loadProperties() {
         control.disabled = false;
       }
     });
+  } finally {
+    if (generation === propertyLoadSequence) propertyRequestController = null;
   }
 }
 
