@@ -40,7 +40,7 @@ class AdminPropertyController extends Controller
             'search' => ['sometimes', 'nullable', 'string', 'max:100'],
             'status' => ['sometimes', 'nullable', 'string', Rule::in(['draft', 'published', 'archived'])],
             'per_page' => ['sometimes', 'integer', 'between:20,100'],
-            'page' => ['sometimes', 'integer', 'min:1'],
+            'page' => ['sometimes', 'integer', 'between:1,1000'],
         ]);
         $paginator = $this->properties->paginateAdminProperties([
             'search' => trim((string) ($filters['search'] ?? '')),
