@@ -214,3 +214,8 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
   .photo-tile.pending canvas{display:block;max-width:100%}
   .team-row,.lead-row,.property-row{overflow-wrap:anywhere}
 }
+
+/* Acesso pausado deve estar claramente identificado sem ocultar opções de recuperação. */
+.team-row.is-inactive{background:rgba(18,60,70,.035)}
+.team-row.is-inactive .team-person strong{color:#536668}
+.team-row.is-inactive .team-permission small{font-weight:800;color:#85503d}
