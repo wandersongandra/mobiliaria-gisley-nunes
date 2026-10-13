@@ -94,15 +94,11 @@ class PageController extends Controller
     {
         $filters = [];
         // PHP query parameters may be arrays; never cast an array to string.
-        $safeQuery = static function (string $key) use ($request): string {
-            $value = $request->query($key, '');
-            return is_string($value) ? $value : '';
-        };
-        $purpose = $safeQuery('purpose');
-        $type = $safeQuery('type');
-        $priceBand = $safeQuery('price_band') ?: $safeQuery('price');
-        $bedrooms = $safeQuery('bedrooms');
-        $location = trim($safeQuery('location'));
+        $purpose = $this->scalarQuery($request, 'purpose');
+        $type = $this->scalarQuery($request, 'type');
+        $priceBand = $this->scalarQuery($request, 'price_band') ?: $this->scalarQuery($request, 'price');
+        $bedrooms = $this->scalarQuery($request, 'bedrooms');
+        $location = trim($this->scalarQuery($request, 'location'));
 
         if (in_array($purpose, ['Comprar', 'Alugar'], true)) {
             $filters['purpose'] = $purpose;
@@ -121,6 +117,13 @@ class PageController extends Controller
         }
 
         return $filters;
+    }
+
+    private function scalarQuery(Request $request, string $key): string
+    {
+        $value = $request->query($key, '');
+
+        return is_string($value) ? $value : '';
     }
 
     public function servicos(Request $request)
