@@ -5,9 +5,9 @@ namespace Tests\Feature;
 use App\Services\CrmService;
 use App\Support\Clock;
 use Illuminate\Database\QueryException;
-use RuntimeException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 use Tests\TestCase;
 
 class InvitationConcurrencyTest extends TestCase
