@@ -46,8 +46,8 @@
 - `tests/browser/frontend.smoke.spec.js`: testes de histórico, concorrência de filtros, imagem sem capa, galeria acessível e overflow em diversas páginas/larguras.
 
 ### Painel administrativo — implementado em código
-- `admin/main.js`: respostas assíncronas obsoletas ignoradas; abortar requisições quando a sessão é encerrada; buscas/filtragens continuam acessíveis durante carregamento; retentativa no erro; fallback Safari para thumbnails de arquivos.
-- `admin/refinements.css`: melhorar alvos de toque, overflow, tipografia e safe area no celular.
+- `admin/main.js`: respostas assíncronas obsoletas ignoradas; abortar requisições quando a sessão é encerrada; buscas/filtragens continuam acessíveis durante carregamento; retentativa no erro; fallback Safari para thumbnails de arquivos; gestor pode pausar/reativar acesso de membros sem remover a conta.
+- `admin/refinements.css`: melhorar alvos de toque, overflow, tipografia e safe area no celular; sinalização visual de acesso pausado.
 - `admin/index.html`: `viewport-fit=cover`.
 - Artefatos `public/admin/*` gerados por build, não editados manualmente.
 
@@ -56,7 +56,7 @@
 - `PublicApiController.php`, `AdminPropertyController.php`, `AdminCrmController.php`: limites explícitos para páginas, prevenindo consultas com offset excessivo.
 - `PropertyService.php`: faixas de preço são exclusivas e consistentes com a interface.
 - `CrmService.php`: criação de convite rejeita usuários já autorizados.
-- `tests/Feature/*`: regressão de limites, parâmetros arrays, preço de borda e convite impossível.
+- `tests/Feature/*`: regressão de limites, parâmetros arrays, preço de borda e convite impossível; pausa de membro revogando sessões ativas sem restauração implícita.
 
 ### Verificações e publicação
 - O rebuild temporário executou `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm test:source` e versionou os artefatos públicos. Job efêmero removido.
