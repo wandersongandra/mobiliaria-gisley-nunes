@@ -38,3 +38,28 @@
 - Core Web Vitals reais (LCP/CLS/INP) no tráfego e teste em iPhone/Android físicos.
 - OAuth real, R2 real, infraestrutura WAF, SSH e configuração Google Cloud.
 - Mudanças em fotos/dados de anúncios sob controle do proprietário.
+
+## Execução nesta PR
+### Front-end público — implementado em código
+- `src/main.js`: cancelamento de `fetch` e sequência de requisições; `popstate` para restaurar filtros e histórico; preservação do SSR enquanto a resposta é obtida; placeholder da capa ausente; fronteira de preço corrigida; galerias sem corrida de carregamento e com indicação `aria-pressed`.
+- `resources/views/partials/property-detail.blade.php`: estado acessível inicial da miniatura ativa.
+- `tests/browser/frontend.smoke.spec.js`: testes de histórico, concorrência de filtros, imagem sem capa, galeria acessível e overflow em diversas páginas/larguras.
+
+### Painel administrativo — implementado em código
+- `admin/main.js`: respostas assíncronas obsoletas ignoradas; abortar requisições quando a sessão é encerrada; buscas/filtragens continuam acessíveis durante carregamento; retentativa no erro; fallback Safari para thumbnails de arquivos.
+- `admin/refinements.css`: melhorar alvos de toque, overflow, tipografia e safe area no celular.
+- `admin/index.html`: `viewport-fit=cover`.
+- Artefatos `public/admin/*` gerados por build, não editados manualmente.
+
+### Backend Laravel — implementado em código
+- `PageController.php`: parâmetros de URL arrays não são forçados a string; limites de bairro harmonizados com API.
+- `PublicApiController.php`, `AdminPropertyController.php`, `AdminCrmController.php`: limites explícitos para páginas, prevenindo consultas com offset excessivo.
+- `PropertyService.php`: faixas de preço são exclusivas e consistentes com a interface.
+- `CrmService.php`: criação de convite rejeita usuários já autorizados.
+- `tests/Feature/*`: regressão de limites, parâmetros arrays, preço de borda e convite impossível.
+
+### Verificações e publicação
+- O rebuild temporário executou `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm test:source` e versionou os artefatos públicos. Job efêmero removido.
+- Os demais jobs do SHA final precisam constar como PASS. Falha de CI impede liberação para merge.
+- **Ficam pendentes como testes reais, não como falhas necessariamente:** autenticação Google ao vivo, upload real R2, monitoramento de WAF/HostGator, verificações em iPhone/Android físicos, performance de campo, contraste por foto real e deploy produtivo.
+- PR em draft e merge expressamente proibido sem nova aprovação do usuário.
