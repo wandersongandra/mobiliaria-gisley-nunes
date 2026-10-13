@@ -35,7 +35,7 @@
       @if(count($photos) > 1)
         <div class="gallery-thumbs" aria-label="Galeria de fotos">
           @foreach($photos as $index => $photo)
-            <button class="gallery-thumb{{ $index === $primaryIndex ? ' is-active' : '' }}" type="button" data-index="{{ $index }}" data-image="{{ $photo['url'] }}" data-alt="{{ $photo['alt_text'] ?: $property['title'] }}" aria-label="Ver foto {{ $index + 1 }} de {{ count($photos) }}"><img src="{{ $photo['url'] }}" alt="" loading="lazy" decoding="async" /><span>{{ str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) }}</span></button>
+            <button class="gallery-thumb{{ $index === $primaryIndex ? ' is-active' : '' }}" type="button" data-index="{{ $index }}" data-image="{{ $photo['url'] }}" data-alt="{{ $photo['alt_text'] ?: $property['title'] }}" aria-label="Ver foto {{ $index + 1 }} de {{ count($photos) }}" aria-pressed="{{ $index === $primaryIndex ? 'true' : 'false' }}"><img src="{{ $photo['url'] }}" alt="" loading="lazy" decoding="async" /><span>{{ str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) }}</span></button>
           @endforeach
         </div>
       @endif
