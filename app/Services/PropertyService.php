@@ -266,7 +266,7 @@ class PropertyService
         }
 
         if ($band === 2) {
-            $query->whereBetween('p.price', [$limits[0], $limits[1]]);
+            $query->where('p.price', '>', $limits[0])->where('p.price', '<=', $limits[1]);
 
             return;
         }
