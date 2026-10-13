@@ -28,9 +28,9 @@ Front-end público (celular/tablet) e editor do CRM em telas estreitas. Cadastro
 - Revisão das condições de media queries e dos seletores alterados.
 
 ## Pendente antes de aprovar merge ou deploy
-1. Em um ambiente com dependências: `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm test:source`, `pnpm build:preview`, `pnpm test:browser`, `pnpm test`.
-2. Confirmar os checks da PR no GitHub Actions; **não afirmar sucesso de CI sem executá-los**.
-3. O arquivo `public/admin/refinements.css` já foi sincronizado, byte a byte, com a fonte `admin/refinements.css`. Antes do merge, executar `pnpm build` para regenerar e versionar os bundles Vite (`public/assets/main.js`, `public/assets/main.css`); não fazer ajustes pontuais nos artefatos.
+1. **Concluído no GitHub Actions**: `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm test:source`, `pnpm build:preview`, `pnpm test:browser` (10/10), `pnpm test` (185 aprovados, 1 pulado), no commit anterior à sincronização dos artefatos. Revalidar checks do SHA final antes do merge.
+2. CI da PR para a versão anterior à sincronização de artefatos retornou sucesso em frontend, Laravel CI, CodeQL e pacote de produção. Conferir a versão final após o último commit.
+3. Artefatos de produção **sincronizados e versionados** em 13/10/2026, por workflow temporário de build que executou `pnpm build` e `pnpm test:source` com resultado positivo: `public/assets/main.js`, `public/assets/main.css` e `public/admin/refinements.css`. Workflow temporário removido após uso; não editar artefatos manualmente.
 4. QA visual/interativo em 320, 360, 375, 390, 414, 768, 950 e 1024px. Testar teclado iOS/Android, bloqueio e abertura do menu, formulário, galeria e modo com movimento reduzido.
 5. Testar autenticação real do CRM, salvamento/upload de foto, navegação da sidebar e revogação de sessão em celular autorizado, sem usar dados reais de clientes em teste.
 6. Validar Core Web Vitals (LCP/CLS/INP) em origem publicada; não estimar ganhos sem medições.
