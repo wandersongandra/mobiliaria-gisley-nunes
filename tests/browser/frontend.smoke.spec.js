@@ -179,16 +179,16 @@ test('histórico do catálogo restaura filtros ao navegar para trás e avançar'
   await page.locator('#purpose').selectOption('Alugar');
   await page.locator('#search-form button[type="submit"]').click();
   await expect(page).toHaveURL(/purpose=Alugar/);
-  await expect(page.locator('[data-listing-card]')).toHaveCount(1);
+  await expect(page.locator('[data-listing-card]')).toHaveCount(2);
 
   await page.goBack();
   await expect(page.locator('#purpose')).toHaveValue('Comprar');
   await expect(page).toHaveURL(/purpose=Comprar/);
-  await expect(page.locator('[data-listing-card]')).not.toHaveCount(1);
+  await expect(page.locator('[data-listing-card]')).not.toHaveCount(2);
 
   await page.goForward();
   await expect(page.locator('#purpose')).toHaveValue('Alugar');
-  await expect(page.locator('[data-listing-card]')).toHaveCount(1);
+  await expect(page.locator('[data-listing-card]')).toHaveCount(2);
 });
 
 test('consulta antiga não pode reverter filtros recentes durante respostas fora de ordem', async ({ page }) => {
@@ -220,7 +220,7 @@ test('consulta antiga não pode reverter filtros recentes durante respostas fora
   releaseOld();
 
   await expect(page.locator('#purpose')).toHaveValue('Alugar');
-  await expect(page.locator('[data-listing-card]')).toHaveCount(1);
+  await expect(page.locator('[data-listing-card]')).toHaveCount(2);
   await expect(page).toHaveURL(/purpose=Alugar/);
 });
 
