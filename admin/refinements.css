@@ -149,6 +149,14 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
   .photo-empty{grid-column:1 / -1}
   .photo-tile{height:auto;min-width:0;overflow:visible}
   .photo-tile img{display:block;width:100%;height:132px;object-fit:cover}
+  /* Pending upload previews use inline 100% height on a canvas inside an auto-height tile. */
+  .photo-tile.pending canvas{height:132px!important;object-fit:cover}
+  .upload-trigger{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-height:44px;padding:8px 12px;border:1px solid var(--copper);
+    border-radius:9px;font-size:12px;text-decoration:none
+  }
+  .switch-row{min-height:56px;gap:12px}
   .photo-tile>span{top:7px;bottom:auto;left:7px}
   .photo-tile-actions{
     position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
@@ -158,6 +166,7 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
     width:100%;height:44px;min-width:44px;min-height:44px;
     border:1px solid var(--line);border-radius:8px;font-size:18px
   }
+  .photo-tile.pending .photo-tile-actions{grid-template-columns:1fr}
   .dialog-footer{
     position:sticky;bottom:-20px;z-index:2;
     background:#f8f8f6;padding:16px 0 calc(12px + env(safe-area-inset-bottom, 0px))
