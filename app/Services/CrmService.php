@@ -487,6 +487,11 @@ class CrmService
         foreach ([0, 1] as $attempt) {
             try {
                 DB::transaction(function () use ($email, $payload): void {
+                    // An already authorized staff member cannot accept a new invitation.
+                    // Reject at creation time instead of distributing an unusable link.
+                    if (DB::table('morada_staff_access')->where('email', $email)->exists()) {
+                        throw new RuntimeException('TEAM_MEMBER_EXISTS');
+                    }
                     DB::table('morada_staff_invitations')
                         ->where('email', $email)
                         ->whereNull('accepted_at')
