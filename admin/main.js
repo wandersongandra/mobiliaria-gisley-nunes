@@ -280,21 +280,42 @@ function renderEditorPhotos() {
     preview.style.height = '100%';
     preview.style.objectFit = 'cover';
     preview.style.display = 'block';
-    void createImageBitmap(file).then((bitmap) => {
+    const drawPreview = async () => {
+      let bitmap = null;
+      let objectUrl = null;
       try {
+        if (typeof createImageBitmap === 'function') {
+          try {
+            bitmap = await createImageBitmap(file);
+          } catch {
+            // Some Safari versions fail to decode AVIF/HEIC with ImageBitmap.
+          }
+        }
+        let source = bitmap;
+        if (!source) {
+          objectUrl = URL.createObjectURL(file);
+          source = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = () => reject(new Error('INVALID_PREVIEW'));
+            image.src = objectUrl;
+          });
+        }
         if (previewGeneration !== state.pendingPreviewGeneration) return;
-        const scale = Math.min(1, 640 / bitmap.width, 640 / bitmap.height);
-        preview.width = Math.max(1, Math.round(bitmap.width * scale));
-        preview.height = Math.max(1, Math.round(bitmap.height * scale));
-        preview.getContext('2d')?.drawImage(bitmap, 0, 0, preview.width, preview.height);
+        const scale = Math.min(1, 640 / source.width, 640 / source.height);
+        preview.width = Math.max(1, Math.round(source.width * scale));
+        preview.height = Math.max(1, Math.round(source.height * scale));
+        preview.getContext('2d')?.drawImage(source, 0, 0, preview.width, preview.height);
+      } catch {
+        if (previewGeneration === state.pendingPreviewGeneration) {
+          preview.setAttribute('aria-label', 'Pré-visualização indisponível');
+        }
       } finally {
-        bitmap.close();
+        bitmap?.close();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
       }
-    }).catch(() => {
-      if (previewGeneration === state.pendingPreviewGeneration) {
-        preview.setAttribute('aria-label', 'Pré-visualização indisponível');
-      }
-    });
+    };
+    void drawPreview();
     tile.append(preview);
 
     const label = document.createElement('span');
