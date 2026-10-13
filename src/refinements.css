@@ -1092,7 +1092,7 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
     overflow-y:auto;
     overscroll-behavior:contain;
   }
-  .mobile-nav a{display:flex;align-items:center;min-height:48px}
+  .mobile-nav a{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px}
 }
 @media (max-width:600px){
   .field select,.catalog-search .field select{font-size:16px;min-height:46px}
