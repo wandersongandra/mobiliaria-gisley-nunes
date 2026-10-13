@@ -61,6 +61,27 @@ class PublicCatalogPaginationTest extends TestCase
             ->assertJsonFragment(['types' => ['Apartamento', 'Casa']]);
     }
 
+    public function test_price_bands_do_not_duplicate_properties_on_exact_boundaries(): void
+    {
+        $this->insertPublishedProperties(3);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-1')->update(['price' => 1500000]);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-2')->update(['price' => 1500000.01]);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-3')->update(['price' => 3000000]);
+
+        $this->getJson('/api/v2/properties?purpose=Comprar&price_band=1')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('properties.0.slug', 'imovel-de-catalogo-1');
+
+        $this->getJson('/api/v2/properties?purpose=Comprar&price_band=2')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 2);
+
+        $this->getJson('/api/v2/properties?purpose=Comprar&price_band=3')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 0);
+    }
+
     public function test_v2_catalog_keeps_query_count_bounded_with_ten_thousand_properties(): void
     {
         $this->insertPublishedProperties(10_000);
