@@ -155,7 +155,7 @@ function initMobileMenu() {
     }
   });
 
-  window.matchMedia('(min-width: 901px)').addEventListener?.('change', (event) => {
+  window.matchMedia('(min-width: 981px)').addEventListener?.('change', (event) => {
     if (event.matches) close();
   });
 
@@ -357,7 +357,7 @@ function initListing() {
       return;
     }
     loadProperties(1);
-    document.querySelector('#imoveis')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelector('#imoveis')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   });
 
   document.querySelector('#clear-filters')?.addEventListener('click', clearFilters);
@@ -365,9 +365,11 @@ function initListing() {
   nextPage?.addEventListener('click', () => loadProperties(pagination.current_page + 1));
 
   async function loadProperties(page = 1) {
+    // Preserve Laravel's first painted results while the catalogue API hydrates.
+    const preservingSSR = !facetsInitialized && !!grid.querySelector('.listing-card-server');
     try {
       grid.setAttribute('aria-busy', 'true');
-      grid.innerHTML = listingSkeletons(document.body.dataset.page === 'home' ? 6 : 6);
+      if (!preservingSSR) grid.innerHTML = listingSkeletons(6);
       if (empty) {
         empty.hidden = true;
         empty.removeAttribute('role');
@@ -405,13 +407,18 @@ function initListing() {
       renderListings(catalog);
     } catch {
       ssrPagination?.removeAttribute('hidden');
-      grid.innerHTML = '';
-      if (count) count.textContent = '00';
+      // A transient network failure must not erase valid SSR results.
+      if (!preservingSSR) {
+        grid.innerHTML = '';
+        if (count) count.textContent = '00';
+      }
       if (empty) {
         empty.hidden = false;
         empty.setAttribute('role', 'alert');
         empty.removeAttribute('aria-live');
-        empty.innerHTML = '<span class="empty-state-message">Não foi possível carregar os imóveis.</span> <button type="button" id="retry-properties-empty">Tentar novamente</button>';
+        empty.innerHTML = preservingSSR
+          ? '<span class="empty-state-message">Não foi possível atualizar os imóveis. Os resultados exibidos podem estar desatualizados.</span> <button type="button" id="retry-properties-empty">Tentar novamente</button>'
+          : '<span class="empty-state-message">Não foi possível carregar os imóveis.</span> <button type="button" id="retry-properties-empty">Tentar novamente</button>';
         empty.querySelector('#retry-properties-empty')?.addEventListener('click', () => loadProperties(page), { once: true });
       }
       if (filterSummary) {
@@ -424,7 +431,8 @@ function initListing() {
     }
   }
 
-  renderListings();
+  // Do not clear the server-rendered catalogue before its first API response.
+  if (grid.querySelector('.listing-card-server')) activateListingCards(grid);
   loadProperties();
 }
 
@@ -630,7 +638,8 @@ function initPropertyDetail() {
 
   trackEvent('view_item', { item_type: 'property' });
 
-  root.innerHTML = renderPropertyDetail(property);
+  // Blade already rendered this detail: binding events must not redraw the page.
+  if (!root.querySelector('.property-hero')) root.innerHTML = renderPropertyDetail(property);
   const thumbs = [...root.querySelectorAll('.gallery-thumb')];
   const mainImage = root.querySelector('.gallery-main img');
   const current = root.querySelector('[data-gallery-current]');
@@ -673,7 +682,7 @@ function initPropertyDetail() {
     };
     preloader.src = nextSrc;
     thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
-    thumbs[activeIndex]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    thumbs[activeIndex]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
     if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${photos.length}: ${nextAlt}`;
     if (lightbox?.open) syncLightbox();
