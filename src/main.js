@@ -568,7 +568,7 @@ function renderPropertyDetail(property) {
     : (property.cover_url ? [{ url: property.cover_url, alt_text: property.title, is_cover: 1 }] : []);
   const primaryIndex = Math.max(0, photos.findIndex((photo) => photo.is_cover));
   const primary = photos[primaryIndex] || photos[0];
-  const thumbs = photos.map((photo, index) => `<button class="gallery-thumb${index === primaryIndex ? ' is-active' : ''}" type="button" data-index="${index}" data-image="${escapeHTML(photo.url)}" data-alt="${escapeHTML(photo.alt_text || property.title)}" aria-label="Ver foto ${index + 1} de ${photos.length}"><img src="${escapeHTML(photo.url)}" alt="" loading="lazy" decoding="async" /><span>${String(index + 1).padStart(2, '0')}</span></button>`).join('');
+  const thumbs = photos.map((photo, index) => `<button class="gallery-thumb${index === primaryIndex ? ' is-active' : ''}" type="button" data-index="${index}" data-image="${escapeHTML(photo.url)}" data-alt="${escapeHTML(photo.alt_text || property.title)}" aria-label="Ver foto ${index + 1} de ${photos.length}" aria-pressed="${index === primaryIndex}"><img src="${escapeHTML(photo.url)}" alt="" loading="lazy" decoding="async" /><span>${String(index + 1).padStart(2, '0')}</span></button>`).join('');
 
   const featureItems = [
     { label: 'Quartos', value: `${property.bedrooms ?? 0}` },
@@ -724,7 +724,10 @@ function initPropertyDetail() {
       if (galleryStatus) galleryStatus.textContent = 'Não foi possível carregar esta foto. Tente outra imagem.';
     };
     preloader.src = nextSrc;
-    thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
+    thumbs.forEach((item, i) => {
+      item.classList.toggle('is-active', i === activeIndex);
+      item.setAttribute('aria-pressed', String(i === activeIndex));
+    });
     thumbs[activeIndex]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
     if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${photos.length}: ${nextAlt}`;
