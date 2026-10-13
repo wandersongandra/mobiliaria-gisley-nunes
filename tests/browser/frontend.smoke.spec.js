@@ -121,3 +121,50 @@ test('404 mantém SEO noindex e landmark principal', async ({ page }) => {
   await expect(page.locator('main')).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
 });
+
+
+test('mobile menu continua aberto ao redimensionar dentro do breakpoint tablet', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 820 });
+  await page.goto('/');
+  const toggle = page.locator('.menu-toggle');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+  await page.setViewportSize({ width: 950, height: 820 });
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#mobile-nav')).toBeVisible();
+
+  await page.setViewportSize({ width: 990, height: 820 });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('campos de busca e alvos de toque respeitam legibilidade no celular', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/');
+
+  const typography = await page.locator('#search-form select').evaluateAll((controls) =>
+    controls.map((control) => Number.parseFloat(getComputedStyle(control).fontSize))
+  );
+  expect(typography.length).toBeGreaterThan(0);
+  for (const size of typography) expect(size).toBeGreaterThanOrEqual(16);
+
+  const menu = page.locator('.menu-toggle');
+  const menuBox = await menu.boundingBox();
+  expect(menuBox?.width).toBeGreaterThanOrEqual(44);
+  expect(menuBox?.height).toBeGreaterThanOrEqual(44);
+
+  await menu.click();
+  const firstLink = page.locator('#mobile-nav a').first();
+  const linkBox = await firstLink.boundingBox();
+  expect(linkBox?.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press('Escape');
+
+  await page.goto('/imoveis/apartamento-solar/');
+  await expect(page.locator('.property-mobile-cta')).toBeVisible();
+  await expect(page.locator('.whatsapp-float')).toBeVisible();
+  const whatsappBottom = await page.locator('.whatsapp-float').evaluate(
+    (element) => Number.parseFloat(getComputedStyle(element).bottom)
+  );
+  expect(whatsappBottom).toBeGreaterThanOrEqual(90);
+});
