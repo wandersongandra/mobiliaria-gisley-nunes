@@ -936,10 +936,13 @@ function renderLeads() {
 
   const items = state.leads;
   const filters = $('#lead-filters');
-  filters.elements.status.value = state.leadFilters.status;
-  filters.elements.date_from.value = state.leadFilters.date_from;
-  filters.elements.date_to.value = state.leadFilters.date_to;
-  filters.elements.per_page.value = String(state.leadFilters.per_page);
+  // Avoid overwriting a date or select value that the operator is editing.
+  if (!filters.contains(document.activeElement)) {
+    filters.elements.status.value = state.leadFilters.status;
+    filters.elements.date_from.value = state.leadFilters.date_from;
+    filters.elements.date_to.value = state.leadFilters.date_to;
+    filters.elements.per_page.value = String(state.leadFilters.per_page);
+  }
   const exportParams = new URLSearchParams();
   for (const key of ['status', 'date_from', 'date_to']) {
     if (state.leadFilters[key]) exportParams.set(key, state.leadFilters[key]);
@@ -1018,7 +1021,8 @@ async function loadLeads() {
   const panel = ensureLeadsPanel();
   const list = panel?.querySelector('#lead-list');
   panel?.setAttribute('aria-busy', 'true');
-  panel?.querySelectorAll('[data-lead-page], #lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
+  // Keep filters usable while an old request is being cancelled or replaced.
+  panel?.querySelectorAll('[data-lead-page]')
     .forEach((control) => { control.disabled = true; });
   if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando contatos…</div>';
   try {
