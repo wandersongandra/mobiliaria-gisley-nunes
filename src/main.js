@@ -27,7 +27,7 @@ function priceBand(price, purpose = 'Comprar') {
     if (value <= 10000) return 2;
     return 3;
   }
-  if (value < 1500000) return 1;
+  if (value <= 1500000) return 1;
   if (value <= 3000000) return 2;
   return 3;
 }
