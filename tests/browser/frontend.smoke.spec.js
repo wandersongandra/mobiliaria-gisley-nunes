@@ -93,6 +93,8 @@ test('galeria usa dialog nativo, navegação e restauração de foco', async ({ 
   await expect(page.locator('[data-gallery-lightbox]')).toHaveAttribute('open', '');
   await page.locator('[data-gallery-lightbox-next]').click();
   await expect(page.locator('[data-gallery-lightbox-current]')).toHaveText('02');
+  await expect(page.locator('.gallery-thumb').nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.gallery-thumb').first()).toHaveAttribute('aria-pressed', 'false');
   await page.keyboard.press('Escape');
   await expect(trigger).toBeFocused();
 });
