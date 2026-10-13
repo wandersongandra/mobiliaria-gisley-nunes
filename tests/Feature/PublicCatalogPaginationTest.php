@@ -30,6 +30,8 @@ class PublicCatalogPaginationTest extends TestCase
     {
         $this->getJson('/api/v2/properties?per_page=101')->assertUnprocessable();
         $this->getJson('/api/v2/properties?per_page=1')->assertUnprocessable();
+        $this->getJson('/api/v2/properties?page=101')->assertUnprocessable();
+        $this->getJson('/api/v2/properties?page%5B%5D=2')->assertUnprocessable();
 
         $this->getJson('/api/v2/properties?page=2&per_page=20')
             ->assertOk()
