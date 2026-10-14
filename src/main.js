@@ -339,7 +339,8 @@ function initListing() {
   }
 
   function queryForPage(page) {
-    const params = new URLSearchParams({ page: String(page), per_page: '20' });
+    const params = new URLSearchParams();
+    if (page > 1) params.set('page', String(page));
     const names = { purpose: 'purpose', location: 'location', type: 'type', price: 'price_band', bedrooms: 'bedrooms' };
     Object.entries(filters).forEach(([key, filter]) => {
       if (filter?.value && filter.value !== 'all') params.set(names[key], filter.value);
@@ -361,7 +362,8 @@ function initListing() {
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
     if (isHome) {
-      window.location.assign(`/imoveis?${queryForPage(1).toString()}`);
+      const query = queryForPage(1).toString();
+      window.location.assign(query ? `/imoveis?${query}` : '/imoveis');
       return;
     }
     loadProperties(1, { navigation: 'push' });
@@ -395,7 +397,8 @@ function initListing() {
         empty.removeAttribute('aria-live');
       }
       const params = queryForPage(page);
-      const response = await fetch(`/api/v2/properties?${params.toString()}`, {
+      const query = params.toString();
+      const response = await fetch(query ? `/api/v2/properties?${query}` : '/api/v2/properties', {
         headers: { Accept: 'application/json' },
         signal: controller.signal
       });
@@ -428,7 +431,7 @@ function initListing() {
         }
       }
       if (!isHome && navigation !== 'none') {
-        const nextUrl = `/imoveis?${params.toString()}`;
+        const nextUrl = query ? `/imoveis?${query}` : '/imoveis';
         if (nextUrl !== window.location.pathname + window.location.search) {
           if (navigation === 'push') history.pushState(null, '', nextUrl);
           else history.replaceState(null, '', nextUrl);

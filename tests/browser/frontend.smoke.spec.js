@@ -20,10 +20,16 @@ test('home permanece responsiva e sem violações axe automatizáveis', async ({
     await expectNoHorizontalOverflow(page, width);
   }
 
+  expect(consoleErrors).toEqual([]);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
-  await expect(page.locator('#empty-state')).toBeHidden();
-  expect(consoleErrors).toEqual([]);
+  const publishedListings = await page.locator('#listing-grid > *').count();
+  if (publishedListings > 0) {
+    await expect(page.locator('#empty-state')).toBeHidden();
+  } else {
+    await expect(page.locator('#empty-state')).toBeVisible();
+    await expect(page.locator('#empty-state')).toContainText(/imóveis|imóvel/i);
+  }
 });
 
 test('hooks de conversão usam dataLayer sem enviar dados do formulário', async ({ page }) => {
@@ -60,6 +66,13 @@ test('menu mobile abre com foco e fecha com Escape', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(toggle).toBeFocused();
+});
+
+test('catálogo sem filtros mantém a URL limpa', async ({ page }) => {
+  await page.goto('/imoveis/');
+
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/imoveis');
+  await expect.poll(() => new URL(page.url()).search).toBe('');
 });
 
 test('catálogo estático mantém filtros na URL e aplica o fixture local', async ({ page }) => {

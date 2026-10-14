@@ -21,7 +21,7 @@
               <span>{{ $site['address'] }}@if(!empty($site['crci'])) · CRECI {{ $site['crci'] }}@endif</span>
             </div>
           </div>
-          <form class="contact-form" id="contact-form"><label class="contact-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
+          <form class="contact-form" id="contact-form" method="post" action="/api/contact"><label class="contact-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
             <div class="form-row"><label>Seu nome<input required name="name" autocomplete="name" maxlength="120" placeholder="Seu nome" /></label><label>Seu e-mail<input required type="email" name="email" autocomplete="email" maxlength="255" placeholder="voce@email.com" /></label></div>
             <label>Como podemos ajudar?<select name="interest"><option>Quero comprar um imóvel</option><option>Quero alugar um imóvel</option><option>Quero anunciar meu imóvel</option><option>Tenho outra dúvida</option></select></label>
             <label>Mensagem<textarea required name="message" rows="3" maxlength="3000" placeholder="Conte o que você procura"></textarea></label>
