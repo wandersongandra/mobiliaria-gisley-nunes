@@ -138,6 +138,21 @@ class PublicPageRenderTest extends TestCase
             ->assertSee('Imóveis para comprar ou alugar em Belo Horizonte');
     }
 
+    public function test_contact_forms_post_to_the_contact_endpoint_instead_of_putting_data_in_the_url(): void
+    {
+        $property = $this->publishPropertyWithCover();
+
+        foreach (['/', '/contato', '/imoveis/'.$property['slug']] as $path) {
+            $html = $this->get($path)->assertOk()->getContent();
+
+            $this->assertSame(
+                1,
+                preg_match('/<form\\b(?=[^>]*\\bid="contact-form")(?=[^>]*\\bmethod="post")(?=[^>]*\\baction="\\/api\\/contact")[^>]*>/s', $html),
+                'A página '.$path.' precisa enviar o formulário de contato por POST para /api/contact.'
+            );
+        }
+    }
+
     public function test_neighborhood_page_renders_for_a_published_property(): void
     {
         $this->publishPropertyWithCover();
