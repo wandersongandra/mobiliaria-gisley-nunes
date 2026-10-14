@@ -59,7 +59,8 @@ class PageController extends Controller
 
     public function imoveis(Request $request)
     {
-        $page = max(1, min(100, $request->integer('page', 1)));
+        $rawPage = $request->query('page', 1);
+        $page = is_scalar($rawPage) ? max(1, min(100, (int) $rawPage)) : 1;
         $catalog = $this->properties->paginatePublicProperties($page, 20, $this->catalogFilters($request));
         $properties = array_map(
             fn (array $property): array => $this->properties->publicProperty($property),
@@ -92,11 +93,12 @@ class PageController extends Controller
     private function catalogFilters(Request $request): array
     {
         $filters = [];
-        $purpose = (string) $request->query('purpose', '');
-        $type = (string) $request->query('type', '');
-        $priceBand = (string) $request->query('price_band', $request->query('price', ''));
-        $bedrooms = (string) $request->query('bedrooms', '');
-        $location = trim((string) $request->query('location', ''));
+        // PHP query parameters may be arrays; never cast an array to string.
+        $purpose = $this->scalarQuery($request, 'purpose');
+        $type = $this->scalarQuery($request, 'type');
+        $priceBand = $this->scalarQuery($request, 'price_band') ?: $this->scalarQuery($request, 'price');
+        $bedrooms = $this->scalarQuery($request, 'bedrooms');
+        $location = trim($this->scalarQuery($request, 'location'));
 
         if (in_array($purpose, ['Comprar', 'Alugar'], true)) {
             $filters['purpose'] = $purpose;
@@ -110,11 +112,18 @@ class PageController extends Controller
         if (in_array($bedrooms, ['1', '2', '3', '4+'], true)) {
             $filters['bedrooms'] = $bedrooms;
         }
-        if ($location !== '' && mb_strlen($location) <= 255) {
+        if ($location !== '' && mb_strlen($location) <= 180) {
             $filters['location'] = $location;
         }
 
         return $filters;
+    }
+
+    private function scalarQuery(Request $request, string $key): string
+    {
+        $value = $request->query($key, '');
+
+        return is_string($value) ? $value : '';
     }
 
     public function servicos(Request $request)

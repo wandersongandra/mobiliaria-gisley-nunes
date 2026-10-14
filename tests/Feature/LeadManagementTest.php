@@ -88,6 +88,7 @@ class LeadManagementTest extends TestCase
         $this->withSession($session)
             ->getJson('/api/admin/leads?per_page=19')
             ->assertUnprocessable();
+        $this->withSession($session)->getJson('/api/admin/leads?page=1001')->assertUnprocessable();
         $this->withSession($session)
             ->getJson('/api/admin/leads?date_from=2026-10-01&date_to=2026-09-01')
             ->assertUnprocessable();

@@ -180,3 +180,42 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
   .admin-topbar .top-actions{width:100%}
   .admin-topbar #new-property-top{min-height:44px}
 }
+
+
+/* Quality pass — avoid tiny CRM actions and clipped content on tablets/phones. */
+@media (max-width:760px) {
+  .sidebar{padding-top:max(16px,env(safe-area-inset-top,0px))}
+  .admin-main,.admin-view,.properties-table-wrap,.property-row,.lead-row{min-width:0}
+  .property-row{
+    border-bottom:1px solid var(--line);
+    align-items:center;
+    row-gap:14px
+  }
+  .property-identity{min-width:0}
+  .property-identity>div:last-child{min-width:0}
+  .property-identity strong,.property-identity small{overflow-wrap:anywhere}
+  .property-row .row-action,.lead-actions button,
+  .team-actions button,.team-invitation-row button{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:44px;min-height:44px;
+    padding:10px 12px;border-radius:8px;
+    font-size:12px
+  }
+  .lead-main,.lead-main p,.lead-main a{min-width:0;overflow-wrap:anywhere}
+  .lead-status-control select{min-height:44px;font-size:16px}
+  .lead-actions{gap:8px;flex-wrap:wrap}
+  .dialog-header h2{font-size:clamp(27px,6.5vw,35px);line-height:1.15}
+}
+@media(max-width:460px){
+  .admin-view{padding-inline:16px}
+  .admin-topbar{padding-inline:16px}
+  .lead-filters,.property-pagination,.lead-pagination{padding-inline:14px}
+  .property-thumb{flex:0 0 66px}
+  .photo-tile.pending canvas{display:block;max-width:100%}
+  .team-row,.lead-row,.property-row{overflow-wrap:anywhere}
+}
+
+/* Acesso pausado deve estar claramente identificado sem ocultar opções de recuperação. */
+.team-row.is-inactive{background:rgba(18,60,70,.035)}
+.team-row.is-inactive .team-person strong{color:#536668}
+.team-row.is-inactive .team-permission small{font-weight:800;color:#85503d}

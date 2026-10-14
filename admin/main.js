@@ -13,6 +13,10 @@ ensureAdminStyles();
 
 const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
 let propertySearchTimer = 0;
+let propertyLoadSequence = 0;
+let leadLoadSequence = 0;
+let propertyRequestController = null;
+let leadRequestController = null;
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -86,6 +90,10 @@ async function request(url, options = {}) {
 }
 
 function clearSensitiveState() {
+  propertyRequestController?.abort();
+  leadRequestController?.abort();
+  propertyLoadSequence += 1;
+  leadLoadSequence += 1;
   state.user = null;
   state.csrfToken = '';
   state.properties = [];
@@ -272,21 +280,42 @@ function renderEditorPhotos() {
     preview.style.height = '100%';
     preview.style.objectFit = 'cover';
     preview.style.display = 'block';
-    void createImageBitmap(file).then((bitmap) => {
+    const drawPreview = async () => {
+      let bitmap = null;
+      let objectUrl = null;
       try {
+        if (typeof createImageBitmap === 'function') {
+          try {
+            bitmap = await createImageBitmap(file);
+          } catch {
+            // Some Safari versions fail to decode AVIF/HEIC with ImageBitmap.
+          }
+        }
+        let source = bitmap;
+        if (!source) {
+          objectUrl = URL.createObjectURL(file);
+          source = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = () => reject(new Error('INVALID_PREVIEW'));
+            image.src = objectUrl;
+          });
+        }
         if (previewGeneration !== state.pendingPreviewGeneration) return;
-        const scale = Math.min(1, 640 / bitmap.width, 640 / bitmap.height);
-        preview.width = Math.max(1, Math.round(bitmap.width * scale));
-        preview.height = Math.max(1, Math.round(bitmap.height * scale));
-        preview.getContext('2d')?.drawImage(bitmap, 0, 0, preview.width, preview.height);
+        const scale = Math.min(1, 640 / source.width, 640 / source.height);
+        preview.width = Math.max(1, Math.round(source.width * scale));
+        preview.height = Math.max(1, Math.round(source.height * scale));
+        preview.getContext('2d')?.drawImage(source, 0, 0, preview.width, preview.height);
+      } catch {
+        if (previewGeneration === state.pendingPreviewGeneration) {
+          preview.setAttribute('aria-label', 'Pré-visualização indisponível');
+        }
       } finally {
-        bitmap.close();
+        bitmap?.close();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
       }
-    }).catch(() => {
-      if (previewGeneration === state.pendingPreviewGeneration) {
-        preview.setAttribute('aria-label', 'Pré-visualização indisponível');
-      }
-    });
+    };
+    void drawPreview();
     tile.append(preview);
 
     const label = document.createElement('span');
@@ -745,11 +774,11 @@ function renderTeam() {
     const isSelf = Boolean(member.is_self);
     const isBootstrap = Boolean(member.is_bootstrap);
     const roleLabel = member.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
-    return `<article class="team-row">
+    return `<article class="team-row${member.active ? '' : ' is-inactive'}">
       <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a></div></div>
-      <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${isSelf ? '<small>você</small>' : ''}${isBootstrap ? '<small>principal</small>' : ''}</div>
+      <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${!member.active ? '<small>Acesso pausado</small>' : ''}${isSelf ? '<small>você</small>' : ''}${isBootstrap ? '<small>principal</small>' : ''}</div>
       <div class="team-actions">
-        ${!isSelf && !isBootstrap ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
+        ${!isSelf && !isBootstrap ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button type="button" data-team-active="${escapeHTML(member.email)}" data-next-active="${member.active ? 'false' : 'true'}">${member.active ? 'Pausar acesso' : 'Reativar'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
       </div>
     </article>`;
   }).join('') : '<div class="empty-properties compact"><span>◎</span><h4>Nenhum acesso adicional.</h4><p>Adicione um corretor ou outro gestor para começar.</p></div>';
@@ -770,6 +799,30 @@ function renderTeam() {
     } catch (error) {
       teamNotify(error.message === 'BOOTSTRAP_MANAGER_PROTECTED' ? 'O gestor principal não pode ser rebaixado.' : 'Não foi possível alterar a permissão.', 'error');
     } finally {
+      setButtonPending(button, false);
+    }
+  }));
+
+  // Revoking access should immediately revoke active backend sessions.
+  list.querySelectorAll('[data-team-active]').forEach((button) => button.addEventListener('click', async () => {
+    const willActivate = button.dataset.nextActive === 'true';
+    const confirmed = await confirmAction({
+      title: willActivate ? 'Reativar acesso?' : 'Pausar acesso?',
+      message: willActivate
+        ? 'A pessoa poderá entrar novamente com sua conta Google.'
+        : 'As sessões atuais serão revogadas e a pessoa deixará de entrar no painel.'
+    });
+    if (!confirmed) return;
+    setButtonPending(button, true, 'Salvando…');
+    try {
+      await request(`/api/admin/team/${encodeURIComponent(button.dataset.teamActive)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: willActivate })
+      });
+      await loadTeam();
+      teamNotify(willActivate ? 'Acesso reativado.' : 'Acesso pausado e sessões revogadas.');
+    } catch {
+      teamNotify('Não foi possível alterar o acesso. Tente novamente.', 'error');
       setButtonPending(button, false);
     }
   }));
@@ -928,10 +981,13 @@ function renderLeads() {
 
   const items = state.leads;
   const filters = $('#lead-filters');
-  filters.elements.status.value = state.leadFilters.status;
-  filters.elements.date_from.value = state.leadFilters.date_from;
-  filters.elements.date_to.value = state.leadFilters.date_to;
-  filters.elements.per_page.value = String(state.leadFilters.per_page);
+  // Avoid overwriting a date or select value that the operator is editing.
+  if (!filters.contains(document.activeElement)) {
+    filters.elements.status.value = state.leadFilters.status;
+    filters.elements.date_from.value = state.leadFilters.date_from;
+    filters.elements.date_to.value = state.leadFilters.date_to;
+    filters.elements.per_page.value = String(state.leadFilters.per_page);
+  }
   const exportParams = new URLSearchParams();
   for (const key of ['status', 'date_from', 'date_to']) {
     if (state.leadFilters[key]) exportParams.set(key, state.leadFilters[key]);
@@ -1003,10 +1059,15 @@ function renderLeads() {
 }
 
 async function loadLeads() {
+  leadRequestController?.abort();
+  const controller = new AbortController();
+  leadRequestController = controller;
+  const generation = ++leadLoadSequence;
   const panel = ensureLeadsPanel();
   const list = panel?.querySelector('#lead-list');
   panel?.setAttribute('aria-busy', 'true');
-  panel?.querySelectorAll('[data-lead-page], #lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
+  // Keep filters usable while an old request is being cancelled or replaced.
+  panel?.querySelectorAll('[data-lead-page]')
     .forEach((control) => { control.disabled = true; });
   if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando contatos…</div>';
   try {
@@ -1014,12 +1075,14 @@ async function loadLeads() {
     for (const [key, value] of Object.entries(state.leadFilters)) {
       if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
     }
-    const result = await request(`/api/admin/leads?${params.toString()}`);
+    const result = await request(`/api/admin/leads?${params.toString()}`, { signal: controller.signal });
+    if (generation !== leadLoadSequence || !state.user) return;
     state.leads = result.leads || [];
     state.leadPagination = result.pagination || null;
     state.leadSummary = result.summary || { new: 0 };
     renderLeads();
   } catch (error) {
+    if (generation !== leadLoadSequence || error?.name === 'AbortError') return;
     ensureLeadsPanel();
     if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p></div>';
     const status = $('#lead-status');
@@ -1037,21 +1100,29 @@ async function loadLeads() {
       panel.querySelectorAll('#lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
         .forEach((control) => { control.disabled = false; });
     }
+  } finally {
+    if (generation === leadLoadSequence) leadRequestController = null;
   }
 }
 
 async function loadProperties() {
+  propertyRequestController?.abort();
+  const controller = new AbortController();
+  propertyRequestController = controller;
+  const generation = ++propertyLoadSequence;
   const list = $('#property-list');
-  const controls = document.querySelectorAll('.property-filters input, .property-filters select, #property-page-previous, #property-page-next');
+  const controls = document.querySelectorAll('#property-page-previous, #property-page-next');
   controls.forEach((control) => { control.disabled = true; });
   document.querySelector('.properties-table-wrap')?.setAttribute('aria-busy', 'true');
-  if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando imóveis…</div>';
+  // Do not wipe the list or disable the text field while the manager is typing.
+  if (list && !list.children.length) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando imóveis…</div>';
   try {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(state.propertyFilters)) {
       if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
     }
-    const result = await request(`/api/admin/properties?${params.toString()}`);
+    const result = await request(`/api/admin/properties?${params.toString()}`, { signal: controller.signal });
+    if (generation !== propertyLoadSequence || !state.user) return;
     state.properties = result.properties || [];
     state.propertyPagination = result.pagination || null;
     state.propertySummary = result.summary || { total: 0, active: 0, published: 0, draft: 0 };
@@ -1060,8 +1131,10 @@ async function loadProperties() {
       return loadProperties();
     }
     renderProperties();
-  } catch {
-    if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora.</p></div>';
+  } catch (error) {
+    if (generation !== propertyLoadSequence || error?.name === 'AbortError') return;
+    if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora. Confira a conexão e tente novamente.</p><button id="retry-admin-properties" class="outline-button" type="button">Tentar novamente</button></div>';
+    $('#retry-admin-properties')?.addEventListener('click', () => { void loadProperties(); }, { once: true });
     document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
     controls.forEach((control) => {
       if (control.matches('#property-page-previous')) {
@@ -1072,6 +1145,8 @@ async function loadProperties() {
         control.disabled = false;
       }
     });
+  } finally {
+    if (generation === propertyLoadSequence) propertyRequestController = null;
   }
 }
 

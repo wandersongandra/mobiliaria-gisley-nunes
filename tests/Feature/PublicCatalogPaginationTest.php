@@ -30,6 +30,8 @@ class PublicCatalogPaginationTest extends TestCase
     {
         $this->getJson('/api/v2/properties?per_page=101')->assertUnprocessable();
         $this->getJson('/api/v2/properties?per_page=1')->assertUnprocessable();
+        $this->getJson('/api/v2/properties?page=101')->assertUnprocessable();
+        $this->getJson('/api/v2/properties?page%5B%5D=2')->assertUnprocessable();
 
         $this->getJson('/api/v2/properties?page=2&per_page=20')
             ->assertOk()
@@ -57,6 +59,27 @@ class PublicCatalogPaginationTest extends TestCase
             ->assertJsonPath('properties.0.slug', 'imovel-de-catalogo-2')
             ->assertJsonFragment(['locations' => ['Lourdes · Belo Horizonte', 'Savassi · Belo Horizonte']])
             ->assertJsonFragment(['types' => ['Apartamento', 'Casa']]);
+    }
+
+    public function test_price_bands_do_not_duplicate_properties_on_exact_boundaries(): void
+    {
+        $this->insertPublishedProperties(3);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-1')->update(['price' => 1500000]);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-2')->update(['price' => 1500000.01]);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-3')->update(['price' => 3000000]);
+
+        $this->getJson('/api/v2/properties?purpose=Comprar&price_band=1')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('properties.0.slug', 'imovel-de-catalogo-1');
+
+        $this->getJson('/api/v2/properties?purpose=Comprar&price_band=2')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 2);
+
+        $this->getJson('/api/v2/properties?purpose=Comprar&price_band=3')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 0);
     }
 
     public function test_v2_catalog_keeps_query_count_bounded_with_ten_thousand_properties(): void

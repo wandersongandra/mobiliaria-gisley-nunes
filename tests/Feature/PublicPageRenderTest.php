@@ -131,6 +131,13 @@ class PublicPageRenderTest extends TestCase
             ->assertSee('<meta name="robots" content="noindex,follow" />', false);
     }
 
+    public function test_catalog_ignores_malformed_array_query_parameters_without_a_server_error(): void
+    {
+        $this->get('/imoveis?page%5B%5D=2&location%5B%5D=x&purpose%5B%5D=Alugar&type%5B%5D=Casa&price_band%5B%5D=3')
+            ->assertOk()
+            ->assertSee('Imóveis para comprar ou alugar em Belo Horizonte');
+    }
+
     public function test_neighborhood_page_renders_for_a_published_property(): void
     {
         $this->publishPropertyWithCover();

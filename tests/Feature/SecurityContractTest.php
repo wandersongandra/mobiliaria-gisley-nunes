@@ -143,6 +143,40 @@ class SecurityContractTest extends TestCase
         $access->requireCurrent($request);
     }
 
+    public function test_manager_can_pause_and_reactivate_editor_while_revoking_active_sessions(): void
+    {
+        $manager = $this->createAdminSession('manager');
+        $editor = $this->createAdminSession('editor');
+        $email = (string) DB::table('morada_staff_access')
+            ->where('open_id', $editor['admin_open_id'])
+            ->value('email');
+        $this->assertNotSame('', $email);
+
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
+        $this->withSession($manager)->withHeaders($headers)
+            ->patchJson('/api/admin/team/'.rawurlencode($email), ['active' => false])
+            ->assertOk()
+            ->assertJsonPath('member.active', false);
+
+        $this->assertDatabaseHas('morada_staff_access', ['email' => $email, 'active' => 0]);
+        $this->assertNotNull(DB::table('morada_admin_sessions')
+            ->where('jti', $editor['admin_jti'])->value('revoked_at'));
+
+        $this->withSession($editor)
+            ->getJson('/api/admin/session')
+            ->assertOk()
+            ->assertJsonPath('authenticated', false);
+
+        $this->withSession($manager)->withHeaders($headers)
+            ->patchJson('/api/admin/team/'.rawurlencode($email), ['active' => true])
+            ->assertOk()
+            ->assertJsonPath('member.active', true);
+
+        // Re-activation never resurrects the revoked session.
+        $this->assertNotNull(DB::table('morada_admin_sessions')
+            ->where('jti', $editor['admin_jti'])->value('revoked_at'));
+    }
+
     private function propertyInput(string $title, array $overrides = []): array
     {
         return array_merge([

@@ -93,6 +93,8 @@ test('galeria usa dialog nativo, navegação e restauração de foco', async ({ 
   await expect(page.locator('[data-gallery-lightbox]')).toHaveAttribute('open', '');
   await page.locator('[data-gallery-lightbox-next]').click();
   await expect(page.locator('[data-gallery-lightbox-current]')).toHaveText('02');
+  await expect(page.locator('.gallery-thumb').nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.gallery-thumb').first()).toHaveAttribute('aria-pressed', 'false');
   await page.keyboard.press('Escape');
   await expect(trigger).toBeFocused();
 });
@@ -167,4 +169,79 @@ test('campos de busca e alvos de toque respeitam legibilidade no celular', async
     (element) => Number.parseFloat(getComputedStyle(element).bottom)
   );
   expect(whatsappBottom).toBeGreaterThanOrEqual(90);
+});
+
+
+test('histórico do catálogo restaura filtros ao navegar para trás e avançar', async ({ page }) => {
+  await page.goto('/imoveis/');
+  await page.locator('#purpose').selectOption('Comprar');
+  await page.locator('#search-form button[type="submit"]').click();
+  await expect(page).toHaveURL(/purpose=Comprar/);
+
+  await page.locator('#purpose').selectOption('Alugar');
+  await page.locator('#search-form button[type="submit"]').click();
+  await expect(page).toHaveURL(/purpose=Alugar/);
+  await expect(page.locator('[data-listing-card]')).toHaveCount(2);
+
+  await page.goBack();
+  await expect(page.locator('#purpose')).toHaveValue('Comprar');
+  await expect(page).toHaveURL(/purpose=Comprar/);
+  await expect(page.locator('[data-listing-card]')).not.toHaveCount(2);
+
+  await page.goForward();
+  await expect(page.locator('#purpose')).toHaveValue('Alugar');
+  await expect(page.locator('[data-listing-card]')).toHaveCount(2);
+});
+
+test('consulta antiga não pode reverter filtros recentes durante respostas fora de ordem', async ({ page }) => {
+  await page.goto('/imoveis/');
+  await expect(page.locator('[data-listing-card]').first()).toBeVisible();
+  const fixtureResponse = await page.request.get('/api/v2/properties/');
+  const fixture = await fixtureResponse.json();
+  let releaseOld;
+  let oldStarted;
+  const firstStarted = new Promise((resolve) => { oldStarted = resolve; });
+  const releaseFirst = new Promise((resolve) => { releaseOld = resolve; });
+
+  await page.route('**/api/v2/properties**', async (route) => {
+    const requestedPurpose = new URL(route.request().url()).searchParams.get('purpose');
+    if (requestedPurpose === 'Comprar') {
+      oldStarted();
+      await releaseFirst;
+    }
+    await route.fulfill({ json: fixture }).catch(() => {});
+  });
+
+  await page.locator('#purpose').selectOption('Comprar');
+  await page.locator('#search-form button[type="submit"]').click();
+  await firstStarted;
+
+  await page.locator('#purpose').selectOption('Alugar');
+  await page.locator('#search-form button[type="submit"]').click();
+  await expect(page).toHaveURL(/purpose=Alugar/);
+  releaseOld();
+
+  await expect(page.locator('#purpose')).toHaveValue('Alugar');
+  await expect(page.locator('[data-listing-card]')).toHaveCount(2);
+  await expect(page).toHaveURL(/purpose=Alugar/);
+});
+
+test('imóvel sem capa usa fallback visual em vez de imagem de URL vazia', async ({ page }) => {
+  const fixtureResponse = await page.request.get('/api/v2/properties/');
+  const fixture = await fixtureResponse.json();
+  fixture.properties[0].cover_url = '';
+  await page.route('**/api/v2/properties**', (route) => route.fulfill({ json: fixture }));
+  await page.goto('/imoveis/');
+
+  await expect(page.locator('.listing-image-placeholder').first()).toBeVisible();
+  await expect(page.locator('.listing-image img[src=""]')).toHaveCount(0);
+});
+
+test('páginas institucionais e catálogo não ultrapassam a largura do celular', async ({ page }) => {
+  for (const route of ['/imoveis/', '/sobre/', '/servicos/', '/contato/', '/bairros/']) {
+    await page.goto(route);
+    for (const width of [320, 375, 768, 1024]) {
+      await expectNoHorizontalOverflow(page, width);
+    }
+  }
 });

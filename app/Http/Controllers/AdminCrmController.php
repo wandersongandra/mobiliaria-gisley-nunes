@@ -178,7 +178,7 @@ class AdminCrmController extends Controller
         ];
         if (! $includeFormat) {
             $rules['per_page'] = ['sometimes', 'integer', 'between:20,100'];
-            $rules['page'] = ['sometimes', 'integer', 'min:1'];
+            $rules['page'] = ['sometimes', 'integer', 'between:1,1000'];
         } else {
             $rules['format'] = ['sometimes', 'string', Rule::in(['csv', 'json'])];
         }

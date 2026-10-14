@@ -56,7 +56,7 @@ class PropertyService
             ->leftJoin('morada_property_photos as ph', function ($join): void {
                 $join->on('ph.property_id', '=', 'p.id')->where('ph.is_cover', '=', 1);
             })
-            ->select('p.*', DB::raw('CASE WHEN p.price < 1500000 THEN 1 WHEN p.price <= 3000000 THEN 2 ELSE 3 END AS price_band'), DB::raw("COALESCE(ph.url, '') AS cover_url"));
+            ->select('p.*', DB::raw('CASE WHEN p.price <= 1500000 THEN 1 WHEN p.price <= 3000000 THEN 2 ELSE 3 END AS price_band'), DB::raw("COALESCE(ph.url, '') AS cover_url"));
 
         if ($publicOnly) {
             $query->where('p.status', 'published')
@@ -266,7 +266,7 @@ class PropertyService
         }
 
         if ($band === 2) {
-            $query->whereBetween('p.price', [$limits[0], $limits[1]]);
+            $query->where('p.price', '>', $limits[0])->where('p.price', '<=', $limits[1]);
 
             return;
         }

@@ -69,6 +69,7 @@ class PropertyManagementTest extends TestCase
 
         $this->withSession($session)->getJson('/api/admin/properties?status=for-sale')->assertUnprocessable();
         $this->withSession($session)->getJson('/api/admin/properties?per_page=19')->assertUnprocessable();
+        $this->withSession($session)->getJson('/api/admin/properties?page=1001')->assertUnprocessable();
     }
 
     private function createProperty(string $title, string $status): void

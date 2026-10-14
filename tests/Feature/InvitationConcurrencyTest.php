@@ -7,6 +7,7 @@ use App\Support\Clock;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 use Tests\TestCase;
 
 class InvitationConcurrencyTest extends TestCase
@@ -55,6 +56,28 @@ class InvitationConcurrencyTest extends TestCase
         $expired = str_repeat('e', 64);
         DB::table('morada_staff_invitations')->insert($this->invitation($expired, 'expired@example.test', Clock::nowMs() - 1));
         $this->assertNull($crm->acceptInvitation($expired, 'expired-subject', 'expired@example.test'));
+    }
+
+    public function test_existing_staff_member_cannot_receive_a_new_unusable_invitation(): void
+    {
+        $crm = app(CrmService::class);
+        $crm->saveStaff([
+            'email' => 'invitee@example.test',
+            'openId' => 'google-stable-subject',
+            'name' => 'Membro já cadastrado',
+            'role' => 'editor',
+            'active' => true,
+            'invitedBy' => 'manager@example.test',
+        ]);
+
+        try {
+            $crm->createInvitation($this->serviceInvitation(str_repeat('e', 64)));
+            $this->fail('A second invitation for an active account should be rejected.');
+        } catch (RuntimeException $error) {
+            $this->assertSame('TEAM_MEMBER_EXISTS', $error->getMessage());
+        }
+
+        $this->assertDatabaseCount('morada_staff_invitations', 0);
     }
 
     /** @return array<string, mixed> */

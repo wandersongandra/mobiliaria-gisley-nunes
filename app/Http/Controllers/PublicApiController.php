@@ -29,7 +29,7 @@ class PublicApiController extends Controller
     public function propertiesV2(Request $request): JsonResponse
     {
         $filters = $request->validate([
-            'page' => ['sometimes', 'integer', 'min:1'],
+            'page' => ['sometimes', 'integer', 'between:1,100'],
             'per_page' => ['sometimes', 'integer', 'between:20,100'],
             'purpose' => ['sometimes', Rule::in(['Comprar', 'Alugar'])],
             'location' => ['sometimes', 'string', 'max:180'],

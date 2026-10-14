@@ -27,7 +27,7 @@ function priceBand(price, purpose = 'Comprar') {
     if (value <= 10000) return 2;
     return 3;
   }
-  if (value < 1500000) return 1;
+  if (value <= 1500000) return 1;
   if (value <= 3000000) return 2;
   return 3;
 }
@@ -61,9 +61,12 @@ function normalizeProperty(item) {
 function listingCard(item, index = 0) {
   const href = item.slug ? `/imoveis/${encodeURIComponent(item.slug)}` : '/contato';
   const delayClass = `listing-delay-${Math.min(Math.max(Number(index) || 0, 0), 7)}`;
+  const image = item.image
+    ? `<img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" width="1200" height="800" sizes="(max-width: 600px) calc(100vw - 32px), (max-width: 980px) 50vw, 33vw" loading="lazy" decoding="async" />`
+    : '<span class="listing-image-placeholder" aria-hidden="true">GN</span>';
   return `<article class="listing-card listing-card-enter ${delayClass}" data-listing-card>
     <a href="${href}" class="listing-image">
-      <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.title)}, ${escapeHTML(item.location)}" width="1200" height="800" sizes="(max-width: 600px) calc(100vw - 32px), (max-width: 980px) 50vw, 33vw" loading="lazy" decoding="async" />
+      ${image}
       <span class="listing-tag">${escapeHTML(item.tag)}</span>
       <span class="listing-arrow" aria-hidden="true">↗</span>
       <span class="listing-image-shade" aria-hidden="true"></span>
@@ -186,6 +189,9 @@ function initListing() {
   let catalog = [];
   let pagination = { current_page: 1, last_page: 1, total: 0 };
   let facetsInitialized = false;
+  let initialRenderPending = true;
+  let activeController = null;
+  let requestGeneration = 0;
 
   function activeFilterLabels() {
     return [
@@ -243,7 +249,7 @@ function initListing() {
   function clearFilters() {
     Object.values(filters).forEach((filter) => { if (filter) filter.value = 'all'; });
     updatePriceOptions();
-    loadProperties(1);
+    loadProperties(1, { navigation: 'push' });
   }
 
   function fillSelect(select, values, allLabel, selected = 'all') {
@@ -314,6 +320,8 @@ function initListing() {
 
   function applyUrlFilters() {
     const params = new URLSearchParams(window.location.search);
+    Object.values(filters).forEach((filter) => { if (filter) filter.value = 'all'; });
+    updatePriceOptions();
     const requestedPurpose = params.get('purpose');
     if (requestedPurpose && [...filters.purpose.options].some((option) => option.value === requestedPurpose)) {
       filters.purpose.value = requestedPurpose;
@@ -356,17 +364,28 @@ function initListing() {
       window.location.assign(`/imoveis?${queryForPage(1).toString()}`);
       return;
     }
-    loadProperties(1);
+    loadProperties(1, { navigation: 'push' });
     document.querySelector('#imoveis')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   });
 
   document.querySelector('#clear-filters')?.addEventListener('click', clearFilters);
-  previousPage?.addEventListener('click', () => loadProperties(pagination.current_page - 1));
-  nextPage?.addEventListener('click', () => loadProperties(pagination.current_page + 1));
+  previousPage?.addEventListener('click', () => loadProperties(pagination.current_page - 1, { navigation: 'push' }));
+  nextPage?.addEventListener('click', () => loadProperties(pagination.current_page + 1, { navigation: 'push' }));
 
-  async function loadProperties(page = 1) {
-    // Preserve Laravel's first painted results while the catalogue API hydrates.
-    const preservingSSR = !facetsInitialized && !!grid.querySelector('.listing-card-server');
+  if (!isHome) window.addEventListener('popstate', () => {
+    if (!facetsInitialized) return;
+    applyUrlFilters();
+    const pageValue = Number(new URLSearchParams(window.location.search).get('page') || 1);
+    loadProperties(Number.isSafeInteger(pageValue) ? Math.max(1, pageValue) : 1, { navigation: 'none' });
+  });
+
+  async function loadProperties(page = 1, { navigation = 'replace' } = {}) {
+    // Ignore outdated network responses if users change filters quickly.
+    activeController?.abort();
+    const controller = new AbortController();
+    activeController = controller;
+    const generation = ++requestGeneration;
+    const preservingSSR = initialRenderPending && !!grid.querySelector('.listing-card-server');
     try {
       grid.setAttribute('aria-busy', 'true');
       if (!preservingSSR) grid.innerHTML = listingSkeletons(6);
@@ -376,9 +395,13 @@ function initListing() {
         empty.removeAttribute('aria-live');
       }
       const params = queryForPage(page);
-      const response = await fetch(`/api/v2/properties?${params.toString()}`, { headers: { Accept: 'application/json' } });
+      const response = await fetch(`/api/v2/properties?${params.toString()}`, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal
+      });
       if (!response.ok) throw new Error('LOAD_FAILED');
       const payload = await response.json();
+      if (generation !== requestGeneration) return;
       const rawProperties = Array.isArray(payload?.properties) ? payload.properties : [];
       catalog = filterStaticPreview(rawProperties).map(normalizeProperty);
       pagination = payload?.pagination || pagination;
@@ -399,13 +422,22 @@ function initListing() {
         const requestedPage = Math.max(1, Number(new URLSearchParams(window.location.search).get('page') || 1));
         facetsInitialized = true;
         if (hasUrlFilters || requestedPage > 1) {
-          await loadProperties(hasUrlFilters ? 1 : requestedPage);
+          // The first response only populated facets; keep the Blade cards visible.
+          void loadProperties(requestedPage, { navigation: 'none' });
           return;
         }
       }
-      if (!isHome) history.replaceState(null, '', `/imoveis?${params.toString()}`);
+      if (!isHome && navigation !== 'none') {
+        const nextUrl = `/imoveis?${params.toString()}`;
+        if (nextUrl !== window.location.pathname + window.location.search) {
+          if (navigation === 'push') history.pushState(null, '', nextUrl);
+          else history.replaceState(null, '', nextUrl);
+        }
+      }
       renderListings(catalog);
-    } catch {
+      initialRenderPending = false;
+    } catch (error) {
+      if (generation !== requestGeneration || error?.name === 'AbortError') return;
       ssrPagination?.removeAttribute('hidden');
       // A transient network failure must not erase valid SSR results.
       if (!preservingSSR) {
@@ -427,7 +459,10 @@ function initListing() {
         filterSummary.querySelector('#retry-properties')?.addEventListener('click', () => loadProperties(page), { once: true });
       }
     } finally {
-      grid.removeAttribute('aria-busy');
+      if (generation === requestGeneration) {
+        grid.removeAttribute('aria-busy');
+        activeController = null;
+      }
     }
   }
 
@@ -533,7 +568,7 @@ function renderPropertyDetail(property) {
     : (property.cover_url ? [{ url: property.cover_url, alt_text: property.title, is_cover: 1 }] : []);
   const primaryIndex = Math.max(0, photos.findIndex((photo) => photo.is_cover));
   const primary = photos[primaryIndex] || photos[0];
-  const thumbs = photos.map((photo, index) => `<button class="gallery-thumb${index === primaryIndex ? ' is-active' : ''}" type="button" data-index="${index}" data-image="${escapeHTML(photo.url)}" data-alt="${escapeHTML(photo.alt_text || property.title)}" aria-label="Ver foto ${index + 1} de ${photos.length}"><img src="${escapeHTML(photo.url)}" alt="" loading="lazy" decoding="async" /><span>${String(index + 1).padStart(2, '0')}</span></button>`).join('');
+  const thumbs = photos.map((photo, index) => `<button class="gallery-thumb${index === primaryIndex ? ' is-active' : ''}" type="button" data-index="${index}" data-image="${escapeHTML(photo.url)}" data-alt="${escapeHTML(photo.alt_text || property.title)}" aria-label="Ver foto ${index + 1} de ${photos.length}" aria-pressed="${index === primaryIndex}"><img src="${escapeHTML(photo.url)}" alt="" loading="lazy" decoding="async" /><span>${String(index + 1).padStart(2, '0')}</span></button>`).join('');
 
   const featureItems = [
     { label: 'Quartos', value: `${property.bedrooms ?? 0}` },
@@ -652,6 +687,7 @@ function initPropertyDetail() {
     ? property.photos
     : (property.cover_url ? [{ url: property.cover_url, alt_text: property.title, is_cover: 1 }] : []);
   let activeIndex = Math.max(0, photos.findIndex((photo) => photo.is_cover));
+  let photoLoadGeneration = 0;
 
   const syncLightbox = () => {
     if (!lightboxImage || !photos.length) return;
@@ -674,14 +710,24 @@ function initPropertyDetail() {
     mainImage.classList.add('is-switching');
     const nextSrc = photo.url;
     const nextAlt = photo.alt_text || property.title;
+    const generation = ++photoLoadGeneration;
     const preloader = new Image();
     preloader.onload = () => {
+      if (generation !== photoLoadGeneration) return;
       mainImage.src = nextSrc;
       mainImage.alt = nextAlt;
       requestAnimationFrame(() => mainImage.classList.remove('is-switching'));
     };
+    preloader.onerror = () => {
+      if (generation !== photoLoadGeneration) return;
+      mainImage.classList.remove('is-switching');
+      if (galleryStatus) galleryStatus.textContent = 'Não foi possível carregar esta foto. Tente outra imagem.';
+    };
     preloader.src = nextSrc;
-    thumbs.forEach((item, i) => item.classList.toggle('is-active', i === activeIndex));
+    thumbs.forEach((item, i) => {
+      item.classList.toggle('is-active', i === activeIndex);
+      item.setAttribute('aria-pressed', String(i === activeIndex));
+    });
     thumbs[activeIndex]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     if (current) current.textContent = String(activeIndex + 1).padStart(2, '0');
     if (galleryStatus) galleryStatus.textContent = `Foto ${activeIndex + 1} de ${photos.length}: ${nextAlt}`;
