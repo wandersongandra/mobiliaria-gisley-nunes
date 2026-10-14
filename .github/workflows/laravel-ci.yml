@@ -70,6 +70,21 @@ jobs:
           composer --version
           php -m | grep -qi pdo_mysql
 
+      - name: Wait for ephemeral MySQL
+        env:
+          MYSQL_PWD: root-integration-only
+        run: |
+          for attempt in {1..15}; do
+            if mysqladmin --connect-timeout=2 --host=127.0.0.1 --port=3306 --user=root ping --silent >/dev/null 2>&1; then
+              echo "Ephemeral MySQL is accepting connections."
+              exit 0
+            fi
+            echo "Waiting for ephemeral MySQL ($attempt/15)..."
+            sleep 1
+          done
+          echo "::error::Ephemeral MySQL did not accept connections within the retry window."
+          exit 1
+
       - name: Configure ephemeral MySQL trigger support
         env:
           MYSQL_PWD: root-integration-only
