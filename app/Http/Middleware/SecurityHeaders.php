@@ -51,6 +51,7 @@ class SecurityHeaders
             $response->headers->set('Cache-Control', 'no-store, private');
             $response->headers->set('Pragma', 'no-cache');
             $response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+            $response->headers->set('Referrer-Policy', 'no-referrer');
         }
 
         if ($request->is('api*') || $request->is('admin*')) {

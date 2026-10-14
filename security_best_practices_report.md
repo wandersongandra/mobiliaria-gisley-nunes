@@ -94,3 +94,25 @@ Não foi confirmada vulnerabilidade crítica ou alta de bypass de autenticação
 **Readiness de segurança:** `NO-GO` até tornar o gate de release efetivo, resolver o check Workers Builds e obter evidência ponta a ponta de OAuth, R2 e proxy.
 
 As correções locais foram aplicadas após a auditoria e validadas pelos checks descritos acima. Publicação, ativação de workflow e provas externas continuam pendentes.
+
+## Reauditoria focada — 2026-10-14
+
+### Escopo confirmado nesta rodada
+
+- **CONFIRMED:** middleware global de cabeçalhos, fronteiras de origem/host, limites de requisição, autenticação e capabilities Laravel; rotas administrativas; fluxo de convite do painel; pontos de renderização HTML dinâmica do painel.
+- **CONFIRMED:** busca estática dirigida por sinks DOM (`innerHTML`, atributos `href`/`src`), execução dinâmica (`eval`, `Function`), APIs de shell e operações de storage. Campos de texto livre exibidos nas áreas revisadas usam escape HTML; valores de estado, papel e identificadores vêm dos contratos administrativos do backend. Não foi confirmada execução de HTML controlado por visitante.
+- **CONFIRMED:** `pnpm audit --prod --audit-level=moderate` não encontrou vulnerabilidades conhecidas nas dependências Node de produção, na data desta execução.
+- **BLOCKED:** `composer audit` não pôde ser executado porque Composer não está disponível neste ambiente. Não trate a observação do CI da auditoria anterior como resultado atual.
+- **NÃO VERIFICADO:** configuração efetiva de logs do proxy/HostGator, fluxo OAuth completo, R2 e comportamento dos cabeçalhos no domínio publicado.
+
+### Finding LOW — token de convite permanecia na URL e podia ser enviado como Referer
+
+- **Evidência antes da correção:** `admin/main.js` lia `invite` da query string para compor o link de login, mas não removia o parâmetro do endereço; `SecurityHeaders` aplicava `strict-origin-when-cross-origin`, que permite Referer completo em navegações da mesma origem. Assim, requisições subsequentes do painel poderiam carregar a query com o convite em logs que registram Referer. Não foi confirmado que a configuração de logs publicada retenha esse valor.
+- **Impacto:** exposição evitável de um token de convite temporário a registros/telemetria internos. O token, isoladamente, ainda depende da autenticação Google e do e-mail autorizado pelo convite.
+- **Correção:** respostas do painel, APIs administrativas/autenticação e callback OAuth agora usam `Referrer-Policy: no-referrer`; o painel remove `invite` do endereço assim que inicia, mantém um único token válido somente em memória e ainda o inclui no link do botão de login. Parâmetros não relacionados e o fragmento são preservados; query com mais de um `invite` é descartada e não segue no link de login.
+- **Regressões adicionadas:** contrato Laravel para o cabeçalho no painel e callback; teste Playwright sintético verifica remoção da query e preservação do token no link de login.
+- **Validação desta rodada:** `HttpSecurityBoundaryTest` 5/5; suíte Playwright completa 19/19; testes Node 185 aprovados e 1 integração MySQL ignorada por requerer banco; suíte Laravel 153/153 (778 assertions); `pnpm audit --prod` sem vulnerabilidades conhecidas; secret scan, build e sincronização dos artefatos públicos passaram. O check Composer ficou bloqueado pela ausência do executável.
+
+### Reavaliação de risco
+
+Nenhum bypass de autenticação/autorização, XSS confirmada, SQL injection, SSRF ou path traversal foi encontrado nesta reauditoria focada. Isso é uma conclusão de inspeção de código e testes locais, não uma declaração de segurança do domínio publicado. A auditoria Composer e as verificações ponta a ponta de OAuth, R2, proxy, release e logs permanecem pendentes.

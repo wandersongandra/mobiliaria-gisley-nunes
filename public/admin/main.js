@@ -15,8 +15,12 @@ const state = { user: null, csrfToken: '', properties: [], propertyPagination: n
 let propertySearchTimer = 0;
 let propertyLoadSequence = 0;
 let leadLoadSequence = 0;
+let teamLoading = false;
+let leadsLoaded = false;
 let propertyRequestController = null;
 let leadRequestController = null;
+let teamRequestController = null;
+let teamLoadSequence = 0;
 const $ = (selector) => document.querySelector(selector);
 const loginScreen = $('#login-screen');
 const dashboard = $('#dashboard');
@@ -92,8 +96,12 @@ async function request(url, options = {}) {
 function clearSensitiveState() {
   propertyRequestController?.abort();
   leadRequestController?.abort();
+  teamRequestController?.abort();
+  teamRequestController = null;
   propertyLoadSequence += 1;
   leadLoadSequence += 1;
+  teamLoadSequence += 1;
+  teamLoading = false;
   state.user = null;
   state.csrfToken = '';
   state.properties = [];
@@ -102,6 +110,7 @@ function clearSensitiveState() {
   state.propertyFilters = { search: '', status: '', page: 1, per_page: 20 };
   state.leads = [];
   state.leadPagination = null;
+  leadsLoaded = false;
   state.leadFilters = { status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
   state.team = [];
   state.invitations = [];
@@ -116,6 +125,7 @@ function clearSensitiveState() {
   const invitationList = $('#team-invitations');
   const invitationResult = $('#team-invite-result');
   const auditList = $('#audit-list');
+  teamLoaded = false;
   if (propertyList) propertyList.innerHTML = '';
   if (leadList) leadList.innerHTML = '';
   if (teamList) teamList.innerHTML = '';
@@ -124,14 +134,19 @@ function clearSensitiveState() {
   if (auditList) auditList.innerHTML = '';
 }
 
-function invitationTokenFromUrl() {
-  const value = new URLSearchParams(window.location.search).get('invite');
-  return /^[A-Za-z0-9_-]{43}$/.test(value || '') ? value : '';
+const invitationParams = new URLSearchParams(window.location.search);
+const invitationTokens = invitationParams.getAll('invite');
+const invitationToken = invitationTokens.length === 1 && /^[A-Za-z0-9_-]{43}$/.test(invitationTokens[0])
+  ? invitationTokens[0]
+  : '';
+if (invitationTokens.length) {
+  invitationParams.delete('invite');
+  const query = invitationParams.toString();
+  window.history.replaceState(window.history.state, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
 }
 
 function loginUrl() {
-  const token = invitationTokenFromUrl();
-  return token ? `/api/auth/login?invite=${encodeURIComponent(token)}` : '/api/auth/login';
+  return invitationToken ? `/api/auth/login?invite=${encodeURIComponent(invitationToken)}` : '/api/auth/login';
 }
 
 function showLogin() {
@@ -189,6 +204,7 @@ function showDashboard() {
   if (dashboardMain) dashboardMain.id = 'admin-main';
   skipLink?.setAttribute('href', '#admin-main');
   $('#user-name').textContent = state.user?.name?.split(' ')[0] || 'equipe';
+  $('#session-indicator').textContent = 'Sessão autenticada';
   const manager = state.user?.role === 'manager';
   document.querySelectorAll('[data-manager-only]').forEach((element) => { element.hidden = !manager; });
   const roleChip = $('#user-role');
@@ -625,11 +641,36 @@ instagramUrlInput?.addEventListener('input', () => {
 });
 
 function switchView(name) {
-  document.querySelectorAll('.admin-view').forEach((view) => { view.hidden = view.id !== name; });
-  document.querySelectorAll('.side-nav a[data-view]').forEach((link) => { link.classList.toggle('active', link.dataset.view === name); });
-  if (name === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
-  if (name === 'team-view' && state.user?.role === 'manager' && !teamLoaded) { teamLoaded = true; loadTeam(); }
-  if (name === 'audit-view' && state.user?.role === 'manager' && !auditLoaded) { auditLoaded = true; loadAudit(); }
+  const views = [...document.querySelectorAll('.admin-view')];
+  const links = [...document.querySelectorAll('.side-nav a[data-view]')];
+  const requestedView = views.find((view) => view.id === name);
+  const permittedLink = links.find((link) => link.dataset.view === name && !link.hidden);
+  const activeView = requestedView && permittedLink ? requestedView : $('#dashboard-view');
+
+  views.forEach((view) => { view.hidden = view !== activeView; });
+  links.forEach((link) => {
+    const isCurrent = link.dataset.view === activeView?.id;
+    link.classList.toggle('active', isCurrent);
+    if (isCurrent) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+  if (activeView) {
+    const heading = activeView.querySelector('h1, h2, h3');
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus();
+    }
+  }
+  if (activeView?.id === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
+  if (activeView?.id === 'team-view' && state.user?.role === 'manager' && !teamLoaded) { void loadTeam(); }
+  if (activeView?.id === 'audit-view' && state.user?.role === 'manager' && !auditLoaded) { auditLoaded = true; loadAudit(); }
+}
+
+function viewFromHash() {
+  const view = window.location.hash.slice(1);
+  const link = [...document.querySelectorAll('.side-nav a[data-view]')]
+    .find((item) => item.dataset.view === view && !item.hidden);
+  return link?.dataset.view || 'dashboard-view';
 }
 
 function renderTestimonials(items = []) {
@@ -875,18 +916,34 @@ function renderTeamInvitations() {
 }
 
 async function loadTeam() {
+  if (teamLoading) return;
+  teamLoading = true;
+  const controller = new AbortController();
+  teamRequestController?.abort();
+  teamRequestController = controller;
+  const generation = ++teamLoadSequence;
   const list = $('#team-list');
   const invitations = $('#team-invitations');
   if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando acessos…</div>';
   if (invitations) invitations.innerHTML = '<div class="empty-properties compact" role="status">Carregando convites…</div>';
   try {
-    state.team = (await request('/api/admin/team')).team || [];
-    state.invitations = (await request('/api/admin/team/invitations')).invitations || [];
+    state.team = (await request('/api/admin/team', { signal: controller.signal })).team || [];
+    state.invitations = (await request('/api/admin/team/invitations', { signal: controller.signal })).invitations || [];
+    if (generation !== teamLoadSequence || !state.user) return;
     renderTeam();
     renderTeamInvitations();
-  } catch {
-    if (list) list.innerHTML = '<div class="empty-properties compact"><p>Não foi possível carregar a equipe agora.</p></div>';
-    if (invitations) invitations.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os convites agora.</p></div>';
+    teamLoaded = true;
+  } catch (error) {
+    if (generation !== teamLoadSequence || error?.name === 'AbortError') return;
+    teamLoaded = false;
+    if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar a equipe.</p><button id="retry-team-load" class="outline-button" type="button">Tentar novamente</button></div>';
+    if (invitations) invitations.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os convites.</p></div>';
+    $('#retry-team-load')?.addEventListener('click', () => { void loadTeam(); }, { once: true });
+  } finally {
+    if (generation === teamLoadSequence) {
+      teamRequestController = null;
+      teamLoading = false;
+    }
   }
 }
 
@@ -976,8 +1033,7 @@ function renderLeads() {
   const list = $('#lead-list');
   const newCount = Number(state.leadSummary?.new || 0);
   $('#lead-total').textContent = `${newCount} ${newCount === 1 ? 'novo' : 'novos'}`;
-  const accent = document.querySelector('.metric-accent');
-  if (accent) accent.innerHTML = `<span class="metric-label">contatos novos</span><strong>${String(newCount).padStart(2, '0')}</strong><small>recebidos pelo site</small>`;
+  $('#metric-leads-new').textContent = String(newCount).padStart(2, '0');
 
   const items = state.leads;
   const filters = $('#lead-filters');
@@ -1080,11 +1136,16 @@ async function loadLeads() {
     state.leads = result.leads || [];
     state.leadPagination = result.pagination || null;
     state.leadSummary = result.summary || { new: 0 };
+    leadsLoaded = true;
     renderLeads();
   } catch (error) {
     if (generation !== leadLoadSequence || error?.name === 'AbortError') return;
+    if (!leadsLoaded) $('#metric-leads-new').textContent = '—';
     ensureLeadsPanel();
-    if ($('#lead-list')) $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p></div>';
+    if ($('#lead-list')) {
+      $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p><button id="retry-admin-leads" class="outline-button" type="button">Tentar novamente</button></div>';
+      $('#retry-admin-leads')?.addEventListener('click', () => { void loadLeads(); }, { once: true });
+    }
     const status = $('#lead-status');
     if (status) {
       status.textContent = error.message === 'VALIDATION_FAILED'
@@ -1133,6 +1194,11 @@ async function loadProperties() {
     renderProperties();
   } catch (error) {
     if (generation !== propertyLoadSequence || error?.name === 'AbortError') return;
+    if (state.propertySummary === null) {
+      $('#metric-total').textContent = '—';
+      $('#metric-published').textContent = '—';
+      $('#metric-draft').textContent = '—';
+    }
     if (list) list.innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os imóveis agora. Confira a conexão e tente novamente.</p><button id="retry-admin-properties" class="outline-button" type="button">Tentar novamente</button></div>';
     $('#retry-admin-properties')?.addEventListener('click', () => { void loadProperties(); }, { once: true });
     document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
@@ -1157,6 +1223,7 @@ async function init() {
     if (!session.authenticated) return showLogin();
     state.user = session.user;
     showDashboard();
+    switchView(viewFromHash());
     await Promise.all([loadProperties(), loadLeads()]);
   } catch (error) {
     if (error.message !== 'AUTH_REQUIRED') showLogin();
@@ -1169,6 +1236,7 @@ $('#archive-property')?.addEventListener('click', archiveProperty);
 $('#logout-button')?.addEventListener('click', () => { void performLogout(); });
 $('#logout-all-button')?.addEventListener('click', () => { void performLogout({ all: true }); });
 form.addEventListener('submit', saveProperty);
+$('#photo-upload-trigger')?.addEventListener('click', () => $('#photo-input')?.click());
 $('#photo-input').addEventListener('change', (event) => {
   const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
   const incoming = Array.from(event.target.files || []);
@@ -1183,7 +1251,13 @@ $('#photo-input').addEventListener('change', (event) => {
   renderEditorPhotos();
 });
 dialog.addEventListener('close', clearPendingFiles);
-document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); switchView(link.dataset.view); }));
+document.querySelectorAll('.side-nav a[data-view]').forEach((link) => link.addEventListener('click', (event) => {
+  event.preventDefault();
+  if (window.location.hash !== link.hash) window.history.pushState(null, '', link.hash);
+  switchView(link.dataset.view);
+}));
+window.addEventListener('popstate', () => switchView(viewFromHash()));
+window.addEventListener('hashchange', () => switchView(viewFromHash()));
 siteForm?.addEventListener('submit', saveSite);
 testimonialForm?.addEventListener('submit', addTestimonial);
 teamForm?.addEventListener('submit', createTeamInvitation);
