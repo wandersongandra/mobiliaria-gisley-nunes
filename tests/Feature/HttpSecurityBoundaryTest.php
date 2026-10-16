@@ -56,6 +56,7 @@ class HttpSecurityBoundaryTest extends TestCase
         $response->assertHeader('Origin-Agent-Cluster', '?1');
         $response->assertHeader('X-Permitted-Cross-Domain-Policies', 'none');
         $response->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        $response->assertHeader('Referrer-Policy', 'no-referrer');
 
         $csp = (string) $response->headers->get('Content-Security-Policy');
         $this->assertStringContainsString("script-src-attr 'none'", $csp);
@@ -63,5 +64,14 @@ class HttpSecurityBoundaryTest extends TestCase
         $this->assertStringContainsString("worker-src 'none'", $csp);
         $this->assertStringContainsString('https://account123.r2.cloudflarestorage.com', $csp);
         $this->assertStringNotContainsString('https://*.r2.cloudflarestorage.com', $csp);
+    }
+
+    public function test_oauth_callback_never_exposes_its_query_to_referrers(): void
+    {
+        $response = $this->get('/oauth/google/return?code=synthetic-code&state=synthetic-state');
+
+        $response->assertHeader('Referrer-Policy', 'no-referrer');
+        $response->assertHeader('Cache-Control', 'no-store, private');
+        $response->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
     }
 }

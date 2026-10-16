@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\AdminAccessService;
+use App\Services\CriticalAuditService;
 use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -134,13 +135,62 @@ class SecurityContractTest extends TestCase
         $request->setLaravelSession($this->app['session']->driver());
         $request->session()->put('admin_jti', $session['admin_jti']);
         $access = app(AdminAccessService::class);
-        $this->assertNotNull($access->current($request));
+        $admin = $access->current($request);
+        $this->assertNotNull($admin);
 
         $access->revokeAll((string) $record->user_id);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('AUTH_REQUIRED');
-        $access->requireCurrent($request);
+        $mutated = false;
+        try {
+            app(CriticalAuditService::class)->run(
+                $admin,
+                'security.contract',
+                'test',
+                null,
+                static function () use (&$mutated): void {
+                    $mutated = true;
+                },
+            );
+            $this->fail('A sessão revogada não deveria alcançar a mutação crítica.');
+        } catch (RuntimeException $error) {
+            $this->assertSame('AUTH_REQUIRED', $error->getMessage());
+        }
+
+        $this->assertFalse($mutated);
+        $this->assertNull(DB::table('morada_audit_log')->where('action', 'security.contract')->first());
+    }
+
+    public function test_critical_boundary_rejects_a_role_changed_after_initial_authorization(): void
+    {
+        $session = $this->createAdminSession('manager');
+        $request = Request::create('/api/admin/team', 'POST');
+        $request->setLaravelSession($this->app['session']->driver());
+        $request->session()->put('admin_jti', $session['admin_jti']);
+        $admin = app(AdminAccessService::class)->current($request);
+        $this->assertNotNull($admin);
+
+        DB::table('morada_staff_access')
+            ->where('open_id', $session['admin_open_id'])
+            ->update(['role' => 'editor']);
+
+        $mutated = false;
+        try {
+            app(CriticalAuditService::class)->run(
+                $admin,
+                'security.contract',
+                'test',
+                null,
+                static function () use (&$mutated): void {
+                    $mutated = true;
+                },
+            );
+            $this->fail('O papel revogado não deveria alcançar a mutação crítica.');
+        } catch (RuntimeException $error) {
+            $this->assertSame('AUTH_REQUIRED', $error->getMessage());
+        }
+
+        $this->assertFalse($mutated);
+        $this->assertNull(DB::table('morada_audit_log')->where('action', 'security.contract')->first());
     }
 
     public function test_manager_can_pause_and_reactivate_editor_while_revoking_active_sessions(): void

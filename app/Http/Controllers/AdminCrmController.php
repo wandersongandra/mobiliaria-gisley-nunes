@@ -86,7 +86,31 @@ class AdminCrmController extends Controller
     public function leads(Request $request): JsonResponse
     {
         $filters = $this->leadFilters($request);
-        $paginator = $this->crm->paginateLeads($filters);
+        $admin = $this->admin($request);
+        $result = $this->criticalAudit->run(
+            $admin,
+            'lead.read',
+            'lead',
+            null,
+            function () use ($filters): array {
+                return [
+                    'paginator' => $this->crm->paginateLeads($filters),
+                    'newCount' => $this->crm->countNewLeads(),
+                ];
+            },
+            static function (array $result) use ($filters): array {
+                $paginator = $result['paginator'];
+
+                return [
+                    'filters' => array_intersect_key($filters, array_flip(['status', 'date_from', 'date_to'])),
+                    'page' => $paginator->currentPage(),
+                    'perPage' => $paginator->perPage(),
+                    'total' => $paginator->total(),
+                    'returned' => count($paginator->items()),
+                ];
+            },
+        );
+        $paginator = $result['paginator'];
 
         return response()->json([
             'leads' => $paginator->items(),
@@ -99,7 +123,7 @@ class AdminCrmController extends Controller
                 'to' => $paginator->lastItem(),
             ],
             'summary' => [
-                'new' => $this->crm->countNewLeads(),
+                'new' => $result['newCount'],
             ],
         ])->header('Cache-Control', 'no-store');
     }
@@ -108,13 +132,18 @@ class AdminCrmController extends Controller
     {
         $filters = $this->leadFilters($request, true);
         $format = $filters['format'];
-        $count = $this->crm->countExportLeads($filters);
-
-        $this->audit($this->admin($request), 'lead.export', 'lead', null, [
-            'format' => $format,
-            'filters' => array_intersect_key($filters, array_flip(['status', 'date_from', 'date_to'])),
-            'count' => $count,
-        ]);
+        $count = $this->criticalAudit->run(
+            $this->admin($request),
+            'lead.export',
+            'lead',
+            null,
+            fn (): int => $this->crm->countExportLeads($filters),
+            static fn (int $count): array => [
+                'format' => $format,
+                'filters' => array_intersect_key($filters, array_flip(['status', 'date_from', 'date_to'])),
+                'count' => $count,
+            ],
+        );
 
         if ($format === 'json') {
             return response()->stream(function () use ($filters): void {

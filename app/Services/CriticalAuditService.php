@@ -7,7 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class CriticalAuditService
 {
-    public function __construct(private readonly CrmService $crm) {}
+    public function __construct(
+        private readonly CrmService $crm,
+        private readonly AdminAccessService $access,
+    ) {}
 
     /**
      * Executa mutação e trilha crítica na mesma transação do banco. A ação só
@@ -23,6 +26,7 @@ class CriticalAuditService
         array|Closure|null $details = null,
     ): mixed {
         return DB::transaction(function () use ($admin, $action, $entityType, $entityId, $mutation, $details): mixed {
+            $this->access->assertCurrentForCriticalOperation($admin);
             $result = $mutation();
             $auditEntityId = $entityId;
             if ($auditEntityId === null && is_array($result) && isset($result['id'])) {
