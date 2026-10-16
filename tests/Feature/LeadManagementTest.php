@@ -78,6 +78,33 @@ class LeadManagementTest extends TestCase
             ->assertJsonPath('leads.0.status', 'perdido');
     }
 
+    public function test_lead_reads_are_audited_without_copying_lead_personal_data(): void
+    {
+        $session = $this->createAdminSession('manager');
+        $this->createLead([
+            'name' => 'Nome Privado do Lead',
+            'email' => 'privado@example.test',
+            'message' => 'Mensagem privada de contato.',
+        ]);
+
+        $this->withSession($session)
+            ->getJson('/api/admin/leads?status=new&page=1')
+            ->assertOk()
+            ->assertJsonCount(1, 'leads');
+
+        $audit = DB::table('morada_audit_log')->where('action', 'lead.read')->first();
+        $this->assertNotNull($audit);
+        $this->assertSame('lead', $audit->entity_type);
+
+        $details = json_decode((string) $audit->details, true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(['status' => 'new', 'date_from' => null, 'date_to' => null], $details['filters']);
+        $this->assertSame(1, $details['total']);
+        $this->assertSame(1, $details['returned']);
+        $this->assertStringNotContainsString('Nome Privado do Lead', (string) $audit->details);
+        $this->assertStringNotContainsString('privado@example.test', (string) $audit->details);
+        $this->assertStringNotContainsString('Mensagem privada de contato.', (string) $audit->details);
+    }
+
     public function test_invalid_filters_and_page_sizes_are_rejected(): void
     {
         $session = $this->createAdminSession('manager');

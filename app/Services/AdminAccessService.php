@@ -147,6 +147,7 @@ class AdminAccessService
             'openId' => $openId,
             'userId' => $userId,
             'identityId' => $identityId,
+            'sessionJti' => $jti,
             'email' => strtolower((string) $user->email),
             'name' => (string) $user->name,
             'role' => $bootstrap ? 'manager' : (((string) ($access->role ?? 'editor')) === 'manager' ? 'manager' : 'editor'),
@@ -194,10 +195,81 @@ class AdminAccessService
             'openId' => $resolved['openId'],
             'userId' => $resolved['userId'],
             'identityId' => $resolved['identityId'],
+            'sessionJti' => $jti,
             'email' => $resolved['email'],
             'name' => $resolved['name'],
             'role' => $role === 'manager' ? 'manager' : 'editor',
         ];
+    }
+
+    /**
+     * Revalida e bloqueia a identidade autorizada enquanto a operação crítica
+     * e seu registro de auditoria são confirmados na mesma transação.
+     *
+     * @param  array<string, mixed>  $admin
+     */
+    public function assertCurrentForCriticalOperation(array $admin): void
+    {
+        $userId = (string) ($admin['userId'] ?? '');
+        $identityId = (string) ($admin['identityId'] ?? '');
+        $openId = (string) ($admin['openId'] ?? '');
+        $jti = (string) ($admin['sessionJti'] ?? '');
+
+        if ($userId === '' || $identityId === '' || $openId === '' || $jti === '') {
+            throw new RuntimeException('AUTH_REQUIRED');
+        }
+
+        $user = DB::table('morada_users')
+            ->where('id', $userId)
+            ->whereNull('blocked_at')
+            ->lockForUpdate()
+            ->first();
+        $identity = DB::table('morada_oauth_identities')
+            ->where('id', $identityId)
+            ->where('user_id', $userId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $user || ! $identity || ! hash_equals((string) $identity->provider_subject, $openId)) {
+            throw new RuntimeException('AUTH_REQUIRED');
+        }
+
+        $access = DB::table('morada_staff_access')
+            ->where('open_id', $openId)
+            ->lockForUpdate()
+            ->first();
+        $bootstrap = $this->isBootstrapIdentity($openId, (string) $user->email);
+
+        if (! $bootstrap && (! $access || ! (bool) $access->active || (string) $access->invited_by === 'environment')) {
+            throw new RuntimeException('AUTH_REQUIRED');
+        }
+
+        $role = $bootstrap ? 'manager' : (((string) ($access->role ?? 'editor')) === 'manager' ? 'manager' : 'editor');
+        if ($role !== (string) ($admin['role'] ?? '')
+            || strtolower((string) ($user->email ?? '')) !== strtolower((string) ($admin['email'] ?? ''))) {
+            throw new RuntimeException('AUTH_REQUIRED');
+        }
+
+        $now = Clock::nowMs();
+        $session = DB::table('morada_admin_sessions')
+            ->where('jti', $jti)
+            ->where('user_id', $userId)
+            ->where('oauth_identity_id', $identityId)
+            ->where('open_id', $openId)
+            ->whereNull('revoked_at')
+            ->where('expires_at_ms', '>', $now)
+            ->lockForUpdate()
+            ->first();
+        $idleTimeoutMs = max(15, min(240, (int) config('gisley.admin.idle_timeout_minutes', 60))) * 60 * 1000;
+
+        if (! $session
+            || ((int) $session->last_seen_at_ms > 0 && ($now - (int) $session->last_seen_at_ms) > $idleTimeoutMs)) {
+            throw new RuntimeException('AUTH_REQUIRED');
+        }
+
+        if (($now - (int) $session->last_seen_at_ms) > 60_000) {
+            DB::table('morada_admin_sessions')->where('jti', $jti)->update(['last_seen_at_ms' => $now]);
+        }
     }
 
     private function revokeJti(string $jti): void

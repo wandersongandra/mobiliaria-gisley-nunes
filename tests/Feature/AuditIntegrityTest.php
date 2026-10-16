@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Services\AdminAccessService;
+use App\Services\AdminIdentityService;
 use App\Services\CriticalAuditService;
 use App\Services\CrmService;
 use Illuminate\Database\QueryException;
@@ -29,7 +31,11 @@ class AuditIntegrityTest extends TestCase
                 throw new RuntimeException('audit unavailable');
             }
         };
-        $critical = new CriticalAuditService($crm);
+        $access = new class(app(AdminIdentityService::class)) extends AdminAccessService
+        {
+            public function assertCurrentForCriticalOperation(array $admin): void {}
+        };
+        $critical = new CriticalAuditService($crm, $access);
 
         try {
             $critical->run(
@@ -62,7 +68,11 @@ class AuditIntegrityTest extends TestCase
                 $this->details = $details;
             }
         };
-        $critical = new CriticalAuditService($crm);
+        $access = new class(app(AdminIdentityService::class)) extends AdminAccessService
+        {
+            public function assertCurrentForCriticalOperation(array $admin): void {}
+        };
+        $critical = new CriticalAuditService($crm, $access);
 
         $result = $critical->run(
             ['email' => 'manager@example.test', 'userId' => null],
