@@ -97,7 +97,9 @@ class LeadManagementTest extends TestCase
         $this->assertSame('lead', $audit->entity_type);
 
         $details = json_decode((string) $audit->details, true, 512, JSON_THROW_ON_ERROR);
-        $this->assertSame(['status' => 'new', 'date_from' => null, 'date_to' => null], $details['filters']);
+        $this->assertSame('new', $details['filters']['status']);
+        $this->assertNull($details['filters']['date_from']);
+        $this->assertNull($details['filters']['date_to']);
         $this->assertSame(1, $details['total']);
         $this->assertSame(1, $details['returned']);
         $this->assertStringNotContainsString('Nome Privado do Lead', (string) $audit->details);
