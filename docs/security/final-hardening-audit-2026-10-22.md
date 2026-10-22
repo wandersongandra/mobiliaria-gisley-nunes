@@ -97,7 +97,8 @@ Todos os resultados abaixo foram obtidos nesta sessão. `PASS`, `FAIL`, `BLOCKED
 - O HEAD observado no início da edição foi `30b6fab872f33d11a46abb7a1b4125813a81b327`; esse avanço concorrente já existia e não foi descartado.
 - Worktree baseline separado foi criado e devolvido limpo; nenhum stash, reset, clean, checkout/restore em massa ou `git add .` foi usado.
 - `cors.json` continua não rastreado, preexistente, preservado e fora do staging/PR.
-- Commits, push, número da PR e checks remotos serão registrados no handoff somente após a revisão final do diff; merge e deploy continuam proibidos.
+- Commits desta sessão: `b2e49b6` (`fix(security): harden OAuth input and admin origin`) e `38a5fbc` (`docs(security): record final homologation evidence`).
+- Push, número da PR e checks remotos serão registrados no handoff após a publicação; merge e deploy continuam proibidos.
 
 ## G. Pendências
 
