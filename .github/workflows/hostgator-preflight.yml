@@ -62,7 +62,11 @@ jobs:
           ini-values: opcache.enable_cli=1, memory_limit=512M
 
       - name: Validate deploy script syntax
-        run: bash -n scripts/deploy-hostgator.sh
+        run: |
+          bash -n scripts/deploy-hostgator.sh
+          bash -n scripts/test-deploy-hostgator.sh
+          shellcheck scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh
+          bash scripts/test-deploy-hostgator.sh
 
       - name: Install production dependencies
         run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress

@@ -218,6 +218,51 @@ class UploadLifecycleTest extends TestCase
         );
     }
 
+    public function test_presigned_get_signs_response_cache_and_content_headers(): void
+    {
+        config([
+            'services.r2.account_id' => 'test-account',
+            'services.r2.bucket' => 'test-bucket',
+            'services.r2.access_key_id' => 'test-key',
+            'services.r2.secret_access_key' => 'test-secret',
+        ]);
+
+        $url = app(R2Storage::class)->presignGet(
+            'gisley/properties/property-id/photo.jpg',
+            60,
+            'image/jpeg',
+            'photo.jpg',
+            'private, no-store',
+        );
+
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        $this->assertSame('private, no-store', $query['response-cache-control'] ?? null);
+        $this->assertSame('image/jpeg', $query['response-content-type'] ?? null);
+        $this->assertSame('inline; filename="photo.jpg"', $query['response-content-disposition'] ?? null);
+    }
+
+    public function test_presigned_get_rejects_unapproved_response_cache_policy(): void
+    {
+        config([
+            'services.r2.account_id' => 'test-account',
+            'services.r2.bucket' => 'test-bucket',
+            'services.r2.access_key_id' => 'test-key',
+            'services.r2.secret_access_key' => 'test-secret',
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('INVALID_CACHE_CONTROL');
+
+        app(R2Storage::class)->presignGet(
+            'gisley/properties/property-id/photo.jpg',
+            60,
+            'image/jpeg',
+            'photo.jpg',
+            'public, max-age=3600',
+        );
+    }
+
     public function test_image_inspection_rejects_a_renamed_payload(): void
     {
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);

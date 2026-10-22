@@ -13,10 +13,13 @@ HEALTH_URL="${HEALTH_URL:-}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-0}"
 DEPLOY_STATE_FILE="${DEPLOY_STATE_FILE:-$PROJECT_ROOT/.deploy-state}"
 LOCK_DIR="${LOCK_DIR:-$PROJECT_ROOT/.deploy-lock}"
+TMP_DIR="${TMPDIR:-/tmp}"
 
-# Arquivos efêmeros criados em public/ durante o deploy e removidos logo após.
-# Nomes com prefixo duplo para não colidir com rotas do Laravel.
-FPM_CHECK_FILE="$PROJECT_ROOT/public/__fpm_sec_check.php"
+FPM_CHECK_FILE=''
+FPM_HEADERS_FILE=''
+FPM_BODY_FILE=''
+FPM_CURL_CONFIG_FILE=''
+LOCK_ACQUIRED=0
 
 fail() {
     printf 'deploy-hostgator: %s\n' "$1" >&2
@@ -24,10 +27,27 @@ fail() {
 }
 
 cleanup() {
-    rmdir "$LOCK_DIR" 2>/dev/null || true
-    # Garante que o arquivo efêmero seja removido mesmo em caso de falha.
-    rm -f "$FPM_CHECK_FILE" 2>/dev/null || true
+    if (( LOCK_ACQUIRED == 1 )); then
+        rmdir -- "$LOCK_DIR" 2>/dev/null || true
+    fi
+    for temporary_file in "$FPM_CHECK_FILE" "$FPM_HEADERS_FILE" "$FPM_BODY_FILE" "$FPM_CURL_CONFIG_FILE"; do
+        if [[ -n "$temporary_file" ]]; then
+            rm -f -- "$temporary_file" 2>/dev/null || true
+        fi
+    done
 }
+
+handle_signal() {
+    cleanup
+    exit "$1"
+}
+
+trap cleanup EXIT
+trap 'handle_signal 129' HUP
+trap 'handle_signal 130' INT
+trap 'handle_signal 143' TERM
+
+umask 077
 
 if [[ "${ALLOW_HOSTGATOR_DEPLOY:-0}" != "1" ]]; then
     fail 'execução desabilitada; defina ALLOW_HOSTGATOR_DEPLOY=1 somente durante uma janela autorizada'
@@ -42,7 +62,7 @@ fi
 cd "$PROJECT_ROOT"
 [[ ! -e "$LOCK_DIR" ]] || fail 'já existe outro lock de deploy'
 mkdir "$LOCK_DIR"
-trap cleanup EXIT
+LOCK_ACQUIRED=1
 
 [[ -z "$(git status --porcelain)" ]] || fail 'working tree não está limpo'
 
@@ -83,12 +103,16 @@ touch "$PROJECT_ROOT/public/.user.ini" || fail 'não foi possível atualizar o m
 # Derivamos a URL base do HEALTH_URL (ex: https://www.gisleynunesimoveis.com.br
 # a partir de https://www.gisleynunesimoveis.com.br/health/live).
 BASE_URL="$(printf '%s' "$HEALTH_URL" | sed -E 's|^(https?://[^/]+).*|\1|')"
-[[ -n "$BASE_URL" ]] || fail 'não foi possível derivar a URL base do HEALTH_URL'
+[[ "$BASE_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] \
+    || fail 'HEALTH_URL deve usar HTTPS e um host simples do mesmo vhost'
 
-# Token aleatório embaralhado no script para impedir acesso não autorizado
-# durante a janela em que o arquivo existe em public/.
-FPM_TOKEN="$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
-[[ -n "$FPM_TOKEN" ]] || fail 'falha ao gerar token de verificação FPM'
+# O arquivo e o token são imprevisíveis. O arquivo temporário recebe modo 600;
+# o PHP-FPM deve usar o mesmo usuário da conta que executa o deploy.
+FPM_CHECK_FILE="$(mktemp "$PROJECT_ROOT/public/.fpm_sec_check.XXXXXX.php")" \
+    || fail 'falha ao criar arquivo temporário de verificação FPM'
+FPM_TOKEN="$(openssl rand -hex 32)" \
+    || fail 'falha ao gerar token de verificação FPM'
+[[ "$FPM_TOKEN" =~ ^[0-9a-f]{64}$ ]] || fail 'token de verificação FPM inválido'
 
 cat > "$FPM_CHECK_FILE" <<ENPHP
 <?php
@@ -142,31 +166,61 @@ echo json_encode([
 ], JSON_PRETTY_PRINT);
 ENPHP
 
-FPM_CHECK_URL="$BASE_URL/__fpm_sec_check.php"
+FPM_CACHE_BUSTER="$(openssl rand -hex 16)" \
+    || fail 'falha ao gerar cache-buster de verificação FPM'
+[[ "$FPM_CACHE_BUSTER" =~ ^[0-9a-f]{32}$ ]] || fail 'cache-buster FPM inválido'
+FPM_CHECK_URL="$BASE_URL/$(basename "$FPM_CHECK_FILE")?fpm_probe=$FPM_CACHE_BUSTER"
+FPM_HEADERS_FILE="$(mktemp "$TMP_DIR/gisley-fpm-headers.XXXXXX")" \
+    || fail 'falha ao criar arquivo temporário de headers FPM'
+FPM_BODY_FILE="$(mktemp "$TMP_DIR/gisley-fpm-body.XXXXXX")" \
+    || fail 'falha ao criar arquivo temporário de corpo FPM'
+FPM_CURL_CONFIG_FILE="$(mktemp "$TMP_DIR/gisley-fpm-curl.XXXXXX")" \
+    || fail 'falha ao criar configuração temporária do curl FPM'
+printf 'header = "X-FPM-Check-Token: %s"\n' "$FPM_TOKEN" > "$FPM_CURL_CONFIG_FILE"
 
 # Faz várias sondas para observar workers diferentes. Uma resposta insegura
 # bloqueia o deploy; não há fallback permissivo nem reset remoto de opcache.
 for attempt in 1 2 3 4 5; do
-    fpm_response=''
-    fpm_response="$(curl --fail --silent --show-error --max-time 15 \
+    : > "$FPM_HEADERS_FILE"
+    : > "$FPM_BODY_FILE"
+    curl --fail --silent --show-error --max-time 15 \
+        --dump-header "$FPM_HEADERS_FILE" \
+        --output "$FPM_BODY_FILE" \
+        --config "$FPM_CURL_CONFIG_FILE" \
         -H 'Cache-Control: no-cache' \
-        -H "X-FPM-Check-Token: $FPM_TOKEN" \
-        "$FPM_CHECK_URL" 2>&1)" \
-        || fail "falha ao acessar o script de verificação FPM (tentativa $attempt): $fpm_response"
+        -H 'Pragma: no-cache' \
+        -H 'Accept: application/json' \
+        "$FPM_CHECK_URL" \
+        || fail "falha ao acessar o script de verificação FPM (tentativa $attempt)"
 
-    fpm_secure="$(printf '%s' "$fpm_response" | "$PHP_BIN" -r '
-    \$j = json_decode(stream_get_contents(STDIN), true);
-    echo isset(\$j["secure"]) ? (\$j["secure"] ? "1" : "0") : "ERR";
-    ')"
+    grep -Eiq '^cache-control:[[:space:]]*[^\r\n]*no-store' "$FPM_HEADERS_FILE" \
+        || fail "resposta FPM sem Cache-Control no-store (tentativa $attempt)"
+    grep -Eiq '^content-type:[[:space:]]*application/json([;[:space:]]|$)' "$FPM_HEADERS_FILE" \
+        || fail "resposta FPM sem Content-Type JSON (tentativa $attempt)"
+
+    # O código PHP é deliberadamente literal; nenhum valor do shell deve ser
+    # interpolado no parser que valida a resposta do FPM.
+    # shellcheck disable=SC2016
+    fpm_secure="$("$PHP_BIN" -r '
+    $j = json_decode(stream_get_contents(STDIN), true);
+    $secure = is_array($j)
+        && ($j["secure"] ?? false) === true
+        && ($j["patched"] ?? false) === true
+        && ($j["upload_progress_disabled"] ?? false) === true
+        && ($j["post_max_bounded"] ?? false) === true
+        && ($j["sapi"] ?? null) === "fpm-fcgi";
+    echo $secure ? "1" : "0";
+    ' < "$FPM_BODY_FILE")" \
+        || fail "não foi possível validar o corpo JSON do FPM (tentativa $attempt)"
     [[ "$fpm_secure" == "1" ]] || {
         printf 'deploy-hostgator: FPM runtime NÃO É seguro contra PHP2Shell.\n' >&2
-        printf 'Resposta do FPM:\n%s\n' "$fpm_response" >&2
         fail 'O PHP-FPM da HostGator está vulnerável a CVE-2026-109618/109619. Abortando deploy.'
     }
-    printf 'FPM security check %d/5 OK:\n%s\n' "$attempt" "$fpm_response"
+    printf 'FPM security check %d/5 OK\n' "$attempt"
 done
 
 rm -f "$FPM_CHECK_FILE"
+FPM_CHECK_FILE=''
 
 "$PHP_BIN" artisan config:clear --no-ansi
 "$PHP_BIN" artisan route:clear --no-ansi
@@ -183,7 +237,15 @@ else
     printf 'migrations não executadas; defina RUN_MIGRATIONS=1 em uma janela aprovada\n'
 fi
 
-health_body="$(curl --fail --silent --show-error --location --max-time 15 "$HEALTH_URL")" || fail 'health check falhou'
+HEALTH_CACHE_BUSTER="$(openssl rand -hex 16)" || fail 'falha ao gerar cache-buster do health check'
+if [[ "$HEALTH_URL" == *\?* ]]; then
+    HEALTH_CHECK_URL="${HEALTH_URL}&deploy_probe=$HEALTH_CACHE_BUSTER"
+else
+    HEALTH_CHECK_URL="${HEALTH_URL}?deploy_probe=$HEALTH_CACHE_BUSTER"
+fi
+health_body="$(curl --fail --silent --show-error --location --max-time 15 \
+    -H 'Cache-Control: no-cache, no-store' -H 'Pragma: no-cache' \
+    "$HEALTH_CHECK_URL")" || fail 'health check falhou'
 [[ "$health_body" == '{"status":"ok"}' ]] || fail 'health check retornou corpo inesperado'
 
 printf 'deploy validado: %s\n' "$DEPLOY_SHA"

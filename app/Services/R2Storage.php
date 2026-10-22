@@ -219,9 +219,15 @@ class R2Storage
      *
      * @param  string|null  $contentType  MIME type validado (ex: image/jpeg)
      * @param  string|null  $fileName  Nome seguro do arquivo para Content-Disposition
+     * @param  string  $cacheControl  Cache-Control que o R2 deve devolver
      */
-    public function presignGet(string $path, int $seconds = 60, ?string $contentType = null, ?string $fileName = null): string
-    {
+    public function presignGet(
+        string $path,
+        int $seconds = 60,
+        ?string $contentType = null,
+        ?string $fileName = null,
+        string $cacheControl = 'public, max-age=60',
+    ): string {
         $key = $this->assertKey($path);
         $client = $this->client();
 
@@ -240,7 +246,7 @@ class R2Storage
         // Força Content-Type estrito na resposta — o navegador nunca faz
         // sniffing quando o servidor declara o tipo com ResponseContent-Type.
         if ($contentType !== null && $contentType !== '') {
-            $params['ResponseContent-Type'] = $contentType;
+            $params['ResponseContentType'] = $contentType;
         }
 
         // Content-Disposition inline com filename — permite exibir as imagens
@@ -250,6 +256,11 @@ class R2Storage
             $safeName = preg_replace('/[^A-Za-z0-9._-]/', '-', $fileName) ?: 'imagem';
             $params['ResponseContentDisposition'] = 'inline; filename="'.$safeName.'"';
         }
+
+        if (! in_array($cacheControl, ['public, max-age=60', 'private, no-store'], true)) {
+            throw new RuntimeException('INVALID_CACHE_CONTROL');
+        }
+        $params['ResponseCacheControl'] = $cacheControl;
 
         $command = $client->getCommand('GetObject', $params);
 

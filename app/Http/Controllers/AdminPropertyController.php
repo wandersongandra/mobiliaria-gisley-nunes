@@ -296,6 +296,7 @@ class AdminPropertyController extends Controller
                 60,
                 (string) ($photo['mime_type'] ?? ''),
                 basename((string) $photo['storage_path']),
+                'private, no-store',
             ),
             307,
         )->header('Cache-Control', 'no-store');
