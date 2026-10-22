@@ -225,7 +225,8 @@ como aprovação.
   referência histórica.
 - Commits atômicos desta continuação: `60264dc` (testes de autenticação/dados),
   `c53bcae` (estado/foco/refresh do admin), `6f2c7b3` (floor do AWS SDK) e
-  `03361aa` (WAF, CORS, migração PHP e relatório).
+  `03361aa` (WAF, CORS, migração PHP e relatório), `4a135fc` (handoff do
+  relatório) e `d5ba552` (verificação ShellCheck).
 - PR #27 permanece aberta e **DRAFT**. Não foi criada PR duplicada nem alterada
   a configuração do repositório.
 - CodeRabbit terminou uma revisão `COMMENTED` no HEAD anterior; os cinco
