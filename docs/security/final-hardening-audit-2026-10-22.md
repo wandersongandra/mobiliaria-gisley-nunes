@@ -87,11 +87,11 @@ comportamento aprovado; a ausência de um achado não é inferida de configuraç
 | MEDIUM | `app/Services/R2Storage.php` | `ResponseContent-Type` não era o nome do parâmetro SDK e cache de GET não era fixado | Teste falhou: `response-content-type` ausente; após `ResponseContentType` + `ResponseCacheControl`, 24 testes passaram | Navegador poderia receber tipo diferente do esperado e mídia administrativa poderia ser reutilizada por cache | Parâmetros SDK corretos, allowlist de cache público curto/privado sem cache e admin usando `private, no-store` | CONFIRMED → CORRIGIDO; PASS |
 | MEDIUM | `composer.json` + `app/Services/R2Storage.php` | Constraint `^3.0` permitia resolver SDK abaixo do release efetivamente testado, embora o signer dependa dos hooks protegidos de presign | Código estende `S3SignatureV4::getHeaderBlacklist()`/`getPresignHeaderDenyList()`; lock testado em 3.400.1 e teste confirma `Content-Type`/`If-None-Match` assinados | Regeneração do lock poderia produzir combinação sem o contrato de assinatura validado, enfraquecendo anti-replay | Floor fixado em `aws/aws-sdk-php ^3.400.1`; lock atualizado somente no `content-hash` | CONFIRMED (compatibilidade de segurança) → CORRIGIDO; PASS |
 | LOW | `bootstrap/app.php` | `ThrottleRequestsException` caía no tratamento genérico e podia devolver 500 quando o limite era atingido com debug desativado | Regressão pré-correção: exit 1, esperado 429 e recebido 500; CI MySQL também falhou na mesma fronteira | Clientes e monitoramento recebiam erro interno em vez de sinal de rate limit; o bloqueio não era bypassado | Mapeamento explícito para 429, `RATE_LIMITED` e headers do framework; teste usa IP determinístico | CONFIRMED → CORRIGIDO; PASS |
-| LOW | `playwright.config.js` / suíte browser | Workers paralelos excedem a memória disponível e abortam processos; não é vulnerabilidade de runtime | `npx.cmd playwright test --workers=4 --fully-parallel --reporter=line`: exit 1, 19 falhas, OOM; máquina 7.976 MB, pico dos processos novos 517 MB, 7 processos | CI/local pode produzir falso negativo, processos podem ser abortados e mascarar regressões | `workers: 1` explícito, `fullyParallel: false`, sem reduzir os 21 cenários; serial final PASS | CONFIRMED → MITIGADO; monitorar no CI |
+| LOW | `playwright.config.js` / suíte browser | Workers paralelos excedem os recursos disponíveis e podem abortar processos; não é vulnerabilidade de runtime | Execução medida com 4 workers registrou 7.976 MB de RAM física, pico de 517 MB nos 7 processos novos e falha por pressão; nova execução com 8 workers terminou com `ERR_INSUFFICIENT_RESOURCES`, 8 falhas e 13 pass; 4 workers também passou em tentativa posterior | CI/local pode produzir falso negativo, processos podem ser abortados e mascarar regressões | `workers: 1` explícito, `fullyParallel: false`, sem reduzir os 21 cenários; serial final PASS | CONFIRMED → MITIGADO; monitorar no CI |
 | INFORMATIONAL | `docs/security/cloudflare-waf-php2shell.txt` | Fallback regex ainda dependia de `http.request.body.raw` e não resolvia plano sem body inspection | Auditoria contra documentação Cloudflare: `body.raw`, `body.truncated`, `body.mime`, `body.form` e `body.size` têm requisitos/limites de plano; fallback não era independente | Operador poderia acreditar em cobertura inexistente | Seção removida; regra permanece adicional e PHP/FPM é controle primário | CORRIGIDO; staging NOT VERIFIED |
 | HIGH residual | HostGator/PHP-FPM | Runtime web real não foi acessado | CLI 8.2.35 passou; FPM remoto não foi sondado | FPM abaixo do patch mínimo pode manter exposição ao PHP2Shell | Gate fail-closed e roteiro de staging | NOT VERIFIED; sem confirmação remota |
 | MEDIUM residual | R2/CORS/OAuth/WAF efetivos | Integrações externas não disponíveis/permitidas nesta sessão | Nenhum bucket, zone, client OAuth ou domínio de staging autorizado foi identificado | Configuração efetiva pode divergir da proposta local | Checklist executável de homologação | NOT VERIFIED |
-| LOW | Pint global | Divergências de estilo em 17 arquivos fora do diff desta tarefa | Global exit 1; nenhum dos 17 caminhos retornados coincide com os arquivos modificados nesta continuação | Ruído de qualidade, sem evidência de falha de segurança | PR de estilo separada; não reformatado aqui | FAIL preexistente/fora do escopo |
+| LOW | Pint global | Divergências de estilo em 16 arquivos fora do diff desta tarefa | Global exit 1; nenhum dos 16 caminhos retornados coincide com os arquivos modificados nesta continuação | Ruído de qualidade, sem evidência de falha de segurança | PR de estilo separada; não reformatado aqui | FAIL preexistente/fora do escopo |
 
 Vetor PHP2Shell em até três linhas: um multipart malicioso pode atingir o
 processamento de upload/progresso de sessão antes do fluxo normal da aplicação.
@@ -160,6 +160,13 @@ bucket real.
 | CORS proposto | parse JSON + regra de origens | 0 | PASS | `cors_proposed_tracked=True`, `cors_wildcard_local_preview_count=0`, origem do painel presente |
 | Diff whitespace | `git diff --check` | 0 | PASS | somente avisos informativos de conversão LF/CRLF |
 | Migração MySQL real | não executado | — | BLOCKED | sem banco de staging autorizado; nenhum banco real alterado |
+| PHPUnit no merge HEAD | `vendor/bin/phpunit --testsuite=Feature --do-not-cache-result` com PHP 8.2.35 | 0 | PASS | `OK (179 tests, 883 assertions)` em `d784b2c` |
+| Playwright serial no merge HEAD | `npx.cmd playwright test --reporter=line` | 0 | PASS | `Running 21 tests using 1 worker`; `21 passed (28.2s)` |
+| Playwright 4 workers | `npx.cmd playwright test --workers=4 --fully-parallel --reporter=line` | 0 | PASS | `Running 21 tests using 4 workers`; `21 passed (11.9s)`; resultado não altera a configuração serial, que é o perfil reprodutível do host |
+| Playwright 8 workers | `npx.cmd playwright test --workers=8 --fully-parallel --reporter=line` | 1 | FAIL reproduzido por pressão do host | `ERR_INSUFFICIENT_RESOURCES`, worker encerrado com `3221226505`, 8 falhas e 13 pass |
+| Composer atual | PHAR oficial verificado por SHA-384 + PHP 8.2.35: `composer validate --strict --no-interaction` e `composer audit --locked --no-interaction --format=plain` | 0/0 | PASS | `./composer.json is valid`; `No security vulnerability advisories found.` |
+| CodeQL remoto no HEAD | workflow `CodeQL`, run `39832320086`, HEAD `d784b2c` | 0 | PASS | job `analyze` concluído com sucesso |
+| CI remoto no HEAD | `gh pr checks 27` / runs `39832320259`, `39832320127`, `39832320099` | 0 | PASS | Laravel CI/MySQL, quality/security/frontend e production package passaram; Workers preview também passou |
 
 O primeiro `pnpm test` do baseline foi iniciado junto com a geração de preview
 e falhou por manifesto ausente; a execução na ordem correta passou. Isso é
@@ -229,9 +236,17 @@ como aprovação.
 
 - Repositório: `https://github.com/wandersongandra/mobiliaria-gisley-nunes.git`.
 - Branch: `security/final-hardening-2026-10-22`; não é `main`.
-- HEAD efetivo antes desta continuação: `9ddeba35764e8c57360e525e9c1b652474ece65c`;
+- HEAD efetivo atual: `d784b2c58bfc5bf4c26fa1f7f88d0be2ac0aefc9`, com pais
+  `2211386c3e9d4d7c2ddb83a40906f5493cb3ee66` e `51f6b1c399731f46c3ace603a695037f567a392a`;
   o commit `6f4169373d6d853c81a3e33723bcc5a253eac604` permanece somente como
-  referência histórica.
+  referência histórica. O merge-base com `main` é
+  `6b476feaee5023cb0ee664f4edd16256e6055afe`.
+- A PR estava `mergeable=false`/`CONFLICTING` antes da sincronização. O merge
+  local 3-way encontrou conflitos somente em `admin/main.js`,
+  `public/admin/main.js` e `tests/browser/admin.smoke.spec.js`; a resolução
+  preservou o hardening da branch e incorporou o teste legítimo da `main`.
+  O merge commit não mudou o conteúdo da árvore da PR; foi publicado por push
+  normal e a PR passou a `MERGEABLE`.
 - Commits atômicos desta continuação: `60264dc` (testes de autenticação/dados),
   `c53bcae` (estado/foco/refresh do admin), `6f2c7b3` (floor do AWS SDK) e
   `03361aa` (WAF, CORS, migração PHP e relatório), `4a135fc` (handoff do
@@ -241,9 +256,21 @@ como aprovação.
 - PR #27 permanece aberta e **DRAFT**. Não foi criada PR duplicada nem alterada
   a configuração do repositório.
 - CodeRabbit terminou uma revisão `COMMENTED` no HEAD anterior; os cinco
-  comentários acionáveis foram verificados, quatro correções de código/documento
-  foram aplicadas e o aviso de docstring foi classificado fora do escopo. A
-  classificação completa está em G.1; isso não equivale a aprovação humana.
+  comentários acionáveis foram verificados e as cinco threads foram resolvidas
+  após regressão no HEAD atual (quatro outdated e uma atual). O aviso de
+  docstring foi classificado fora do escopo. O comando manual
+  `@coderabbitai review` foi aceito, mas a própria automação informou que não
+  reanalisa commits já revisados; o check remoto permanece pending e não é
+  tratado como aprovação humana. A classificação completa está em G.1.
+- No HEAD `d784b2c`, CodeQL, Laravel CI/MySQL, quality/security/frontend,
+  production package e Workers preview passaram. `gh pr checks` ainda retorna
+  código 8 exclusivamente por `CodeRabbit pending`; não há falha de código
+  reportada.
+- A API de proteção clássica de `main` respondeu `404 Branch not protected`, a
+  listagem de rulesets acessível não retornou regras e a consulta de checks
+  obrigatórios da branch respondeu que não há checks requeridos reportados.
+  Isso é uma lacuna de governança do repositório, não uma justificativa para
+  reduzir gates da PR.
 - `cors.json` local continua preservado e não está nos commits.
 - Não houve merge, deploy, rollback, alteração de produção, DNS, Cloudflare,
   R2, HostGator ou banco real.
@@ -281,7 +308,7 @@ estão em [`docs/homologacao-checklist.md`](../homologacao-checklist.md).
 
 | Eixo | Resultado | Justificativa |
 |---|---|---|
-| Código | **READY WITH CONDITIONS** | Correções confirmadas, testes locais verdes e nenhum CRITICAL/HIGH confirmado aberto; Pint global preexistente fora do escopo |
+| Código | **READY WITH CONDITIONS** | Correções confirmadas, testes locais e checks remotos do HEAD verdes, nenhum CRITICAL/HIGH confirmado aberto; Pint global preexistente fora do escopo e CodeRabbit pending |
 | Homologação | **READY WITH CONDITIONS** | Checklist executável pronto, mas R2/HostGator/WAF/CORS/OAuth/MySQL ainda precisam de staging identificado |
 | Produção | **BLOCKED** | Não existe evidência real de staging/produção nesta sessão; deploy e alterações reais são proibidos |
 
