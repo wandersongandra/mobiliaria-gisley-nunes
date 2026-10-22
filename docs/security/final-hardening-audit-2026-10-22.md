@@ -165,8 +165,8 @@ bucket real.
 | Playwright 4 workers | `npx.cmd playwright test --workers=4 --fully-parallel --reporter=line` | 0 | PASS | `Running 21 tests using 4 workers`; `21 passed (11.9s)`; resultado não altera a configuração serial, que é o perfil reprodutível do host |
 | Playwright 8 workers | `npx.cmd playwright test --workers=8 --fully-parallel --reporter=line` | 1 | FAIL reproduzido por pressão do host | `ERR_INSUFFICIENT_RESOURCES`, worker encerrado com `3221226505`, 8 falhas e 13 pass |
 | Composer atual | PHAR oficial verificado por SHA-384 + PHP 8.2.35: `composer validate --strict --no-interaction` e `composer audit --locked --no-interaction --format=plain` | 0/0 | PASS | `./composer.json is valid`; `No security vulnerability advisories found.` |
-| CodeQL remoto no HEAD final | workflow `CodeQL`, run `39832722876`, HEAD `1761322` | 0 | PASS | job `analyze` concluído com sucesso |
-| CI remoto no HEAD final | `gh pr checks 27` / runs `39832722892`, `39832722866`, `39832722889` e `39832717407` | 0 | PASS | Laravel CI/MySQL, quality/security/frontend, production package, CodeQL e Workers preview passaram; `gh pr checks` exit 0 |
+| CodeQL remoto no HEAD final | workflow `CodeQL`, run `39833032792`, HEAD `955ba5d` | 0 | PASS | job `analyze` concluído com sucesso |
+| CI remoto no HEAD final | `gh pr checks 27` / runs `39833032635`, `39833032648`, `39833032668` e `39833026662` | 8 | BLOCKED/PENDING | MySQL, quality/security, production package, CodeQL e Workers preview passaram; o job frontend do run `39833032648` permanece em `Install Chromium for browser smoke`, sem falha de teste reportada |
 
 O primeiro `pnpm test` do baseline foi iniciado junto com a geração de preview
 e falhou por manifesto ausente; a execução na ordem correta passou. Isso é
@@ -236,8 +236,9 @@ como aprovação.
 
 - Repositório: `https://github.com/wandersongandra/mobiliaria-gisley-nunes.git`.
 - Branch: `security/final-hardening-2026-10-22`; não é `main`.
-- HEAD efetivo atual: `176132286b063411c232348e8caf00231d816fc9`, commit documental
-  sobre o merge `d784b2c58bfc5bf4c26fa1f7f88d0be2ac0aefc9`, cujos pais são
+- HEAD efetivo atual: `955ba5da98bba6ceacadd0a60a03a87bcdea57e6`, commit documental
+  sobre o merge `d784b2c58bfc5bf4c26fa1f7f88d0be2ac0aefc9` e os ajustes de
+  evidência `1761322`, cujos pais do merge são
   `2211386c3e9d4d7c2ddb83a40906f5493cb3ee66` e
   `51f6b1c399731f46c3ace603a695037f567a392a`;
   o commit `6f4169373d6d853c81a3e33723bcc5a253eac604` permanece somente como
@@ -265,10 +266,11 @@ como aprovação.
   reanalisa commits já revisados; o check remoto terminou como `pass` com
   revisão pulada por a PR continuar draft, e não é tratado como aprovação
   humana. A classificação completa está em G.1.
-- No HEAD final `1761322`, CodeQL, Laravel CI/MySQL, quality/security/frontend,
-  production package e Workers preview passaram. `gh pr checks 27` retornou
-  código 0; CodeRabbit aparece como `pass` com a mensagem esperada de revisão
-  pulada por a PR continuar draft.
+- No HEAD final `955ba5d`, CodeQL, Laravel CI/MySQL, quality/security,
+  production package e Workers preview passaram. O job frontend correspondente
+  ainda está pendente em `Install Chromium for browser smoke`; não há falha de
+  teste reportada. CodeRabbit aparece como `pass` com a mensagem esperada de
+  revisão pulada por a PR continuar draft.
 - A API de proteção clássica de `main` respondeu `404 Branch not protected`, a
   listagem de rulesets acessível não retornou regras e a consulta de checks
   obrigatórios da branch respondeu que não há checks requeridos reportados.
