@@ -98,7 +98,11 @@ Todos os resultados abaixo foram obtidos nesta sessão. `PASS`, `FAIL`, `BLOCKED
 - Worktree baseline separado foi criado e devolvido limpo; nenhum stash, reset, clean, checkout/restore em massa ou `git add .` foi usado.
 - `cors.json` continua não rastreado, preexistente, preservado e fora do staging/PR.
 - Commits desta sessão: `b2e49b6` (`fix(security): harden OAuth input and admin origin`) e `38a5fbc` (`docs(security): record final homologation evidence`).
-- Push, número da PR e checks remotos serão registrados no handoff após a publicação; merge e deploy continuam proibidos.
+- Commit de handoff: `c919eda` (`docs(security): record commit handoff`).
+- Push: **PASS**, branch remota atualizada até `c919eda66340c11f447e3c4d64aeb22e5733359b`.
+- PR draft: **#27**, [security: final hardening and homologation gates](https://github.com/wandersongandra/mobiliaria-gisley-nunes/pull/27), estado `OPEN`/`DRAFT`.
+- Checks remotos observados para o SHA publicado: `analyze`, `frontend`, `mysql`, `production-build`, `quality`, `security`, `CodeQL` e `Workers Builds` em **PASS**. `CodeRabbit` ficou **SKIPPED** porque a PR é draft.
+- Merge e deploy continuam proibidos; o check Workers Builds foi um preview automático da integração e não foi promovido por esta sessão.
 
 ## G. Pendências
 
