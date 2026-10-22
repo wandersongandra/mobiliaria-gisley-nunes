@@ -3,11 +3,16 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\PublicApiController;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class RequestBoundaryTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -44,5 +49,22 @@ class RequestBoundaryTest extends TestCase
 
         $this->assertNotNull($route);
         $this->assertContains('throttle:public-api', $route->middleware());
+    }
+
+    public function test_auth_login_is_rate_limited_after_thirty_attempts_from_one_ip(): void
+    {
+        config([
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'test-client-secret',
+        ]);
+        RateLimiter::clear('auth-login:127.0.0.1');
+
+        for ($attempt = 0; $attempt < 30; $attempt++) {
+            $this->get('/api/auth/login')->assertRedirect();
+        }
+
+        $response = $this->get('/api/auth/login');
+
+        $this->assertInstanceOf(ThrottleRequestsException::class, $response->exception);
     }
 }

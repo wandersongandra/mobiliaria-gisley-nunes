@@ -70,6 +70,26 @@ class SessionRevocationTest extends TestCase
         return $request;
     }
 
+    public function test_establish_regenerates_the_framework_session_id(): void
+    {
+        $identity = $this->attachAdminIdentity('session-rotation-sub', 'rotation@example.test', 'Rotação');
+        $request = Request::create('/api/auth/callback', 'GET');
+        $request->setLaravelSession(app('session.store'));
+        $before = $request->session()->getId();
+
+        app(AdminAccessService::class)->establish($request, [
+            'provider' => 'google',
+            'providerSubject' => 'session-rotation-sub',
+            'openId' => 'session-rotation-sub',
+            'email' => 'rotation@example.test',
+            'name' => 'Rotação',
+            'userId' => $identity['user_id'],
+            'identityId' => $identity['identity_id'],
+        ], 'editor');
+
+        $this->assertNotSame($before, $request->session()->getId());
+    }
+
     // --- Session Revocation ---
 
     public function test_revoked_session_is_immediately_rejected_with_401(): void
