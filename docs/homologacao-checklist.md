@@ -78,15 +78,17 @@ Rollback: restaurar a configuração anterior documentada do bucket de homologa�
 
 Status atual: NOT VERIFIED — não houve acesso ao bucket nem aplicação de CORS.
 
-## 3. PHP-FPM e HostGator
+## 3. PHP web (PHP-FPM ou LiteSpeed LSAPI) e HostGator
 
-Pré-requisitos: acesso SSH/SFTP ao ambiente de homologação e um hostname de teste apontando para o release correto.
+Pré-requisitos: acesso SSH ao ambiente de homologação, HTTPS válido e hostname
+de teste apontando para o release correto. Não expor sondas em um staging
+bloqueado sem uma janela de teste específica e controles de acesso temporários.
 
 Passos:
 
-1. Verifique o PHP CLI e o PHP-FPM efetivo; eles devem estar em patch suportado, não apenas o CLI.
-2. Execute o preflight do release e confirme que `public/.user.ini` está no diretório público correto.
-3. Confirme via HTTP que `session.upload_progress.enabled=0` e `post_max_size` estão efetivos no FPM.
+1. Verifique o PHP CLI e o PHP web efetivo; ambos devem estar em patch suportado. Para o runtime web, aceite apenas os SAPIs conhecidos `fpm-fcgi` ou `litespeed`, nunca uma suposição baseada no CLI.
+2. Execute o preflight do release e confirme que `public/.user.ini` e as diretivas do cPanel estão no diretório público correto.
+3. Confirme via HTTP, com a sonda efêmera autorizada, que `session.upload_progress.enabled=0`, `post_max_size` limitado e versão corrigida estão efetivos no PHP web.
 4. Simule uma instalação com PHP abaixo de 8.2.35, uma diretiva ausente e uma falha de probe; o deploy deve abortar e limpar o arquivo temporário.
 5. Confirme permissões mínimas: apenas `storage` e `bootstrap/cache` graváveis pela aplicação; `.env`, `vendor` sensível e arquivos internos não expostos.
 
@@ -104,15 +106,26 @@ $env:RUN_MIGRATIONS = '0'
 bash scripts/deploy-hostgator.sh
 ```
 
+Os comandos de deploy acima são **exemplos para uma janela futura aprovada**;
+não são autorizados pelo preparo de staging. A sonda temporária deve ser
+inacessível sem token CSPRNG e removida em sucesso, erro e interrupção.
+
 Resultado esperado: release abortado em qualquer falha obrigatória; nenhuma mensagem imprime secrets; probe retorna somente os valores de controle esperados e é removido ao final.
 
-Critério de aprovação: PHP-FPM efetivo atende o patch mínimo da branch, upload progress está desabilitado, `post_max_size` está limitado e todas as falhas são fail-closed.
+Critério de aprovação: PHP web efetivo é FPM ou LSAPI conhecido, atende o patch mínimo da branch, tem upload progress desabilitado, `post_max_size` limitado e todas as falhas são fail-closed.
 
-Critério de reprovação: CLI aprovado com FPM divergente, fallback permissivo, probe público persistente, `.env` acessível ou deploy continua após falha.
+Critério de reprovação: CLI aprovado com PHP web divergente, SAPI desconhecido, fallback permissivo, probe público persistente, `.env` acessível ou deploy continua após falha.
 
 Rollback: não prosseguir com o release; manter o release anterior intacto e usar o rollback operacional do HostGator somente para o ambiente de homologação autorizado.
 
-Status atual: NOT VERIFIED — o PHP CLI padrão continua em 8.2.29; o PHP oficial temporário 8.2.35 foi usado nesta sessão e passou os gates locais; FPM/HostGator não foram acessados.
+Status atual (22/10/2026): PARCIAL. cPanel HostGator `gisley77` acessado,
+staging `staging.gisleynunesimoveis.com.br` separado e bloqueado por 403,
+HTTPS válido, handler `ea-php83___lsphp` configurado. PHP 8.3.36 confirmado
+no binário CLI da versão selecionada. No MultiPHP INI Editor exclusivo do staging,
+`post_max_size=16M`, `upload_max_filesize=12M` e
+`session.upload_progress.enabled=Off` foram salvos com sucesso.
+**PHP_SAPI e diretivas efetivas via HTTP ainda NOT VERIFIED**; nenhuma sonda
+web, deploy ou migration foi realizada.
 
 ## 4. Cloudflare WAF / PHP2Shell
 

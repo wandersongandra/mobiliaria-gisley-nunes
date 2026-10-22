@@ -87,18 +87,18 @@ git checkout --detach "$DEPLOY_SHA"
 "$COMPOSER_BIN" validate --strict --no-interaction
 "$COMPOSER_BIN" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
 
-# Revalida o mtime do arquivo versionado antes da sonda. O FPM deve carregar
-# esta configuração por diretório; a sonda abaixo é o gate que prova o valor
-# efetivo, enquanto o comando Artisan só consegue validar o arquivo no CLI.
+# Revalida o mtime do arquivo versionado antes da sonda. O runtime web
+# (PHP-FPM ou LiteSpeed LSAPI) precisa carregar a configuração por diretório.
+# Apenas a sonda HTTP comprova os valores efetivos; CLI não é suficiente.
 touch "$PROJECT_ROOT/public/.user.ini" || fail 'não foi possível atualizar o mtime de public/.user.ini'
 
 # ============================================================================
-# FPM SECURITY CHECK (PHP2Shell CVE-2026-109618 / CVE-2026-109619)
+# WEB PHP SECURITY CHECK (PHP2Shell CVE-2026-109618 / CVE-2026-109619)
 # ============================================================================
-# O php-cli pode estar atualizado enquanto o php-fpm do domínio continua
-# vulnerável.  Em vez de verificar via CLI, criamos um script efêmero em
-# public/ e o acessamos via HTTP — o request passa pelo PHP-FPM, que é o
-# runtime que realmente serve a aplicação.
+# O php-cli pode estar atualizado enquanto o PHP web do domínio continua
+# vulnerável. A sonda efêmera em public/ valida o runtime realmente servido.
+# Somente SAPIs conhecidos (PHP-FPM e LiteSpeed LSAPI), com versão patched,
+# upload-progress desativado e POST limitado, podem passar pelo gate.
 #
 # Derivamos a URL base do HEALTH_URL (ex: https://www.gisleynunesimoveis.com.br
 # a partir de https://www.gisleynunesimoveis.com.br/health/live).
@@ -107,7 +107,7 @@ BASE_URL="$(printf '%s' "$HEALTH_URL" | sed -E 's|^(https?://[^/]+).*|\1|')"
     || fail 'HEALTH_URL deve usar HTTPS e um host simples do mesmo vhost'
 
 # O arquivo e o token são imprevisíveis. O arquivo temporário recebe modo 600;
-# o PHP-FPM deve usar o mesmo usuário da conta que executa o deploy.
+# o worker PHP web deve executar sob o usuário da conta que faz o deploy.
 FPM_CHECK_FILE="$(mktemp "$PROJECT_ROOT/public/.fpm_sec_check.XXXXXX.php")" \
     || fail 'falha ao criar arquivo temporário de verificação FPM'
 FPM_TOKEN="$(openssl rand -hex 32)" \
@@ -208,15 +208,15 @@ for attempt in 1 2 3 4 5; do
         && ($j["patched"] ?? false) === true
         && ($j["upload_progress_disabled"] ?? false) === true
         && ($j["post_max_bounded"] ?? false) === true
-        && ($j["sapi"] ?? null) === "fpm-fcgi";
+        && in_array(($j["sapi"] ?? null), ["fpm-fcgi", "litespeed"], true);
     echo $secure ? "1" : "0";
     ' < "$FPM_BODY_FILE")" \
-        || fail "não foi possível validar o corpo JSON do FPM (tentativa $attempt)"
+        || fail "não foi possível validar o corpo JSON do PHP web (tentativa $attempt)"
     [[ "$fpm_secure" == "1" ]] || {
-        printf 'deploy-hostgator: FPM runtime NÃO É seguro contra PHP2Shell.\n' >&2
-        fail 'O PHP-FPM da HostGator está vulnerável a CVE-2026-109618/109619. Abortando deploy.'
+        printf 'deploy-hostgator: runtime PHP web não passou no gate PHP2Shell.\n' >&2
+        fail 'Versão, diretivas ou SAPI do PHP web incompatíveis com a política de segurança. Abortando deploy.'
     }
-    printf 'FPM security check %d/5 OK\n' "$attempt"
+    printf 'PHP web security check %d/5 OK\n' "$attempt"
 done
 
 rm -f "$FPM_CHECK_FILE"

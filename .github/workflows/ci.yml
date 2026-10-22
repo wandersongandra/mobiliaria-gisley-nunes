@@ -70,6 +70,13 @@ jobs:
           composer --version
           php -m | grep -qi pdo_sqlite
 
+      - name: HostGator deploy security gate regression
+        run: |
+          bash -n scripts/deploy-hostgator.sh
+          bash -n scripts/test-deploy-hostgator.sh
+          shellcheck scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh
+          bash scripts/test-deploy-hostgator.sh
+
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
