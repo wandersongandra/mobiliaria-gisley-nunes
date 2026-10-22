@@ -12,6 +12,7 @@ use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Session\TokenMismatchException;
 use Illuminate\Validation\ValidationException;
@@ -57,6 +58,10 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($e instanceof TokenMismatchException
                 || ($e instanceof HttpExceptionInterface && $e->getStatusCode() === 419)) {
                 return response()->json(['error' => 'CSRF_TOKEN_MISMATCH'], 419);
+            }
+
+            if ($e instanceof ThrottleRequestsException) {
+                return response()->json(['error' => 'RATE_LIMITED'], 429, $e->getHeaders());
             }
 
             report($e);
