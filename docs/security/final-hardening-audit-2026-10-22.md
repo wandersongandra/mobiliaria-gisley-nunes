@@ -16,6 +16,13 @@ Foram confirmados e corrigidos nesta continuação:
 - `presignGet` usava `ResponseContent-Type`, nome não reconhecido pelo AWS SDK,
   e não fixava `ResponseCacheControl`; o teste de regressão falhou antes da
   correção e passou depois.
+- lacunas de evidência em OAuth, sessão, autorização, rate limit, SQLi,
+  mass assignment e consistência R2↔MySQL receberam testes comportamentais;
+  nenhum desses testes revelou bypass de produção.
+- o teste Playwright paralelo foi reproduzido com OOM; a configuração agora
+  fixa um worker e mantém todos os testes, e a suíte final passou com 21/21.
+- a documentação WAF passou a registrar truncamento/padding e requisitos
+  Enterprise, e o plano de migração PHP 8.2→8.3/8.4 foi versionado.
 
 O código está **READY WITH CONDITIONS** para homologação. Não há CRITICAL ou
 HIGH de código confirmado aberto nesta revisão. PHP-FPM/HostGator, R2 real,
@@ -23,8 +30,48 @@ CORS efetivo, WAF, OAuth externo, banco de staging e upload real continuam sem
 prova externa. Logo, produção permanece **BLOCKED**.
 
 PHP 8.2.35 existe e foi usado nesta sessão por binário oficial temporário; a
-série 8.2 recebe correções de segurança até 2026-12-31. Planejar migração para
+série 8.2 recebe correções de segurança até 2026-12-31. O floor do AWS SDK foi
+fixado no release atualmente testado (`^3.400.1`). Planejar migração para
 8.3/8.4 em PR separada, sem migrar nesta.
+
+## A.1 Matriz de cobertura de autenticação e dados
+
+Os testes abaixo foram executados nesta sessão. `PASS` significa teste de
+comportamento aprovado; a ausência de um achado não é inferida de configuração.
+
+| Área | Controle | Teste (`arquivo::método`) | Status | Evidência |
+|---|---|---|---|---|
+| OAuth | `code` escalar/canônico | `tests/Feature/OAuthIdentityTest.php::test_callback_rejects_array_query_parameters_before_external_exchange`; `test/auth.test.js::parâmetros OAuth aceitam somente valores escalares e canônicos` | PASS | PHPUnit/Node focados: exit 0; 40 testes PHP e 64 testes Node aprovados |
+| OAuth | `state` vinculado à sessão | `tests/Feature/OAuthIdentityTest.php::test_callback_rejects_a_state_that_is_not_bound_to_the_session`; `test/auth-session.test.js::state OAuth usa hash estável e comparação segura de tamanho fixo` | PASS | Callback rejeitou state divergente antes da troca externa; Node security exit 0 |
+| OAuth | expiração | `tests/Feature/Security/SessionRevocationTest.php::test_expired_auth_challenge_is_rejected` | PASS | Challenge expirado retornou `null`; suíte focada exit 0 |
+| OAuth | uso único/replay | `tests/Feature/OAuthIdentityTest.php::test_callback_consumes_the_oauth_challenge_and_rejects_replay`; `tests/Feature/Security/SessionRevocationTest.php::test_auth_challenge_cannot_be_consumed_twice` | PASS | Primeiro callback controlado; repetição 400; suíte focada exit 0 |
+| OAuth | redirect sem open redirect | `tests/Feature/OAuthIdentityTest.php::test_login_builds_google_authorization_request_with_the_public_callback`; `test_login_can_use_neutral_callback_path_for_host_waf_compatibility` | PASS | `redirect_uri` foi canônica/configurada, sem parâmetro arbitrário; exit 0 |
+| OAuth | erro do provedor | `tests/Feature/OAuthIdentityTest.php::test_callback_returns_a_controlled_error_when_the_provider_rejects_the_code` | PASS | Resposta 400 genérica sem stack trace; exit 0 |
+| OAuth | timeout/indisponibilidade | `tests/Feature/OAuthIdentityTest.php::test_callback_returns_a_controlled_error_when_the_provider_times_out` | PASS | `ConnectionException` sintética resultou em 400 controlado; exit 0 |
+| Sessão | fixation/regeneração de ID | `tests/Feature/Security/SessionRevocationTest.php::test_establish_regenerates_the_framework_session_id` | PASS | ID antes/depois foi diferente; exit 0 |
+| Sessão | cookies Secure/HttpOnly/SameSite/`__Host-` | `test/auth.test.js::cookies administrativos mantêm flags seguras esperadas`; `test/auth-session.test.js::cookies de produção usam prefixo __Host e flags fortes` | PASS | Node security: 64 pass, 0 fail |
+| Sessão | expiração absoluta/idle | `tests/Feature/Security/SessionRevocationTest.php::test_expired_session_is_rejected_even_without_explicit_revocation`; `::test_idle_timeout_revokes_long_inactive_session` | PASS | Sessões foram rejeitadas/revogadas; exit 0 |
+| Sessão | logout/revogação | `tests/Feature/Security/SessionRevocationTest.php::test_revoked_session_is_immediately_rejected_with_401`; `::test_logout_all_revokes_every_session_for_the_user`; `tests/Feature/SecurityContractTest.php::test_logout_revokes_session_and_writes_audit_event` | PASS | JTI revogado rejeitado e logout-all revogou todas; exit 0 |
+| Autorização | admin versus comum | `test/authorization.test.js::editor recebe 403 em todas as rotas exclusivas de gestor`; `tests/Feature/SecurityContractTest.php::test_editor_cannot_publish_or_delete_properties` | PASS | Capacidades e mutações indevidas retornaram 403; Node/PHP exit 0 |
+| Autorização | não autenticado em API privada | `tests/Feature/BackendContractTest.php::test_admin_session_and_protected_api_contract` | PASS | Sessão anônima/API privada rejeitadas com 401; exit 0 |
+| Autorização | IDOR/BOLA/ownership de mídia | `test/storage.test.js::caminho de storage pertence somente ao imóvel esperado`; `tests/Feature/UploadLifecycleTest.php::test_storage_key_boundary_rejects_ambiguous_or_unsafe_paths` | PASS | Chaves fora do imóvel e caminhos ambíguos rejeitados; exit 0 |
+| Rate limit | login por IP | `tests/Feature/RequestBoundaryTest.php::test_auth_login_is_rate_limited_after_thirty_attempts_from_one_ip`; `test/rate-limit.test.js::rate limiter aceita até o limite e bloqueia a requisição seguinte` | PASS | 31ª tentativa acionou `ThrottleRequestsException`; PHP/Node exit 0 |
+| SQLi | filtros públicos parametrizados | `tests/Feature/PublicCatalogPaginationTest.php::test_v2_catalog_treats_sql_fragments_as_values_not_query_code` | PASS | payload SQL foi tratado como valor e retornou total 0; exit 0 |
+| Mass assignment | payload não escala privilégio/publicação | `test/authorization.test.js::editor não cria imóvel publicado ou destacado por payload adulterado`; `::persistência também impede Editor de publicar ou destacar` | PASS | payload adulterado não elevou capacidades; Node security exit 0 |
+| R2 ↔ MySQL | confirmação/metadata antes do registro | `tests/Feature/UploadLifecycleTest.php::test_photo_registration_rejects_actual_object_size_mismatch`; `::test_photo_registration_rejects_actual_object_dimensions_mismatch` | PASS | objeto inconsistente não foi registrado; PHPUnit de upload exit 0 |
+| R2 ↔ MySQL | órfãos/remoção/consistência | `tests/Feature/UploadLifecycleTest.php::test_orphan_cleanup_removes_unregistered_objects`; `::test_remove_photo_cleans_object_and_database_record` | PASS | cleanup/remove cobertos localmente; R2 real ainda NOT VERIFIED |
+
+### Ciclo das lacunas
+
+- As lacunas de OAuth, sessão, SQLi e mass assignment eram lacunas de prova,
+  não vulnerabilidades confirmadas: os novos testes foram adicionados e
+  passaram sem alteração permissiva no código de produção.
+- O primeiro teste do rate limit falhou por defeito do próprio harness (`no
+  such table: morada_auth_challenges`); a causa foi a ausência de
+  `RefreshDatabase`, corrigida no teste. A regressão final passou com o
+  middleware real acionado e `ThrottleRequestsException` observado.
+- O fluxo R2↔MySQL já tinha testes de regressão; a prova local passou, mas não
+  substitui a confirmação contra bucket e banco de staging.
 
 ## B. Vulnerabilidades e riscos
 
@@ -33,9 +80,12 @@ série 8.2 recebe correções de segurança até 2026-12-31. Planejar migração
 | MEDIUM | `scripts/deploy-hostgator.sh` | Sonda com arquivo previsível, limpeza incompleta, resposta pouco validada e token em header de argumento | Prova estática pré-correção encontrou `secure-temp-file`, `signal-cleanup` e `probe-cache-hardening` ausentes; teste mock pós-correção cobriu sucesso, corpo inválido e TERM | Deploy poderia validar cache/worker errado, deixar diagnóstico público ou expor token no process list | `mktemp`, CSPRNG, config temporário do curl, `umask 077`, headers/body separados, cache-buster, validação de JSON/SAPI/headers e traps HUP/INT/TERM/EXIT | CONFIRMED → CORRIGIDO; PASS |
 | MEDIUM | `docs/security/cloudflare-waf-php2shell.txt` | Uso de `http.request.body` e comparação de mapa de cookies com `contains` | Campos foram comparados com a referência oficial do Ruleset Engine; auditoria estática pós-correção não encontrou os campos inválidos nem hostname de produção | Regra poderia não compilar ou aparentar cobertura sem bloquear | Expressão com `http.request.body.raw`, `http.cookie`, limites/plano documentados e escopo somente staging | CONFIRMED → CORRIGIDO; PASS |
 | MEDIUM | `app/Services/R2Storage.php` | `ResponseContent-Type` não era o nome do parâmetro SDK e cache de GET não era fixado | Teste falhou: `response-content-type` ausente; após `ResponseContentType` + `ResponseCacheControl`, 24 testes passaram | Navegador poderia receber tipo diferente do esperado e mídia administrativa poderia ser reutilizada por cache | Parâmetros SDK corretos, allowlist de cache público curto/privado sem cache e admin usando `private, no-store` | CONFIRMED → CORRIGIDO; PASS |
+| MEDIUM | `composer.json` + `app/Services/R2Storage.php` | Constraint `^3.0` permitia resolver SDK abaixo do release efetivamente testado, embora o signer dependa dos hooks protegidos de presign | Código estende `S3SignatureV4::getHeaderBlacklist()`/`getPresignHeaderDenyList()`; lock testado em 3.400.1 e teste confirma `Content-Type`/`If-None-Match` assinados | Regeneração do lock poderia produzir combinação sem o contrato de assinatura validado, enfraquecendo anti-replay | Floor fixado em `aws/aws-sdk-php ^3.400.1`; lock atualizado somente no `content-hash` | CONFIRMED (compatibilidade de segurança) → CORRIGIDO; PASS |
+| LOW | `playwright.config.js` / suíte browser | Workers paralelos excedem a memória disponível e abortam processos; não é vulnerabilidade de runtime | `npx.cmd playwright test --workers=4 --fully-parallel --reporter=line`: exit 1, 19 falhas, OOM; máquina 7.976 MB, pico dos processos novos 517 MB, 7 processos | CI/local pode produzir falso negativo, processos podem ser abortados e mascarar regressões | `workers: 1` explícito, `fullyParallel: false`, sem reduzir os 21 cenários; serial final PASS | CONFIRMED → MITIGADO; monitorar no CI |
+| INFORMATIONAL | `docs/security/cloudflare-waf-php2shell.txt` | Fallback regex ainda dependia de `http.request.body.raw` e não resolvia plano sem body inspection | Auditoria contra documentação Cloudflare: `body.raw`, `body.truncated`, `body.mime`, `body.form` e `body.size` têm requisitos/limites de plano; fallback não era independente | Operador poderia acreditar em cobertura inexistente | Seção removida; regra permanece adicional e PHP/FPM é controle primário | CORRIGIDO; staging NOT VERIFIED |
 | HIGH residual | HostGator/PHP-FPM | Runtime web real não foi acessado | CLI 8.2.35 passou; FPM remoto não foi sondado | FPM abaixo do patch mínimo pode manter exposição ao PHP2Shell | Gate fail-closed e roteiro de staging | NOT VERIFIED; sem confirmação remota |
 | MEDIUM residual | R2/CORS/OAuth/WAF efetivos | Integrações externas não disponíveis/permitidas nesta sessão | Nenhum bucket, zone, client OAuth ou domínio de staging autorizado foi identificado | Configuração efetiva pode divergir da proposta local | Checklist executável de homologação | NOT VERIFIED |
-| LOW | Pint global | Divergências de estilo em 19 arquivos fora do diff desta tarefa | Global exit 1; baseline limpo reportou o mesmo conjunto; nenhum arquivo tocado nesta sessão está na lista | Ruído de qualidade, sem evidência de falha de segurança | PR de estilo separada; não reformatado aqui | FAIL preexistente/fora do escopo |
+| LOW | Pint global | Divergências de estilo em 17 arquivos fora do diff desta tarefa | Global exit 1; nenhum dos 17 caminhos retornados coincide com os arquivos modificados nesta continuação | Ruído de qualidade, sem evidência de falha de segurança | PR de estilo separada; não reformatado aqui | FAIL preexistente/fora do escopo |
 
 Vetor PHP2Shell em até três linhas: um multipart malicioso pode atingir o
 processamento de upload/progresso de sessão antes do fluxo normal da aplicação.
@@ -55,6 +105,17 @@ limites de corpo efetivos.
 | `tests/Feature/UploadLifecycleTest.php` | Testes para headers/cache assinados e política inválida | Regressão para o defeito confirmado |
 | `docs/security/cloudflare-waf-php2shell.txt` | Campos válidos, limites de plano e uso exclusivamente em staging | Evitar regra WAF inexequível e alteração de produção |
 | `docs/homologacao-checklist.md` | Probe FPM com nome/cache-buster e consulta WAF em zone de staging | Homologação reproduzível |
+| `docs/cloudflare-r2-admin.md` | Ferramentas/formato `rules.allowed` versus PascalCase e comportamento de formato incorreto | Evitar aplicar CORS na ferramenta errada |
+| `docs/cors.proposed.json` | Mantido como proposta PascalCase rastreada, sem wildcard/localhost/preview | Interoperabilidade sem tocar no `cors.json` local |
+| `docs/security/php-migration-plan.md` | Matriz CI 8.2.35/8.3/8.4, prazo antes do fim de suporte e gate HostGator | Planejar migração sem reduzir o mínimo nesta PR |
+| `playwright.config.js` | `workers: 1` documentado, mantendo todos os testes | Evitar OOM por concorrência local |
+| `admin/main.js` / `public/admin/main.js` | Skip link preserva a view; refresh de equipe pendente é enfileirado; dashboard foca `#page-title` | Corrigir achados válidos do CodeRabbit |
+| `tests/Feature/OAuthIdentityTest.php` | State divergente, replay, erro do provedor e timeout | Fechar lacunas de cobertura OAuth |
+| `tests/Feature/Security/SessionRevocationTest.php` | Regeneração de ID de sessão | Provar proteção contra fixation |
+| `tests/Feature/RequestBoundaryTest.php` | Rate limit efetivo da rota de login | Provar o controle no middleware real |
+| `tests/Feature/PublicCatalogPaginationTest.php` | Fragmento SQL tratado como valor | Regressão explícita contra SQLi |
+| `tests/browser/admin.smoke.spec.js` | Skip link e refresh concorrente da equipe | Regressões E2E para os achados CodeRabbit |
+| `composer.json` / `composer.lock` | Floor AWS SDK `^3.400.1` e atualização apenas do hash do lock | Fixar o contrato de presign testado |
 | `docs/BACKUP-RECOVERY.md` | Runbook de rollback com seis gates operacionais | Reversibilidade sem rollback destrutivo |
 
 `cors.json` local continua não rastreado, preexistente e fora dos commits/PR.
@@ -68,22 +129,26 @@ bucket real.
 | Baseline PHPUnit limpo | `vendor/bin/phpunit --testsuite=Feature --do-not-cache-result` com PHP 8.2.35 em worktree HEAD | 0 | PASS | `OK (170 tests, 826 assertions)` |
 | Regressão R2 antes da correção | filtro de `UploadLifecycleTest` | 1 | FAIL esperado | `response-content-type` ausente por parâmetro SDK incorreto |
 | Regressão R2 depois | mesmo filtro | 0 | PASS | `OK (24 tests, 65 assertions)` |
-| PHPUnit final | `vendor/bin/phpunit --testsuite=Feature --do-not-cache-result` com PHP 8.2.35 | 0 | PASS | `OK (172 tests, 831 assertions)` |
+| PHPUnit antes desta continuação | mesmo comando, PHP 8.2.35 | 0 | PASS | `OK (172 tests, 831 assertions)`; referência do estado anterior |
+| PHPUnit final desta continuação | mesmo comando, PHP 8.2.35 oficial temporário | 0 | PASS | `OK (179 tests, 881 assertions)` |
 | PHPStan | `vendor/bin/phpstan analyse --no-progress --memory-limit=1G` | 0 | PASS | `[OK] No errors` |
 | Pint direcionado | `vendor/bin/pint --test -- <PHP do diff>` | 0 | PASS | `{"tool":"pint","result":"passed"}` |
-| Pint global | `vendor/bin/pint --test` | 1 | FAIL preexistente | 19 arquivos fora do diff; baseline reportou o mesmo conjunto |
+| Pint global | `vendor/bin/pint --test` | 1 | FAIL preexistente | 17 arquivos fora do diff; nenhum arquivo desta continuação na lista |
 | Build | `pnpm build` | 0 | PASS | Vite concluiu e sincronizou `public/assets`/`public/admin` |
 | Preview | `pnpm build:preview` | 0 | PASS | `[preview] generated 19 pages` |
 | Source of truth | `pnpm test:source` | 0 | PASS | artefatos admin/Laravel sincronizados |
 | Node | `pnpm test` | 0 | PASS | `187 tests; 186 pass; 0 fail; 1 skipped` |
-| Playwright paralelo | `pnpm exec playwright test --workers=2` | 0 | PASS | `19 passed (25.2s)` |
-| Playwright serial | `pnpm exec playwright test --workers=1` | 0 | PASS | `19 passed (24.5s)`; OOM não reproduzido |
+| Playwright stress paralelo | `npx.cmd playwright test --workers=4 --fully-parallel --reporter=line` | 1 | FAIL esperado/reproduzido | `Running 19 tests using 4 workers`; 19 falhas por `worker process exited unexpectedly`/`JavaScript heap out of memory`; 7.976 MB RAM física, pico dos processos novos 517 MB, pico 7 processos |
+| Playwright browser final | `npx.cmd playwright test --reporter=line` | 0 | PASS | `Running 21 tests using 1 worker`; `21 passed (27.0s)` |
+| Playwright regressões CodeRabbit | `npx.cmd playwright test tests/browser/admin.smoke.spec.js --reporter=line` | 0 | PASS | `6 passed (4.3s)` |
 | Composer schema | PHAR oficial 8.2.35 `composer validate --strict --no-interaction` | 0 | PASS | `./composer.json is valid` |
 | Composer audit | PHAR oficial `composer audit --locked --no-interaction --format=plain` | 0 | PASS | `No security vulnerability advisories found.` |
 | pnpm audit | `pnpm audit --audit-level=high` | 0 | PASS | `No known vulnerabilities found` |
 | Secret scan | `pnpm run security:secrets` | 0 | PASS | `Secret scan: PASS` |
 | Sonda deploy | `bash -n`, ShellCheck oficial e `bash scripts/test-deploy-hostgator.sh` | 0 | PASS | cinco sondas OK; corpo inválido e TERM rejeitados; `deploy-hostgator probe tests: PASS` |
-| WAF documental | auditoria estática de campos/hostname | 0 | PASS | sem campo inválido e sem domínio de produção |
+| Sonda deploy — ShellCheck local | `shellcheck scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh` | 127 | BLOCKED | `shellcheck: command not found`; `bash -n` e mock continuam PASS; CI remoto é a verificação disponível |
+| WAF documental | auditoria estática de campos/hostname/padding | 0 | PASS | `waf_mentions_padding=True`, `waf_mentions_primary_php=True`, expressão sem `body.size` |
+| CORS proposto | parse JSON + regra de origens | 0 | PASS | `cors_proposed_tracked=True`, `cors_wildcard_local_preview_count=0`, origem do painel presente |
 | Diff whitespace | `git diff --check` | 0 | PASS | somente avisos informativos de conversão LF/CRLF |
 | Migração MySQL real | não executado | — | BLOCKED | sem banco de staging autorizado; nenhum banco real alterado |
 
@@ -103,6 +168,8 @@ falha de orquestração local, não evidência de regressão do código.
 | CORS efetivo | NOT VERIFIED | `cors.json` preservado; proposta não aplicada |
 | OAuth externo | NOT VERIFIED | Sem client de teste e callback externo |
 | Upload via navegador contra R2 | NOT VERIFIED | Browser local usa preview/fixtures |
+| Playwright local | PASS com `workers: 1`; stress paralelo FAIL por OOM reproduzido | Configuração serial documentada; não é prova de R2/produção |
+| AWS SDK / presign | PASS local | `composer.json` e lock fixam `^3.400.1`; R2 real NOT VERIFIED |
 | Deploy | SKIPPED | Proibido executar; apenas gate/sintaxe/mock local |
 
 ## F. Banco, backup e rollback
@@ -127,6 +194,27 @@ expiração, falhas de rede, órfãos e concorrência em bucket de staging.
 
 PHP 8.2.35 foi usado porque é o patch mínimo atual; planejar migração para
 8.3/8.4 antes do fim do suporte de segurança da série 8.2.
+
+O padding acima do limite do WAF permanece bypass esperado da inspeção de
+body; a aprovação exige provar que o PHP-FPM de staging continua protegido
+mesmo quando o WAF não enxerga o marcador deslocado. ShellCheck não está
+instalado localmente nesta sessão (`BLOCKED`); `bash -n` e o mock da sonda
+passaram, e o workflow remoto continua sendo a verificação complementar.
+
+## G.1 CodeRabbit — classificação independente
+
+A revisão `COMMENTED` terminou no HEAD remoto anterior, com cinco comentários
+acionáveis e um aviso de qualidade. A ausência de comentário não foi tratada
+como aprovação.
+
+| Comentário | Classificação | Prova técnica | Tratamento |
+|---|---|---|---|
+| `viewFromHash()` troca a view ativa quando o skip link usa `#admin-main` | VÁLIDO | Código retornava `dashboard-view` para qualquer hash sem link de view; fluxo podia esconder a view atual | Corrigido em `admin/main.js`; E2E cobre preservação da view e foco |
+| `teamLoading` descarta refresh pedido durante mutação | VÁLIDO | `if (teamLoading) return` descartava a chamada; teste E2E reproduz a segunda solicitação pendente | Corrigido com `teamRefreshQueued`; E2E administrativo 6/6 PASS |
+| foco de `dashboard-view` deve usar `#page-title` | VÁLIDO | `#page-title` fica fora do `section#dashboard-view`, então `querySelector('h1,h2,h3')` não encontrava heading | Corrigido; regressão browser PASS |
+| floor de `aws/aws-sdk-php` abaixo do release testado | VÁLIDO | `R2PresignSignatureV4` depende dos hooks protegidos; `^3.0` não fixava a superfície testada, enquanto lock 3.400.1 passou o teste de headers assinados | Corrigido para `^3.400.1`; `composer validate`/audit e PHPUnit PASS |
+| “fallback regex” para plano sem body inspection | VÁLIDO como correção documental | A variante ainda usava `http.request.body.raw`, que exige Enterprise e é truncável; não era fallback real | Seção removida e limites/plano/padding documentados |
+| aviso de docstring coverage (11,27% vs 80%) | FORA DE ESCOPO | É métrica de qualidade do CodeRabbit, não falha de segurança/homologação confirmada; arquivos adicionais não devem ser reformatados oportunisticamente | Não alterado; propor PR de qualidade separada |
 
 ## H. GitHub e PR
 
@@ -156,10 +244,13 @@ gate:
    `If-None-Match`, expiração, privacidade, falha de rede, substituição,
    exclusão e consistência com o banco sintético.
 3. **CORS:** consultar o bucket de staging em modo leitura, comparar com
-   `docs/cors.proposed.json`, testar preflight permitido e origens/métodos/
-   headers proibidos.
+   `docs/cors.proposed.json`, confirmar o formato nativo `rules.allowed`,
+   testar preflight permitido e origens/métodos/headers proibidos; não enviar
+   PascalCase diretamente ao Wrangler/API nativa.
 4. **WAF:** consultar a zone de staging, aplicar/validar a regra somente nela,
-   medir falso positivo no upload legítimo e confirmar bloqueio do marcador.
+   medir falso positivo no upload legítimo, confirmar bloqueio do marcador e
+   executar o caso de padding acima do limite do plano para registrar o
+   truncamento/bypass sem relaxar o gate PHP-FPM.
 5. **OAuth:** usar client/contas de teste, validar state uso único, replay,
    callback host/origem, timeout, erro do provedor e logout.
 6. **Navegador:** executar o fluxo completo de upload/download/admin em desktop

@@ -55,6 +55,19 @@ curl.exe -i -X OPTIONS "https://<R2_TEST_ENDPOINT>/<OBJECT_KEY>" -H "Origin: htt
 curl.exe -i -X OPTIONS "https://<R2_TEST_ENDPOINT>/<OBJECT_KEY>" -H "Origin: https://example.invalid" -H "Access-Control-Request-Method: PUT" -H "Access-Control-Request-Headers: content-type,if-none-match"
 ```
 
+Formatos e ferramenta:
+
+| Formato | Ferramenta autorizada | Regra operacional |
+|---|---|---|
+| `rules.allowed` | Wrangler R2/API nativa: `pnpm dlx wrangler@4.145.0 r2 bucket cors list <STAGING_BUCKET>`; aplicar somente em staging com `pnpm dlx wrangler@4.145.0 r2 bucket cors set <STAGING_BUCKET> --file <ARQUIVO_RULES_ALLOWED>` | É o formato documentado pelo Cloudflare para R2. O comando `set` exige confirmação; não usar `--force` sem autorização específica. |
+| PascalCase (`AllowedOrigins`, `AllowedMethods`...) | Adaptador/API S3 compatível que documente esse contrato; não é o payload nativo a aplicar pelo Wrangler R2 | `docs/cors.proposed.json` é proposta de interoperabilidade e não deve ser enviada diretamente ao Wrangler/API R2 sem conversão e validação. |
+
+Aplicar o formato na ferramenta errada deve ser tratado como falha: esperar erro
+de schema/HTTP não-2xx ou rejeição do comando; não presumir que a configuração
+mudou e não repetir com `--force`. Listar novamente o bucket, comparar o JSON
+efetivo e só então registrar o resultado. O `cors.json` local preexistente é
+preservado e não faz parte desta PR.
+
 Resultado esperado: somente a origem do painel autorizado recebe `Access-Control-Allow-Origin`; somente PUT e os headers explícitos são permitidos; `ETag` é exposto; preflight externo falha.
 
 Critério de aprovação: configuração efetiva equivalente à proposta, sem wildcard e sem métodos/headers extras.
@@ -111,6 +124,7 @@ Passos:
 2. Use um endpoint de teste autorizado e uma requisição multipart inofensiva que corresponda às condições documentadas.
 3. Confirme bloqueio/challenge, evento no Security Events e ausência do payload nos logs da aplicação.
 4. Teste um upload legítimo permitido e confirme que o WAF não quebra o fluxo aprovado.
+5. Execute um teste de padding acima do limite de inspeção do plano: gere um corpo multipart sintético maior que o limite contratado (por exemplo, `256 KiB` quando o limite efetivo for `128 KiB`) e coloque `PHP_SESSION_UPLOAD_PROGRESS` depois do padding. Registre `http.request.body.truncated`/evento da regra; não use dados reais nem carga repetitiva.
 
 Comando somente de leitura:
 
@@ -120,9 +134,14 @@ curl.exe -sS -H "Authorization: Bearer <CLOUDFLARE_API_TOKEN>" "https://api.clou
 
 Resultado esperado: a regra correspondente ao rascunho `docs/security/cloudflare-waf-php2shell.txt` existe no zone de homologação, bloqueia somente o padrão previsto e não expõe tokens.
 
-Critério de aprovação: evidência no Security Events e teste legítimo aprovado.
+Critério de aprovação: evidência no Security Events e teste legítimo aprovado; o
+resultado do padding é conhecido e documentado; mesmo se o WAF não detectar o
+marcador após o truncamento, o PHP-FPM de staging continua atendendo o patch
+mínimo e o hardening de `upload_progress`.
 
-Critério de reprovação: regra ausente, desabilitada, em zone errado, bypass sem evento ou bloqueio de tráfego legítimo.
+Critério de reprovação: regra ausente, desabilitada, em zone errado, bypass
+sem evidência, PHP-FPM abaixo de 8.2.35, `upload_progress` ativo ou bloqueio
+de tráfego legítimo.
 
 Rollback: desabilitar/remover somente a regra de homologação identificada, após registrar o ID; não alterar produção.
 

@@ -19,6 +19,11 @@ A regra é defense-in-depth: ela não substitui o patch do PHP (>= 8.2.35) nem
 a diretiva session.upload_progress.enabled=0 no .user.ini, mas fecha o vetor
 antes que a requisição alcance a origem.
 
+O WAF é somente uma camada adicional. A mitigação primária é PHP >= 8.2.35,
+PHP-FPM verificado no vhost correto e o hardening de runtime que desabilita
+session.upload_progress e mantém os limites de post_max_size/upload. Sem
+esses controles na origem, um bypass de inspeção da borda não é aceitável.
+
 
 REGRA DE WAF — Cloudflare Custom Rule (Ruleset Engine)
 ------------------------------------------------------
@@ -41,8 +46,10 @@ NOTAS SOBRE A EXPRESSÃO
 1. `http.request.body.raw`
    É o corpo bruto e exige plano Enterprise. A inspeção é limitada ao tamanho
    disponível no plano (128 KB no Enterprise); quando houver truncamento, o
-   campo `http.request.body.truncated` fica verdadeiro. A expressão usa
-   `lower(...)` para tornar a comparação explícita.
+   campo `http.request.body.truncated` fica verdadeiro. Um atacante pode
+   preencher o início do corpo e deslocar o campo malicioso para depois desse
+   limite, contornando esta expressão. A expressão usa `lower(...)` para
+   tornar a comparação explícita.
 
 2. `http.request.uri`
    Cobertura defensiva para ataques que tentam passar a variável via query
@@ -57,11 +64,13 @@ NOTAS SOBRE A EXPRESSÃO
 
 Campos e limites: consulte a [referência oficial de `http.request.body.raw`](https://developers.cloudflare.com/ruleset-engine/rules-language/fields/reference/http.request.body.raw/), a [referência de `http.cookie`](https://developers.cloudflare.com/ruleset-engine/rules-language/fields/reference/http.cookie/) e a [linguagem de regras](https://developers.cloudflare.com/ruleset-engine/rules-language/). Sem um plano que exponha os campos de body, a regra não pode ser considerada implantável; mantenha o gate de PHP/FPM como controle principal.
 
-
-ALTERNATIVA COM REGEX (caso `contains` não esteja disponível no plano)
----------------------------------------------------------------------
-
-lower(http.request.body.raw) contains "php_session_upload_progress"
+Compatibilidade de plano confirmada na documentação Cloudflare: `http.request.body.raw`,
+`http.request.body.mime`, `http.request.body.multipart`, `http.request.body.form`
+e `http.request.body.truncated` exigem Enterprise; `http.request.body.size`
+também exige Enterprise. Esta proposta não usa `http.request.body.size`, nem
+deve ser acrescentado como se fosse disponível em plano inferior. Os campos de
+body são truncados conforme o plano e o origin continua recebendo o corpo
+completo; portanto, o teste de padding da homologação é obrigatório.
 
 
 VARIANTE RESTRITIVA (reduz falsos positivos a quase zero)
@@ -122,5 +131,11 @@ LIMITAÇÕES
 - Se `session.upload_progress.name` for customizado no php.ini (não padrão),
   a string-alvo muda.  Verifique com `php -i | grep upload_progress.name`.
 - `http.request.body.raw` exige Enterprise e tem limite de inspeção de 128 KB
-  conforme a referência atual. `http.cookie` exige Pro, Business ou Enterprise.
-  Confirme a elegibilidade do zone de staging antes de usar esta expressão.
+  conforme a referência atual. O mesmo requisito Enterprise vale para os
+  demais campos `http.request.body.*` usados em variantes e para
+  `http.request.body.size`. Confirme a elegibilidade do zone de staging antes
+  de usar esta expressão; se o plano não suportar o campo, remova-o da regra
+  e mantenha o gate da origem, não faça fallback silencioso.
+- Um corpo com padding acima do limite pode deslocar o marcador para a região
+  não inspecionada. Esse bypass é esperado e deve ser medido em staging; ele
+  não pode liberar PHP/FPM vulnerável.
