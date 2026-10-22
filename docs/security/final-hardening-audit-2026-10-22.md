@@ -55,7 +55,7 @@ comportamento aprovado; a ausência de um achado não é inferida de configuraç
 | Autorização | admin versus comum | `test/authorization.test.js::editor recebe 403 em todas as rotas exclusivas de gestor`; `tests/Feature/SecurityContractTest.php::test_editor_can_save_drafts_but_cannot_publish_or_delete_leads` | PASS | Capacidades e mutações indevidas retornaram 403; Node/PHP exit 0 |
 | Autorização | não autenticado em API privada | `tests/Feature/BackendContractTest.php::test_admin_session_and_protected_api_contract` | PASS | Sessão anônima/API privada rejeitadas com 401; exit 0 |
 | Autorização | IDOR/BOLA/ownership de mídia | `test/storage.test.js::caminho de storage pertence somente ao imóvel esperado`; `tests/Feature/UploadLifecycleTest.php::test_storage_key_boundary_rejects_ambiguous_or_unsafe_paths` | PASS | Chaves fora do imóvel e caminhos ambíguos rejeitados; exit 0 |
-| Rate limit | login por IP | `tests/Feature/RequestBoundaryTest.php::test_auth_login_is_rate_limited_after_thirty_attempts_from_one_ip`; `test/rate-limit.test.js::rate limiter aceita até o limite e bloqueia a requisição seguinte` | PASS | 31ª tentativa acionou `ThrottleRequestsException`; PHP/Node exit 0 |
+| Rate limit | login por IP e resposta HTTP fail-closed | `tests/Feature/RequestBoundaryTest.php::test_auth_login_is_rate_limited_after_thirty_attempts_from_one_ip`; `test/rate-limit.test.js::rate limiter aceita até o limite e bloqueia a requisição seguinte` | PASS | 31ª tentativa retornou 429, `RATE_LIMITED` e `Retry-After`; PHP/Node exit 0 |
 | SQLi | filtros públicos parametrizados | `tests/Feature/PublicCatalogPaginationTest.php::test_v2_catalog_treats_sql_fragments_as_values_not_query_code` | PASS | payload SQL foi tratado como valor e retornou total 0; exit 0 |
 | Mass assignment | payload não escala privilégio/publicação | `test/authorization.test.js::editor não cria imóvel publicado ou destacado por payload adulterado`; `::persistência também impede Editor de publicar ou destacar` | PASS | payload adulterado não elevou capacidades; Node security exit 0 |
 | R2 ↔ MySQL | confirmação/metadata antes do registro | `tests/Feature/UploadLifecycleTest.php::test_photo_registration_rejects_actual_object_size_mismatch`; `::test_photo_registration_rejects_dimensions_that_do_not_match_the_object` | PASS | objeto inconsistente não foi registrado; PHPUnit de upload exit 0 |
@@ -70,6 +70,11 @@ comportamento aprovado; a ausência de um achado não é inferida de configuraç
   such table: morada_auth_challenges`); a causa foi a ausência de
   `RefreshDatabase`, corrigida no teste. A regressão final passou com o
   middleware real acionado e `ThrottleRequestsException` observado.
+- A regressão do rate limit também falhou com `APP_DEBUG=false`: o limite
+  acionado atravessava o handler de exceções e virava HTTP 500. A causa raiz
+  era o tratamento genérico de `ThrottleRequestsException`; o handler agora
+  responde 429 sem detalhes internos, e a regressão confirmou `RATE_LIMITED`
+  e `Retry-After`.
 - O fluxo R2↔MySQL já tinha testes de regressão; a prova local passou, mas não
   substitui a confirmação contra bucket e banco de staging.
 
@@ -81,6 +86,7 @@ comportamento aprovado; a ausência de um achado não é inferida de configuraç
 | MEDIUM | `docs/security/cloudflare-waf-php2shell.txt` | Uso de `http.request.body` e comparação de mapa de cookies com `contains` | Campos foram comparados com a referência oficial do Ruleset Engine; auditoria estática pós-correção não encontrou os campos inválidos nem hostname de produção | Regra poderia não compilar ou aparentar cobertura sem bloquear | Expressão com `http.request.body.raw`, `http.cookie`, limites/plano documentados e escopo somente staging | CONFIRMED → CORRIGIDO; PASS |
 | MEDIUM | `app/Services/R2Storage.php` | `ResponseContent-Type` não era o nome do parâmetro SDK e cache de GET não era fixado | Teste falhou: `response-content-type` ausente; após `ResponseContentType` + `ResponseCacheControl`, 24 testes passaram | Navegador poderia receber tipo diferente do esperado e mídia administrativa poderia ser reutilizada por cache | Parâmetros SDK corretos, allowlist de cache público curto/privado sem cache e admin usando `private, no-store` | CONFIRMED → CORRIGIDO; PASS |
 | MEDIUM | `composer.json` + `app/Services/R2Storage.php` | Constraint `^3.0` permitia resolver SDK abaixo do release efetivamente testado, embora o signer dependa dos hooks protegidos de presign | Código estende `S3SignatureV4::getHeaderBlacklist()`/`getPresignHeaderDenyList()`; lock testado em 3.400.1 e teste confirma `Content-Type`/`If-None-Match` assinados | Regeneração do lock poderia produzir combinação sem o contrato de assinatura validado, enfraquecendo anti-replay | Floor fixado em `aws/aws-sdk-php ^3.400.1`; lock atualizado somente no `content-hash` | CONFIRMED (compatibilidade de segurança) → CORRIGIDO; PASS |
+| LOW | `bootstrap/app.php` | `ThrottleRequestsException` caía no tratamento genérico e podia devolver 500 quando o limite era atingido com debug desativado | Regressão pré-correção: exit 1, esperado 429 e recebido 500; CI MySQL também falhou na mesma fronteira | Clientes e monitoramento recebiam erro interno em vez de sinal de rate limit; o bloqueio não era bypassado | Mapeamento explícito para 429, `RATE_LIMITED` e headers do framework; teste usa IP determinístico | CONFIRMED → CORRIGIDO; PASS |
 | LOW | `playwright.config.js` / suíte browser | Workers paralelos excedem a memória disponível e abortam processos; não é vulnerabilidade de runtime | `npx.cmd playwright test --workers=4 --fully-parallel --reporter=line`: exit 1, 19 falhas, OOM; máquina 7.976 MB, pico dos processos novos 517 MB, 7 processos | CI/local pode produzir falso negativo, processos podem ser abortados e mascarar regressões | `workers: 1` explícito, `fullyParallel: false`, sem reduzir os 21 cenários; serial final PASS | CONFIRMED → MITIGADO; monitorar no CI |
 | INFORMATIONAL | `docs/security/cloudflare-waf-php2shell.txt` | Fallback regex ainda dependia de `http.request.body.raw` e não resolvia plano sem body inspection | Auditoria contra documentação Cloudflare: `body.raw`, `body.truncated`, `body.mime`, `body.form` e `body.size` têm requisitos/limites de plano; fallback não era independente | Operador poderia acreditar em cobertura inexistente | Seção removida; regra permanece adicional e PHP/FPM é controle primário | CORRIGIDO; staging NOT VERIFIED |
 | HIGH residual | HostGator/PHP-FPM | Runtime web real não foi acessado | CLI 8.2.35 passou; FPM remoto não foi sondado | FPM abaixo do patch mínimo pode manter exposição ao PHP2Shell | Gate fail-closed e roteiro de staging | NOT VERIFIED; sem confirmação remota |
@@ -113,6 +119,7 @@ limites de corpo efetivos.
 | `tests/Feature/OAuthIdentityTest.php` | State divergente, replay, erro do provedor e timeout | Fechar lacunas de cobertura OAuth |
 | `tests/Feature/Security/SessionRevocationTest.php` | Regeneração de ID de sessão | Provar proteção contra fixation |
 | `tests/Feature/RequestBoundaryTest.php` | Rate limit efetivo da rota de login | Provar o controle no middleware real |
+| `bootstrap/app.php` | Resposta JSON 429 para `ThrottleRequestsException` | Evitar que o limite seja reportado como erro 500 |
 | `tests/Feature/PublicCatalogPaginationTest.php` | Fragmento SQL tratado como valor | Regressão explícita contra SQLi |
 | `tests/browser/admin.smoke.spec.js` | Skip link e refresh concorrente da equipe | Regressões E2E para os achados CodeRabbit |
 | `composer.json` / `composer.lock` | Floor AWS SDK `^3.400.1` e atualização apenas do hash do lock | Fixar o contrato de presign testado |
@@ -130,7 +137,9 @@ bucket real.
 | Regressão R2 antes da correção | filtro de `UploadLifecycleTest` | 1 | FAIL esperado | `response-content-type` ausente por parâmetro SDK incorreto |
 | Regressão R2 depois | mesmo filtro | 0 | PASS | `OK (24 tests, 65 assertions)` |
 | PHPUnit antes desta continuação | mesmo comando, PHP 8.2.35 | 0 | PASS | `OK (172 tests, 831 assertions)`; referência do estado anterior |
-| PHPUnit final desta continuação | mesmo comando, PHP 8.2.35 oficial temporário | 0 | PASS | `OK (179 tests, 881 assertions)` |
+| Rate limit antes da correção | PHPUnit focado com `APP_DEBUG=false` | 1 | FAIL esperado | resposta limitada foi 500, não 429 |
+| Rate limit após a correção | mesmo filtro, PHP 8.2.35 | 0 | PASS | `OK (1 test, 33 assertions)`; 429, `RATE_LIMITED` e `Retry-After` |
+| PHPUnit final desta continuação | mesmo comando, PHP 8.2.35 oficial temporário, cache de arquivo | 0 | PASS | `OK (179 tests, 883 assertions)` |
 | PHPStan | `vendor/bin/phpstan analyse --no-progress --memory-limit=1G` | 0 | PASS | `[OK] No errors` |
 | Pint direcionado | `vendor/bin/pint --test -- <PHP do diff>` | 0 | PASS | `{"tool":"pint","result":"passed"}` |
 | Pint global | `vendor/bin/pint --test` | 1 | FAIL preexistente | 17 arquivos fora do diff; nenhum arquivo desta continuação na lista |
@@ -226,7 +235,9 @@ como aprovação.
 - Commits atômicos desta continuação: `60264dc` (testes de autenticação/dados),
   `c53bcae` (estado/foco/refresh do admin), `6f2c7b3` (floor do AWS SDK) e
   `03361aa` (WAF, CORS, migração PHP e relatório), `4a135fc` (handoff do
-  relatório) e `d5ba552` (verificação ShellCheck).
+  relatório), `d5ba552` (verificação ShellCheck), `113ecec` (sincronização do
+  relatório), `919e050` (referências reproduzíveis da matriz) e `96d9859`
+  (resposta 429 do rate limit).
 - PR #27 permanece aberta e **DRAFT**. Não foi criada PR duplicada nem alterada
   a configuração do repositório.
 - CodeRabbit terminou uma revisão `COMMENTED` no HEAD anterior; os cinco
