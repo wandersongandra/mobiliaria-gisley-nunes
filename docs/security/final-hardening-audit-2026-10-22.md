@@ -97,11 +97,10 @@ Todos os resultados abaixo foram obtidos nesta sessão. `PASS`, `FAIL`, `BLOCKED
 - O HEAD observado no início da edição foi `30b6fab872f33d11a46abb7a1b4125813a81b327`; esse avanço concorrente já existia e não foi descartado.
 - Worktree baseline separado foi criado e devolvido limpo; nenhum stash, reset, clean, checkout/restore em massa ou `git add .` foi usado.
 - `cors.json` continua não rastreado, preexistente, preservado e fora do staging/PR.
-- Commits desta sessão: `b2e49b6` (`fix(security): harden OAuth input and admin origin`) e `38a5fbc` (`docs(security): record final homologation evidence`).
-- Commit de handoff: `c919eda` (`docs(security): record commit handoff`).
-- Push: **PASS**, branch remota atualizada até `c919eda66340c11f447e3c4d64aeb22e5733359b`.
+- Commits desta sessão incluem `b2e49b6` (`fix(security): harden OAuth input and admin origin`), `38a5fbc` (`docs(security): record final homologation evidence`) e commits documentais de handoff.
+- Push: **PASS**, branch remota atualizada para o head final desta auditoria.
 - PR draft: **#27**, [security: final hardening and homologation gates](https://github.com/wandersongandra/mobiliaria-gisley-nunes/pull/27), estado `OPEN`/`DRAFT`.
-- Checks remotos observados para o SHA publicado: `analyze`, `frontend`, `mysql`, `production-build`, `quality`, `security`, `CodeQL` e `Workers Builds` em **PASS**. `CodeRabbit` ficou **SKIPPED** porque a PR é draft.
+- Checks remotos observados após a publicação do head: `analyze`, `frontend`, `mysql`, `production-build`, `quality`, `security`, `CodeQL` e `Workers Builds` em **PASS**. `CodeRabbit` ficou **SKIPPED** porque a PR é draft.
 - Merge e deploy continuam proibidos; o check Workers Builds foi um preview automático da integração e não foi promovido por esta sessão.
 
 ## G. Pendências
