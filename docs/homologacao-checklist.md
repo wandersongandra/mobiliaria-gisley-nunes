@@ -21,7 +21,7 @@ Passos:
 Comandos de apoio, sem credenciais:
 
 ```powershell
-curl.exe -I -H "Authorization: Bearer <TEST_TOKEN>" "https://<STAGING_HOST>/api/admin/photos/<PHOTO_ID>/media"
+curl.exe -i "https://<STAGING_ADMIN_ORIGIN>/api/admin/photos/<PHOTO_ID>/media" -H "Cookie: __Host-gisley_session=<TEST_SESSION_COOKIE>" -H "Host: <STAGING_ADMIN_HOST>"
 curl.exe -i -X OPTIONS "https://<R2_TEST_ENDPOINT>/<OBJECT_KEY>" -H "Origin: https://<STAGING_ADMIN_ORIGIN>" -H "Access-Control-Request-Method: PUT" -H "Access-Control-Request-Headers: content-type,if-none-match"
 ```
 
@@ -80,9 +80,15 @@ Passos:
 Comandos de apoio:
 
 ```powershell
-ssh <STAGING_SSH_USER>@<STAGING_SSH_HOST> "php -v; php artisan app:production-check --no-ansi"
-curl.exe -fsS -H "X-Gisley-Fpm-Probe: <PROBE_TOKEN>" "https://<STAGING_HOST>/__fpm_sec_check.php"
-bash scripts/deploy-hostgator.sh <STAGING_SSH_TARGET> <STAGING_RELEASE_DIR>
+ssh <STAGING_SSH_USER>@<STAGING_SSH_HOST> "cd <STAGING_RELEASE_DIR> && php -v; php artisan app:production-check --no-ansi"
+curl.exe -fsS -H "X-FPM-Check-Token: <PROBE_TOKEN>" "https://<STAGING_HOST>/__fpm_sec_check.php"
+$env:ALLOW_HOSTGATOR_DEPLOY = '1'
+$env:DEPLOY_BRANCH = '<AUTHORIZED_BRANCH>'
+$env:DEPLOY_SHA = '<40_HEX_SHA>'
+$env:PROJECT_ROOT = '<STAGING_RELEASE_DIR>'
+$env:HEALTH_URL = 'https://<STAGING_HOST>/health/live'
+$env:RUN_MIGRATIONS = '0'
+bash scripts/deploy-hostgator.sh
 ```
 
 Resultado esperado: release abortado em qualquer falha obrigatória; nenhuma mensagem imprime secrets; probe retorna somente os valores de controle esperados e é removido ao final.
@@ -93,7 +99,7 @@ Critério de reprovação: CLI aprovado com FPM divergente, fallback permissivo,
 
 Rollback: não prosseguir com o release; manter o release anterior intacto e usar o rollback operacional do HostGator somente para o ambiente de homologação autorizado.
 
-Status atual: NOT VERIFIED — PHP local 8.2.29 falha o requisito, PHP 8.2.35 foi verificado apenas fora do repositório; FPM/HostGator não foram acessados.
+Status atual: NOT VERIFIED — o PHP CLI padrão continua em 8.2.29; o PHP oficial temporário 8.2.35 foi usado nesta sessão e passou os gates locais; FPM/HostGator não foram acessados.
 
 ## 4. Cloudflare WAF / PHP2Shell
 
@@ -137,8 +143,8 @@ Passos:
 Comandos de apoio:
 
 ```powershell
-curl.exe -I "https://<STAGING_ADMIN_ORIGIN>/api/auth/login"
-curl.exe -i "https://<STAGING_ADMIN_ORIGIN>/oauth/callback?code=<TEST_CODE>&state=<TEST_STATE>"
+curl.exe -i "https://<STAGING_ADMIN_ORIGIN>/api/auth/login"
+curl.exe -i "https://<STAGING_ADMIN_ORIGIN>/api/auth/callback?code=<TEST_CODE>&state=<TEST_STATE>"
 ```
 
 Resultado esperado: state de uso único e vinculado ao redirect URI, HTTPS obrigatório, sem open redirect, conta não autorizada rejeitada e logout invalidando a sessão.
@@ -194,7 +200,13 @@ Passos:
 Comandos de apoio:
 
 ```powershell
-bash scripts/deploy-hostgator.sh <STAGING_SSH_TARGET> <STAGING_RELEASE_DIR>
+$env:ALLOW_HOSTGATOR_DEPLOY = '1'
+$env:DEPLOY_BRANCH = '<AUTHORIZED_BRANCH>'
+$env:DEPLOY_SHA = '<40_HEX_SHA>'
+$env:PROJECT_ROOT = '<STAGING_RELEASE_DIR>'
+$env:HEALTH_URL = 'https://<STAGING_HOST>/health/live'
+$env:RUN_MIGRATIONS = '0'
+bash scripts/deploy-hostgator.sh
 ssh <STAGING_SSH_USER>@<STAGING_SSH_HOST> "cd <STAGING_RELEASE_DIR> && php artisan app:production-check --no-ansi"
 ```
 
