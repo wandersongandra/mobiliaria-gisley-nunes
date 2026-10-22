@@ -165,8 +165,8 @@ bucket real.
 | Playwright 4 workers | `npx.cmd playwright test --workers=4 --fully-parallel --reporter=line` | 0 | PASS | `Running 21 tests using 4 workers`; `21 passed (11.9s)`; resultado não altera a configuração serial, que é o perfil reprodutível do host |
 | Playwright 8 workers | `npx.cmd playwright test --workers=8 --fully-parallel --reporter=line` | 1 | FAIL reproduzido por pressão do host | `ERR_INSUFFICIENT_RESOURCES`, worker encerrado com `3221226505`, 8 falhas e 13 pass |
 | Composer atual | PHAR oficial verificado por SHA-384 + PHP 8.2.35: `composer validate --strict --no-interaction` e `composer audit --locked --no-interaction --format=plain` | 0/0 | PASS | `./composer.json is valid`; `No security vulnerability advisories found.` |
-| CodeQL remoto no HEAD final | workflow `CodeQL`, run `39833032792`, HEAD `955ba5d` | 0 | PASS | job `analyze` concluído com sucesso |
-| CI remoto no HEAD final | `gh pr checks 27` / runs `39833032635`, `39833032648`, `39833032668` e `39833026662` | 8 | BLOCKED/PENDING | MySQL, quality/security, production package, CodeQL e Workers preview passaram; o job frontend do run `39833032648` permanece em `Install Chromium for browser smoke`, sem falha de teste reportada |
+| CodeQL no último HEAD de código verificado | workflow `CodeQL`, run `39833032792`, HEAD `955ba5d` | 0 | PASS | job `analyze` concluído com sucesso |
+| CI no último HEAD de código verificado | `gh pr checks 27` / runs `39833032635`, `39833032648`, `39833032668` e `39833026662` | 8 | BLOCKED/PENDING | MySQL, quality/security, production package, CodeQL e Workers preview passaram; o job frontend do run `39833032648` permanece em `Install Chromium for browser smoke`, sem falha de teste reportada |
 
 O primeiro `pnpm test` do baseline foi iniciado junto com a geração de preview
 e falhou por manifesto ausente; a execução na ordem correta passou. Isso é
@@ -236,9 +236,11 @@ como aprovação.
 
 - Repositório: `https://github.com/wandersongandra/mobiliaria-gisley-nunes.git`.
 - Branch: `security/final-hardening-2026-10-22`; não é `main`.
-- HEAD efetivo atual: `955ba5da98bba6ceacadd0a60a03a87bcdea57e6`, commit documental
-  sobre o merge `d784b2c58bfc5bf4c26fa1f7f88d0be2ac0aefc9` e os ajustes de
-  evidência `1761322`, cujos pais do merge são
+- Último HEAD de código verificado: `955ba5da98bba6ceacadd0a60a03a87bcdea57e6`;
+  commits posteriores são exclusivamente documentais e registram o estado
+  dos workflows, sem alterar o código executável. Esse HEAD documenta o merge
+  `d784b2c58bfc5bf4c26fa1f7f88d0be2ac0aefc9` e os ajustes de evidência
+  `1761322`, cujos pais do merge são
   `2211386c3e9d4d7c2ddb83a40906f5493cb3ee66` e
   `51f6b1c399731f46c3ace603a695037f567a392a`;
   o commit `6f4169373d6d853c81a3e33723bcc5a253eac604` permanece somente como
