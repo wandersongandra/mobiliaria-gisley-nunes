@@ -220,14 +220,18 @@ como aprovação.
 
 - Repositório: `https://github.com/wandersongandra/mobiliaria-gisley-nunes.git`.
 - Branch: `security/final-hardening-2026-10-22`; não é `main`.
-- HEAD de referência inicial local/remoto: `6f4169373d6d853c81a3e33723bcc5a253eac604`.
-- Commits desta sessão: `0b92354` (código/gates/testes) e `501be40`
-  (WAF, homologação e rollback), seguidos do commit documental deste relatório.
+- HEAD efetivo antes desta continuação: `9ddeba35764e8c57360e525e9c1b652474ece65c`;
+  o commit `6f4169373d6d853c81a3e33723bcc5a253eac604` permanece somente como
+  referência histórica.
+- Commits atômicos desta continuação: `60264dc` (testes de autenticação/dados),
+  `c53bcae` (estado/foco/refresh do admin), `6f2c7b3` (floor do AWS SDK) e
+  `03361aa` (WAF, CORS, migração PHP e relatório).
 - PR #27 permanece aberta e **DRAFT**. Não foi criada PR duplicada nem alterada
   a configuração do repositório.
-- CodeRabbit não revisa automaticamente PR draft; a ausência de revisão não é
-  aprovação de segurança. A tentativa de comentário, se disponível, será
-  registrada separadamente.
+- CodeRabbit terminou uma revisão `COMMENTED` no HEAD anterior; os cinco
+  comentários acionáveis foram verificados, quatro correções de código/documento
+  foram aplicadas e o aviso de docstring foi classificado fora do escopo. A
+  classificação completa está em G.1; isso não equivale a aprovação humana.
 - `cors.json` local continua preservado e não está nos commits.
 - Não houve merge, deploy, rollback, alteração de produção, DNS, Cloudflare,
   R2, HostGator ou banco real.
