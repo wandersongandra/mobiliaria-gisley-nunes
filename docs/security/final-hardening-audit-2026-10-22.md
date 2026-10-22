@@ -91,7 +91,8 @@ Baseline limpo em worktree separado: build preview PASS; Node PASS após gerar o
 - Branch: `security/final-hardening-2026-10-22`, criada a partir do HEAD `f9e30eb`.
 - O `cors.json` permaneceu local, não rastreado e fora do staging/PR.
 - Alterações tracked e untracked preexistentes foram preservadas; não foram usados `stash`, `reset`, `clean`, `checkout .`, `restore` em massa ou `git add .`.
-- Commit, push e número da PR serão registrados após a revisão do staging. Merge e deploy permanecem proibidos.
+- Commits: `acfe5bd` (hardening PHP/R2/upload), `284b17a` (CI/dependências) e `a29bf24` (documentação/homologação).
+- Push e PR draft ainda dependem da etapa seguinte; merge e deploy permanecem proibidos.
 
 ## G. Pendências
 
