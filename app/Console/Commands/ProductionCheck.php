@@ -130,7 +130,8 @@ class ProductionCheck extends Command
         // APP_URL e ADMIN_ORIGIN precisam ser origens, não URLs de recurso.
         // Aceitamos apenas a barra final convencional; caminho, query,
         // fragmento ou credenciais mudariam redirects e URLs geradas.
-        if (($parts['path'] ?? '') !== '' && ($parts['path'] ?? '') !== '/') {
+        $path = array_key_exists('path', $parts) ? (string) $parts['path'] : '';
+        if ($path !== '' && $path !== '/') {
             return null;
         }
         if (array_key_exists('query', $parts)
