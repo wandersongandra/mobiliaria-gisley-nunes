@@ -14,14 +14,13 @@ class RequireAdminOrigin
             return $next($request);
         }
 
-        $adminOrigin = rtrim((string) config('app.admin_url'), '/');
-        $expectedHost = strtolower((string) parse_url($adminOrigin, PHP_URL_HOST));
-        if ($expectedHost === '' || ! str_starts_with($adminOrigin, 'https://')) {
+        $adminOrigin = $this->canonicalOrigin((string) config('app.admin_url'));
+        if ($adminOrigin === null || ! str_starts_with($adminOrigin, 'https://')) {
             return response()->json(['error' => 'ADMIN_ORIGIN_NOT_CONFIGURED'], 503);
         }
 
-        $currentHost = $this->requestHost($request);
-        if ($currentHost !== null && hash_equals($expectedHost, $currentHost)) {
+        $currentOrigin = $this->canonicalOrigin($request->getSchemeAndHttpHost());
+        if ($currentOrigin !== null && hash_equals($adminOrigin, $currentOrigin)) {
             return $next($request);
         }
 
@@ -41,15 +40,38 @@ class RequireAdminOrigin
             : response('Not Found', 404);
     }
 
-    private function requestHost(Request $request): ?string
+    private function canonicalOrigin(string $value): ?string
     {
-        $raw = strtolower(trim((string) $request->headers->get('host', '')));
-        if ($raw === '' || str_contains($raw, ',') || preg_match('/[\x00-\x20\x7F]/', $raw) === 1) {
+        $parts = parse_url($value);
+        if ($parts === false) {
             return null;
         }
 
-        $host = strtolower((string) parse_url('http://'.$raw, PHP_URL_HOST));
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return null;
+        }
 
-        return $host !== '' && preg_match('/^[a-z0-9.-]+$/D', $host) === 1 ? $host : null;
+        $path = array_key_exists('path', $parts) ? (string) $parts['path'] : '';
+        if ($path !== '' && $path !== '/') {
+            return null;
+        }
+        if (array_key_exists('query', $parts)
+            || array_key_exists('fragment', $parts)
+            || array_key_exists('user', $parts)
+            || array_key_exists('pass', $parts)) {
+            return null;
+        }
+
+        $port = $parts['port'] ?? null;
+        if ($port !== null && $port < 1) {
+            return null;
+        }
+        if ($port !== null && ! (($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80))) {
+            return $scheme.'://'.$host.':'.$port;
+        }
+
+        return $scheme.'://'.$host;
     }
 }

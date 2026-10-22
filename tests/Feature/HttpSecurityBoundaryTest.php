@@ -44,6 +44,20 @@ class HttpSecurityBoundaryTest extends TestCase
             ->assertJson(['error' => 'NOT_FOUND']);
     }
 
+    public function test_admin_origin_requires_exact_configured_scheme_and_port(): void
+    {
+        $this->app->instance('env', 'production');
+        config(['app.admin_url' => 'https://admin.example.test:8443']);
+
+        $this->get('http://admin.example.test:8443/admin')
+            ->assertStatus(307)
+            ->assertHeader('Location', 'https://admin.example.test:8443/admin');
+
+        $this->get('https://admin.example.test:8444/admin')
+            ->assertStatus(307)
+            ->assertHeader('Location', 'https://admin.example.test:8443/admin');
+    }
+
     public function test_security_headers_cover_browser_isolation_and_admin_noindex(): void
     {
         $response = $this->withHeaders(['Host' => 'admin.example.test'])

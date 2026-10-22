@@ -47,6 +47,21 @@ class OAuthIdentityTest extends TestCase
             ->assertSee('Código de vinculação temporário');
     }
 
+    public function test_callback_rejects_array_query_parameters_before_external_exchange(): void
+    {
+        $this->fakeOAuthIdentity(['email_verified' => true]);
+        $state = $this->beginLogin();
+
+        $this->get('/api/auth/callback?'.http_build_query([
+            'code' => ['valid-auth-code'],
+            'state' => $state,
+        ]))
+            ->assertBadRequest()
+            ->assertSee('Sessão de autenticação inválida.');
+
+        $this->assertCount(0, Http::recorded());
+    }
+
     public function test_login_builds_google_authorization_request_with_the_public_callback(): void
     {
         config([
