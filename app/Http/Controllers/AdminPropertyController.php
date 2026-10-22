@@ -290,8 +290,15 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'NOT_FOUND'], 404);
         }
 
-        return redirect()->away($this->storage->presignGet((string) $photo['storage_path']), 307)
-            ->header('Cache-Control', 'no-store');
+        return redirect()->away(
+            $this->storage->presignGet(
+                (string) $photo['storage_path'],
+                60,
+                (string) ($photo['mime_type'] ?? ''),
+                basename((string) $photo['storage_path']),
+            ),
+            307,
+        )->header('Cache-Control', 'no-store');
     }
 
     public function removePhoto(Request $request, string $id)

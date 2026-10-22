@@ -195,6 +195,29 @@ class UploadLifecycleTest extends TestCase
         );
     }
 
+    public function test_presigned_put_signs_only_headers_sent_by_the_browser(): void
+    {
+        config([
+            'services.r2.account_id' => 'test-account',
+            'services.r2.bucket' => 'test-bucket',
+            'services.r2.access_key_id' => 'test-key',
+            'services.r2.secret_access_key' => 'test-secret',
+        ]);
+
+        $url = app(R2Storage::class)->presignPut(
+            'gisley/properties/property-id/photo.jpg',
+            'image/jpeg',
+        );
+
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        $this->assertSame(
+            'content-type;host;if-none-match',
+            $query['X-Amz-SignedHeaders'] ?? null,
+            'O PUT pré-assinado deve vincular Content-Type e If-None-Match à assinatura.',
+        );
+    }
+
     public function test_image_inspection_rejects_a_renamed_payload(): void
     {
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);

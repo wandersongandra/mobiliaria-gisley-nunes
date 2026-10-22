@@ -35,11 +35,43 @@ class ProductionCheckCommandTest extends TestCase
             'gisley.network.trusted_proxies' => ['203.0.113.0/24'],
         ]);
 
-        $this->artisan('app:production-check')
+        $command = $this->artisan('app:production-check')
             ->expectsOutputToContain('[OK] APP_ENV is production')
-            ->expectsOutputToContain('Production configuration checks passed.')
-            ->doesntExpectOutputToContain('not-printed-secret')
-            ->assertSuccessful();
+            ->doesntExpectOutputToContain('not-printed-secret');
+
+        // PHP2Shell (CVE-2026-109618/109619): em PHP patched (>= 8.2.35), todos
+        // os checks passam. Em PHP não patched, o check de versão falha
+        // corretamente — ambos são comportamento esperado.
+        $patched = $this->isPatchedPhpVersion();
+        if ($patched) {
+            $command->expectsOutputToContain('Production configuration checks passed.')
+                ->assertSuccessful();
+        } else {
+            $command->expectsOutputToContain('[FAIL] PHP version is patched against PHP2Shell')
+                ->assertFailed();
+        }
+    }
+
+    /**
+     * Mesma lógica do ProductionCheck::isPatchedPhpVersion() — duplicated here
+     * so the test doesn't depend on a private method via reflection.
+     */
+    private function isPatchedPhpVersion(): bool
+    {
+        $patches = [
+            '8.2' => '8.2.35',
+            '8.3' => '8.3.36',
+            '8.4' => '8.4.27',
+            '8.5' => '8.5.12',
+        ];
+
+        foreach ($patches as $branch => $minPatched) {
+            if (version_compare(PHP_VERSION, $branch.'.0', '>=') && version_compare(PHP_VERSION, $branch.'.999', '<')) {
+                return version_compare(PHP_VERSION, $minPatched, '>=');
+            }
+        }
+
+        return false;
     }
 
     public function test_production_check_rejects_an_invalid_bootstrap_identity(): void
@@ -94,6 +126,20 @@ class ProductionCheckCommandTest extends TestCase
             'app.debug' => false,
             'app.url' => 'https://example.test',
             'app.admin_url' => 'https://example.test:8443',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_origins_with_a_path_or_query_string(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'app.url' => 'https://www.example.test/public?tenant=1',
+            'app.admin_url' => 'https://admin.example.test/',
         ]);
 
         $this->artisan('app:production-check')
