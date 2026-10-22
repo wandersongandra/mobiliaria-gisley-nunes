@@ -81,7 +81,7 @@ Comandos de apoio:
 
 ```powershell
 ssh <STAGING_SSH_USER>@<STAGING_SSH_HOST> "cd <STAGING_RELEASE_DIR> && php -v; php artisan app:production-check --no-ansi"
-curl.exe -fsS -H "X-FPM-Check-Token: <PROBE_TOKEN>" "https://<STAGING_HOST>/__fpm_sec_check.php"
+curl.exe -i -H "Cache-Control: no-cache" -H "Pragma: no-cache" -H "X-FPM-Check-Token: <PROBE_TOKEN>" "https://<STAGING_HOST>/<RANDOM_PROBE_FILENAME>.php?fpm_probe=<RANDOM_CACHE_BUSTER>"
 $env:ALLOW_HOSTGATOR_DEPLOY = '1'
 $env:DEPLOY_BRANCH = '<AUTHORIZED_BRANCH>'
 $env:DEPLOY_SHA = '<40_HEX_SHA>'
@@ -115,7 +115,7 @@ Passos:
 Comando somente de leitura:
 
 ```powershell
-curl.exe -sS -H "Authorization: Bearer <CLOUDFLARE_API_TOKEN>" "https://api.cloudflare.com/client/v4/zones/<ZONE_ID>/firewall/rules"
+curl.exe -sS -H "Authorization: Bearer <CLOUDFLARE_API_TOKEN>" "https://api.cloudflare.com/client/v4/zones/<STAGING_ZONE_ID>/rulesets"
 ```
 
 Resultado esperado: a regra correspondente ao rascunho `docs/security/cloudflare-waf-php2shell.txt` existe no zone de homologação, bloqueia somente o padrão previsto e não expõe tokens.

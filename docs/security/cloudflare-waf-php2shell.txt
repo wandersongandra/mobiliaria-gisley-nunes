@@ -2,7 +2,7 @@
  Cloudflare WAF Custom Rule — PHP2Shell (CVE-2026-109618 / CVE-2026-109619)
 ================================================================================
  Data: 22 de outubro de 2026
- Status: DRAFT — regra não aplicada nem verificada no dashboard/domínio
+ Status: DRAFT — regra somente para staging; não aplicada nem verificada
  CVE: CVE-2026-109618, CVE-2026-109619
  Severidade: CVSS v4.0 9.2 (Critical)
  Vetor: RCE não autenticado via session.upload_progress em multipart uploads
@@ -32,33 +32,36 @@ Ação:          Block
 
 Expressão (colar no campo "Expression" do painel Cloudflare):
 
-(http.request.body contains "PHP_SESSION_UPLOAD_PROGRESS") or (http.request.uri contains "PHP_SESSION_UPLOAD_PROGRESS") or (http.request.cookies contains "PHP_SESSION_UPLOAD_PROGRESS")
+(lower(http.request.body.raw) contains "php_session_upload_progress") or (lower(http.request.uri) contains "php_session_upload_progress") or (lower(http.cookie) contains "php_session_upload_progress")
 
 
 NOTAS SOBRE A EXPRESSÃO
 ----------------------
 
-1. `http.request.body`
-   Inspeciona os primeiros 128 KB do corpo da requisição.  Em multipart
-   uploads, o field name `PHP_SESSION_UPLOAD_PROGRESS` aparece nos primeiros
-   bytes do body (header do part), portanto 128 KB é suficiente.  O operador
-   `contains` é case-insensitive no Ruleset Engine.
+1. `http.request.body.raw`
+   É o corpo bruto e exige plano Enterprise. A inspeção é limitada ao tamanho
+   disponível no plano (128 KB no Enterprise); quando houver truncamento, o
+   campo `http.request.body.truncated` fica verdadeiro. A expressão usa
+   `lower(...)` para tornar a comparação explícita.
 
 2. `http.request.uri`
    Cobertura defensiva para ataques que tentam passar a variável via query
    string.  O PHP não processa upload_progress via URI, mas bloquear evita
    variações e probes de reconhecimento.
 
-3. `http.request.cookies`
-   Cobertura para payloads mascarados em cookies.  Embora o handler
-   upload_progress não leia cookies, alguns exploits encadeados tentam
-   injetar via cookie para confundir WAFs que inspecionam apenas o body.
+3. `http.cookie`
+   É o cabeçalho Cookie completo como string. O campo estruturado
+   `http.request.cookies` é um mapa e não deve ser comparado diretamente com
+   `contains`. A regra continua sendo defesa em profundidade; o handler
+   upload_progress não lê cookies.
+
+Campos e limites: consulte a [referência oficial de `http.request.body.raw`](https://developers.cloudflare.com/ruleset-engine/rules-language/fields/reference/http.request.body.raw/), a [referência de `http.cookie`](https://developers.cloudflare.com/ruleset-engine/rules-language/fields/reference/http.cookie/) e a [linguagem de regras](https://developers.cloudflare.com/ruleset-engine/rules-language/). Sem um plano que exponha os campos de body, a regra não pode ser considerada implantável; mantenha o gate de PHP/FPM como controle principal.
 
 
 ALTERNATIVA COM REGEX (caso `contains` não esteja disponível no plano)
 ---------------------------------------------------------------------
 
-(http.request.body matches "(?i)PHP_SESSION_UPLOAD_PROGRESS") or (http.request.uri matches "(?i)PHP_SESSION_UPLOAD_PROGRESS") or (http.request.cookies matches "(?i)PHP_SESSION_UPLOAD_PROGRESS")
+lower(http.request.body.raw) contains "php_session_upload_progress"
 
 
 VARIANTE RESTRITIVA (reduz falsos positivos a quase zero)
@@ -68,19 +71,19 @@ Restringe a regra apenas a requisições multipart que carregam a variável.
 Útil se a aplicação legítima usa a string `PHP_SESSION_UPLOAD_PROGRESS` em
 outro contexto ( improvável, mas documentado para revisão):
 
-(http.content_type contains "multipart/form-data") and ((http.request.body contains "PHP_SESSION_UPLOAD_PROGRESS") or (http.request.uri contains "PHP_SESSION_UPLOAD_PROGRESS") or (http.request.cookies contains "PHP_SESSION_UPLOAD_PROGRESS"))
+starts_with(lower(http.request.body.mime), "multipart/form-data") and lower(http.request.body.raw) contains "php_session_upload_progress"
 
 
-APLICAÇÃO NO PAINEL CLOUDFLARE
+APLICAÇÃO NO PAINEL CLOUDFLARE — SOMENTE STAGING
 ------------------------------
 
-1. Acesse o dashboard do Cloudflare > domínio gisleynunesimoveis.com.br
+1. Acesse o dashboard do Cloudflare > zone de staging autorizado
 2. Security > WAF > Custom Rules
 3. Click "Create rule"
 4. Name: "Block PHP2Shell upload-progress payload"
 5. Field: (cole a expressão acima no editor de expressão)
 6. Action: Block
-7. Save / Deploy
+7. Salve como rascunho ou aplique somente no zone de staging autorizado; não altere produção.
 
 A regra entra em vigor globalmente em ~10 segundos.
 
@@ -90,7 +93,7 @@ VERIFICAÇÃO PÓS-DEPLOY
 
 Após aplicar a regra, valide com:
 
-  curl -v -X POST https://www.gisleynunesimoveis.com.br/api/contact \
+  curl.exe -i -X POST https://<STAGING_ORIGIN>/api/contact \
     -F "PHP_SESSION_UPLOAD_PROGRESS=test" \
     -F "name=test" -F "email=test@test" -F "message=test"
 
@@ -118,5 +121,6 @@ LIMITAÇÕES
   (session.upload_progress).  Não substitui o patch do PHP runtime.
 - Se `session.upload_progress.name` for customizado no php.ini (não padrão),
   a string-alvo muda.  Verifique com `php -i | grep upload_progress.name`.
-- A inspeção de body tem limite de 128 KB no plano gratuito.  Planos Pro+
-  permitem configurar até 512 KB via "WAF body inspection limit".
+- `http.request.body.raw` exige Enterprise e tem limite de inspeção de 128 KB
+  conforme a referência atual. `http.cookie` exige Pro, Business ou Enterprise.
+  Confirme a elegibilidade do zone de staging antes de usar esta expressão.
