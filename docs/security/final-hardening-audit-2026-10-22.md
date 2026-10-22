@@ -146,7 +146,7 @@ bucket real.
 | pnpm audit | `pnpm audit --audit-level=high` | 0 | PASS | `No known vulnerabilities found` |
 | Secret scan | `pnpm run security:secrets` | 0 | PASS | `Secret scan: PASS` |
 | Sonda deploy | `bash -n`, ShellCheck oficial e `bash scripts/test-deploy-hostgator.sh` | 0 | PASS | cinco sondas OK; corpo inválido e TERM rejeitados; `deploy-hostgator probe tests: PASS` |
-| Sonda deploy — ShellCheck local | `shellcheck scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh` | 127 | BLOCKED | `shellcheck: command not found`; `bash -n` e mock continuam PASS; CI remoto é a verificação disponível |
+| Sonda deploy — ShellCheck | ShellCheck oficial temporário + `scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh` | 0 | PASS | release `v0.11.0` baixada fora do repo, SHA-256 `8a4e...e740e` conferido; ShellCheck exit 0; `bash -n` e mock PASS |
 | WAF documental | auditoria estática de campos/hostname/padding | 0 | PASS | `waf_mentions_padding=True`, `waf_mentions_primary_php=True`, expressão sem `body.size` |
 | CORS proposto | parse JSON + regra de origens | 0 | PASS | `cors_proposed_tracked=True`, `cors_wildcard_local_preview_count=0`, origem do painel presente |
 | Diff whitespace | `git diff --check` | 0 | PASS | somente avisos informativos de conversão LF/CRLF |
@@ -197,9 +197,9 @@ PHP 8.2.35 foi usado porque é o patch mínimo atual; planejar migração para
 
 O padding acima do limite do WAF permanece bypass esperado da inspeção de
 body; a aprovação exige provar que o PHP-FPM de staging continua protegido
-mesmo quando o WAF não enxerga o marcador deslocado. ShellCheck não está
-instalado localmente nesta sessão (`BLOCKED`); `bash -n` e o mock da sonda
-passaram, e o workflow remoto continua sendo a verificação complementar.
+mesmo quando o WAF não enxerga o marcador deslocado. ShellCheck foi instalado
+somente em diretório temporário fora do repositório, com SHA-256 oficial
+verificado, e passou nos dois scripts.
 
 ## G.1 CodeRabbit — classificação independente
 
