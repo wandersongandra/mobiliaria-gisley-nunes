@@ -127,6 +127,44 @@ test('admin recupera a equipe após falha e sincroniza navegação com históric
   await expect(page.locator('[data-view="dashboard-view"]')).toHaveAttribute('aria-current', 'page');
 });
 
+test('skip link preserva a view ativa e foca seu conteúdo', async ({ page }) => {
+  await openAdmin(page);
+
+  await page.locator('[data-view="team-view"]').click();
+  await expect(page.locator('#team-view')).toBeVisible();
+
+  const skipLink = page.locator('.skip-link');
+  await skipLink.focus();
+  await skipLink.press('Enter');
+
+  await expect(page.locator('#team-view')).toBeVisible();
+  await expect(page.locator('#team-view h3')).toBeFocused();
+});
+
+test('nova atualização da equipe não é descartada durante uma requisição pendente', async ({ page }) => {
+  let teamCalls = 0;
+  let firstCallStarted;
+  const firstCall = new Promise((resolve) => { firstCallStarted = resolve; });
+
+  await openAdmin(page, {
+    '/api/admin/team': async (route) => {
+      teamCalls += 1;
+      if (teamCalls === 1) {
+        firstCallStarted();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      await route.fulfill({ json: { team: [] } });
+    }
+  });
+
+  const teamLink = page.locator('[data-view="team-view"]');
+  await teamLink.click();
+  await firstCall;
+  await teamLink.click();
+
+  await expect.poll(() => teamCalls).toBe(2);
+});
+
 test('upload de fotos pode ser aberto pelo teclado e o painel cabe no celular', async ({ page }) => {
   await openAdmin(page);
   await page.locator('#new-property-top').click();
