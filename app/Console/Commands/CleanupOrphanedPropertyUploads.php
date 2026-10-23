@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Services\PropertyService;
 use App\Services\R2Storage;
-use DateTimeInterface;
 use Illuminate\Console\Command;
 
 class CleanupOrphanedPropertyUploads extends Command
@@ -27,10 +26,7 @@ class CleanupOrphanedPropertyUploads extends Command
             $scanned += count($page['objects']);
             $oldObjects = array_values(array_filter(
                 $page['objects'],
-                static fn (array $object): bool => isset($object['key'], $object['last_modified'])
-                    && is_string($object['key'])
-                    && $object['last_modified'] instanceof DateTimeInterface
-                    && $object['last_modified']->getTimestamp() <= $cutoff
+                static fn (array $object): bool => $object['last_modified']->getTimestamp() <= $cutoff
             ));
 
             $registered = [];

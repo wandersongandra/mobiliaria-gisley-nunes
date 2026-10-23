@@ -99,7 +99,7 @@ class LocalMediaStorage
         }
 
         $remaining = substr($key, strlen($prefix));
-        $propertyId = explode('/', $remaining, 2)[0] ?? '';
+        $propertyId = explode('/', $remaining, 2)[0];
 
         return $propertyId !== '' ? $propertyId : null;
     }
@@ -274,7 +274,7 @@ class LocalMediaStorage
         }
     }
 
-    /** @return array{objects: list<array{key: string, last_modified: DateTimeImmutable}>, next_token: null} */
+    /** @return array{objects: list<array{key: string, last_modified: DateTimeImmutable}>, next_token: ?string} */
     public function listPropertyObjects(?string $continuationToken = null): array
     {
         $root = $this->pathForKey(rtrim(self::PREFIX, '/'), false);
@@ -317,10 +317,10 @@ class LocalMediaStorage
             return null;
         }
 
-        $actualMime = strtolower((string) ($details['mime'] ?? ''));
+        $actualMime = strtolower($details['mime']);
         $expectedMime = strtolower(trim($contentType));
-        $width = (int) ($details[0] ?? 0);
-        $height = (int) ($details[1] ?? 0);
+        $width = (int) $details[0];
+        $height = (int) $details[1];
 
         if (! in_array($actualMime, self::IMAGE_MIME_TYPES, true)
             || ! hash_equals($expectedMime, $actualMime)
