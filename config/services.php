@@ -1,5 +1,10 @@
 <?php
 
+$mediaRoot = trim((string) env('MEDIA_ROOT', storage_path('app/private/media')));
+if ($mediaRoot !== '' && preg_match('~^(?:[A-Za-z]:[\\\\/]|[\\\\/]{1,2})~', $mediaRoot) !== 1) {
+    $mediaRoot = base_path($mediaRoot);
+}
+
 return [
     'google_oauth' => [
         'provider' => 'google',
@@ -11,11 +16,9 @@ return [
         'userinfo_url' => 'https://openidconnect.googleapis.com/v1/userinfo',
     ],
 
-    'r2' => [
-        'account_id' => env('R2_ACCOUNT_ID'),
-        'bucket' => env('R2_BUCKET', 'gisley-nunes-imoveis'),
-        'access_key_id' => env('R2_ACCESS_KEY_ID'),
-        'secret_access_key' => env('R2_SECRET_ACCESS_KEY'),
-        'upload_expires' => (int) env('R2_UPLOAD_EXPIRES_SECONDS', 600),
+    'media' => [
+        'root' => $mediaRoot,
+        'max_size' => 12 * 1024 * 1024,
     ],
+
 ];

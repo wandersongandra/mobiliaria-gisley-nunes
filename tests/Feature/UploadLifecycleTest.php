@@ -8,6 +8,7 @@ use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -196,6 +197,43 @@ class UploadLifecycleTest extends TestCase
         );
     }
 
+    public function test_local_storage_resolves_relative_media_root_from_base_path(): void
+    {
+        config(['services.media.root' => 'storage/app/private/media']);
+
+        $this->assertSame(
+            rtrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, base_path('storage/app/private/media')), DIRECTORY_SEPARATOR),
+            R2Storage::configuredMediaRoot(),
+        );
+    }
+
+    public function test_local_storage_rejects_a_media_root_inside_the_document_root(): void
+    {
+        config(['services.media.root' => public_path('media')]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('MEDIA_ROOT_INVALID');
+
+        R2Storage::configuredMediaRoot();
+    }
+
+    public function test_local_storage_lists_objects_from_the_property_root_without_a_trailing_prefix_segment(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        $path = $root.DIRECTORY_SEPARATOR.'gisley'.DIRECTORY_SEPARATOR.'properties'.DIRECTORY_SEPARATOR.'property-id'.DIRECTORY_SEPARATOR.'photo.jpg';
+        File::makeDirectory(dirname($path), 0750, true);
+        File::put($path, 'test');
+
+        try {
+            $objects = app(R2Storage::class)->listPropertyObjects()['objects'];
+
+            $this->assertCount(1, $objects);
+            $this->assertSame('gisley/properties/property-id/photo.jpg', $objects[0]['key']);
+        } finally {
+            File::deleteDirectory($root);
+        }
+    }
+
     public function test_image_inspection_rejects_a_renamed_payload(): void
     {
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);
@@ -269,6 +307,112 @@ class UploadLifecycleTest extends TestCase
             ])
             ->assertStatus(400)
             ->assertJson(['error' => 'INVALID_FILE']);
+    }
+
+    public function test_multipart_upload_uses_private_local_storage_and_serves_registered_media(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        try {
+            config([
+                'app.url' => 'https://test.local',
+                'app.admin_url' => 'https://test.local',
+            ]);
+            $propertyId = $this->createDraftProperty();
+            $session = $this->createManagerSession();
+
+            $response = $this->withSession($session)
+                ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+                ->post('/api/admin/properties/'.$propertyId.'/photos/upload', [
+                    'photo' => UploadedFile::fake()->image('fachada.jpg', 800, 600),
+                    'altText' => 'Fachada local',
+                    'sortOrder' => 0,
+                    'isCover' => true,
+                ])
+                ->assertCreated();
+
+            $photoId = (string) $response->json('photos.0.id');
+            $storagePath = (string) DB::table('morada_property_photos')->where('id', $photoId)->value('storage_path');
+            $this->assertSame('local', DB::table('morada_property_photos')->where('id', $photoId)->value('storage_provider'));
+            $this->assertFileExists($root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $storagePath));
+
+            DB::table('morada_properties')->where('id', $propertyId)->update(['status' => 'published']);
+
+            $this->get('/media/'.$storagePath)
+                ->assertOk()
+                ->assertHeader('Content-Type', 'image/jpeg');
+
+            $this->withSession($session)
+                ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+                ->get('/api/admin/photos/'.$photoId.'/media')
+                ->assertOk()
+                ->assertHeader('Content-Type', 'image/jpeg');
+        } finally {
+            File::deleteDirectory($root);
+        }
+    }
+
+    public function test_legacy_presign_flow_uploads_to_local_storage_before_registration(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        try {
+            config([
+                'app.url' => 'https://test.local',
+                'app.admin_url' => 'https://test.local',
+            ]);
+            $propertyId = $this->createDraftProperty();
+            $session = $this->createManagerSession();
+            $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
+
+            $presign = $this->withSession($session)
+                ->withHeaders($headers)
+                ->postJson('/api/admin/uploads/presign', [
+                    'propertyId' => $propertyId,
+                    'fileName' => 'fachada.jpg',
+                    'contentType' => 'image/jpeg',
+                    'size' => 1024,
+                ])
+                ->assertOk();
+
+            $file = UploadedFile::fake()->image('fachada.jpg', 640, 480);
+            $bytes = file_get_contents($file->getRealPath());
+            $this->assertIsString($bytes);
+
+            $upload = $this->withSession($session)
+                ->call(
+                    'PUT',
+                    $presign->json('uploadUrl'),
+                    [],
+                    $this->prepareCookiesForRequest(),
+                    [],
+                    [
+                        'HTTP_ORIGIN' => 'https://test.local',
+                        'HTTP_HOST' => 'test.local',
+                        'CONTENT_TYPE' => 'image/jpeg',
+                        'CONTENT_LENGTH' => (string) strlen($bytes),
+                    ],
+                    $bytes,
+                )
+                ->assertCreated();
+
+            $storagePath = (string) $upload->json('storagePath');
+            $this->assertFileExists($root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $storagePath));
+
+            $this->withSession($session)
+                ->withHeaders($headers)
+                ->postJson('/api/admin/properties/'.$propertyId.'/photos', [
+                    'storagePath' => $storagePath,
+                    'altText' => 'Fachada presign local',
+                    'contentType' => 'image/jpeg',
+                    'size' => strlen($bytes),
+                    'width' => 640,
+                    'height' => 480,
+                    'sortOrder' => 0,
+                    'isCover' => true,
+                ])
+                ->assertCreated();
+        } finally {
+            File::deleteDirectory($root);
+        }
     }
 
     public function test_image_inspection_rejects_an_image_with_excessive_pixel_area(): void
@@ -380,6 +524,15 @@ class UploadLifecycleTest extends TestCase
         ]);
 
         return $property['id'];
+    }
+
+    private function configureTemporaryMediaRoot(): string
+    {
+        $root = sys_get_temp_dir().DIRECTORY_SEPARATOR.'gisley-media-'.Str::uuid();
+        File::makeDirectory($root, 0750, true);
+        config(['services.media.root' => $root]);
+
+        return $root;
     }
 
     private function createManagerSession(): array

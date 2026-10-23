@@ -18,7 +18,7 @@
 2. Envie o código sem `.env`, `node_modules`, `dist-preview` ou secrets.
 3. Instale dependências: `composer install --no-dev --optimize-autoloader --no-interaction`.
 4. Configure `.env` fora do Document Root com `APP_ENV=production`,
-   `APP_DEBUG=false`, `APP_KEY`, URLs HTTPS, MySQL, R2, OAuth,
+   `APP_DEBUG=false`, `APP_KEY`, URLs HTTPS, MySQL, `MEDIA_ROOT`, OAuth,
    `QUEUE_CONNECTION=sync` e os CIDRs Cloudflare em `TRUSTED_PROXIES`.
 5. Execute `php artisan migrate --force`, então `php artisan config:clear &&
    php artisan route:clear` antes de recriar os caches de configuração, rota e
@@ -28,15 +28,15 @@
 8. Execute `php artisan app:production-check` e valide `/health/live` e
    `/health/ready` pelo domínio HTTPS.
 
-O scheduler executa limpeza de uploads R2 órfãos e anonimização de leads. Não
+O scheduler executa limpeza de uploads locais órfãos e anonimização de leads. Não
 depende de Redis, Supervisor, daemon Node ou worker permanente.
 
 O Document Root contém somente `public/`. O filesystem local privado não tem
-rota HTTP; fotos são servidas pela rota de mídia vinculada ao registro publicado
-e redirecionada ao R2. Não execute `storage:link` neste projeto.
+rota HTTP direta; fotos são servidas pela rota de mídia vinculada ao registro
+publicado. Não execute `storage:link` neste projeto.
 
 ## Rollback
 
 Restabeleça os arquivos da release anterior e restaure o banco somente se a
-migration correspondente tiver rollback seguro e validado. Não remova objetos
-R2 durante rollback: eles são dados independentes do release.
+migration correspondente tiver rollback seguro e validado. Não remova fotos
+locais durante rollback: elas são dados independentes do release.

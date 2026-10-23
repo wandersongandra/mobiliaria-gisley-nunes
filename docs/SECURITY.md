@@ -9,8 +9,9 @@
 - CSRF Laravel em mutações; contato público com origem explícita, rate limit e
   honeypot.
 - Comparação estrita de esquema, host e porta de origem configurada.
-- R2 privado, PUT pré-assinado curto sem overwrite, confirmação por HEAD e
-  inspeção real do tipo e das dimensões da imagem antes do registro.
+- Storage local privado fora do Document Root, PUT autenticado sem overwrite,
+  modo de arquivo restrito e inspeção real do tipo e das dimensões da imagem
+  antes do registro.
 - Headers CSP com nonce, `nosniff`, frame denial, política de referrer e cache
   privado para administração; `style-src` não depende de `unsafe-inline`.
 - Exportação de leads com limite dedicado de 20 requisições por 10 minutos por
@@ -24,7 +25,7 @@
 | ID | Severidade inicial | Evidência e correção |
 | --- | --- | --- |
 | SEC-01 | HIGH | A origem comparava somente host e podia aceitar porta não configurada. `RequireSameOrigin` agora compara origem canônica configurada. |
-| SEC-02 | HIGH | Largura/altura de upload vinham do cliente. `R2Storage::imageInfo` extrai tipo e dimensões do objeto armazenado e rejeita divergências. |
+| SEC-02 | HIGH | Largura/altura de upload vinham do cliente. `LocalMediaStorage::imageInfo` extrai tipo e dimensões do arquivo local e rejeita divergências. |
 | SEC-03 | MEDIUM | Não havia endpoints separados de liveness/readiness. Foram incluídos `/health/live` e `/health/ready`, sem detalhes internos. |
 | SEC-04 | MEDIUM | Login/logout não deixavam eventos explícitos. Eventos de autenticação agora entram na auditoria sem sessão, token ou cookie. |
 | SEC-05 | LOW | `-Indexes` dependia de `mod_negotiation`. A diretiva ficou independente no `.htaccess`. |
@@ -37,15 +38,15 @@
 
 ## Riscos residuais
 
-- Validação ponta a ponta de OAuth, R2, MySQL e Cloudflare requer ambiente
-  hospedado com credenciais reais e não foi executada localmente.
+- Validação ponta a ponta de OAuth, MySQL, HostGator e permissões do diretório
+  de mídia requer ambiente hospedado e não foi executada localmente.
 - O endpoint legado de catálogo continua disponível temporariamente; o frontend
   usa a v2 paginada. A remoção exige inventário externo de consumidores e aviso
   de sunset.
-- Operações que envolvem R2 ainda exigem compensação, pois não existe transação
-  distribuída entre MySQL e o bucket.
-- Validação real de OAuth, R2, MySQL e Cloudflare continua dependente do
-  ambiente autorizado.
+- A gravação do arquivo e o registro MySQL não formam uma transação distribuída;
+  a compensação remove o arquivo quando o registro falha.
+- Objetos antigos do R2 ainda exigem migração física autorizada para `MEDIA_ROOT`;
+  o código não a executa silenciosamente.
 - A aplicação é single-tenant; não há isolamento por imobiliária/proprietário.
 - Definir retenção legal e backup independente para trilha de auditoria exige
   decisão operacional.

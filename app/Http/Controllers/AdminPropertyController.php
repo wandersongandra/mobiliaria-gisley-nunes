@@ -9,7 +9,6 @@ use App\Services\CrmService;
 use App\Services\PropertyService;
 use App\Services\R2Storage;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -177,9 +176,50 @@ class AdminPropertyController extends Controller
             'uploadUrl' => $this->storage->presignPut($storagePath, $contentType),
             'storagePath' => $storagePath,
             'assetUrl' => $this->storage->assetUrl($storagePath),
-            'provider' => 'r2',
+            'provider' => 'local',
             'uploadHeaders' => ['Content-Type' => $contentType, 'If-None-Match' => '*'],
         ]);
+    }
+
+    public function uploadPresigned(Request $request, string $path): JsonResponse
+    {
+        $storagePath = rawurldecode($path);
+        $propertyId = $this->storage->propertyIdFromPath($storagePath);
+        if ($propertyId === null) {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
+        $admin = $this->admin($request);
+        $property = $this->properties->getProperty($propertyId);
+        if (! $property) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
+        if (! $this->canManageMedia($admin, $property)) {
+            return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
+        }
+
+        $contentType = strtolower(trim((string) $request->header('Content-Type', '')));
+        $size = (int) $request->header('Content-Length', 0);
+        if ($size < 1 || $size > 12 * 1024 * 1024) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $stream = $request->getContent(true);
+        if (! is_resource($stream)) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        try {
+            $this->storage->putStream($storagePath, $stream, $contentType, $size);
+        } finally {
+            fclose($stream);
+        }
+
+        return response()->json([
+            'storagePath' => $storagePath,
+            'assetUrl' => $this->storage->assetUrl($storagePath),
+            'provider' => 'local',
+        ], 201);
     }
 
     public function uploadPhoto(Request $request, string $id): JsonResponse
@@ -248,7 +288,7 @@ class AdminPropertyController extends Controller
                     'alt_text' => $altText !== '' ? $altText : 'Foto de '.$property['title'],
                     'sort_order' => $sortOrder,
                     'is_cover' => $isCover ? 1 : 0,
-                    'storage_provider' => 'r2',
+                    'storage_provider' => 'local',
                     'mime_type' => $contentType,
                     'file_size' => $size,
                     'width' => $image['width'],
@@ -341,7 +381,7 @@ class AdminPropertyController extends Controller
                     'alt_text' => $altText !== '' ? $altText : 'Foto de '.$property['title'],
                     'sort_order' => $sortOrder,
                     'is_cover' => $isCover ? 1 : 0,
-                    'storage_provider' => 'r2',
+                    'storage_provider' => 'local',
                     'mime_type' => $contentType,
                     'file_size' => $size,
                     'width' => $image['width'],
@@ -360,7 +400,7 @@ class AdminPropertyController extends Controller
         return response()->json(['photos' => $this->adminPhotos($photos)], 201);
     }
 
-    public function photoMedia(string $id): RedirectResponse|JsonResponse
+    public function photoMedia(string $id): JsonResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
     {
         $this->assertId($id);
         $photo = $this->properties->getPhoto($id);
@@ -368,8 +408,16 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'NOT_FOUND'], 404);
         }
 
-        return redirect()->away($this->storage->presignGet((string) $photo['storage_path']), 307)
-            ->header('Cache-Control', 'no-store');
+        $storagePath = (string) $photo['storage_path'];
+        if (! $this->storage->exists($storagePath)) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
+
+        return response()->file($this->storage->path($storagePath), [
+            'Content-Type' => $this->storage->contentType($storagePath),
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function removePhoto(Request $request, string $id)

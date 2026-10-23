@@ -83,6 +83,7 @@ class RouteSurfaceTest extends TestCase
         'PUT api/admin/properties/{id}',
         'PUT api/admin/properties/{id}/photos/order',
         'PUT api/admin/site',
+        'PUT api/admin/uploads/{path}',
     ];
 
     public function test_application_route_surface_matches_the_snapshot(): void

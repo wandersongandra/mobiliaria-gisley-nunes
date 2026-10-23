@@ -12,14 +12,20 @@ frontend; não é requisito do runtime PHP.
 routes/web.php
   -> middleware (SecurityHeaders, RequireSameOrigin, RequireAdmin, RequireCapability)
   -> controllers
-  -> AdminAccessService | PropertyService | CrmService | R2Storage
-  -> MySQL / Cloudflare R2
+  -> AdminAccessService | PropertyService | CrmService | LocalMediaStorage
+  -> MySQL / MEDIA_ROOT privado
 ```
 
 O projeto usa Query Builder deliberadamente. Não há Models Eloquent,
 repositories, jobs, listeners ou filas no backend Laravel atual. A validação de
 domínio está nos serviços e as validações de filtros HTTP ficam nos controllers.
 Não introduzir Eloquent apenas por convenção: ele não reduz o acoplamento atual.
+
+As novas fotos são gravadas em `MEDIA_ROOT`, fora do Document Root, e entregues
+por controllers que validam o registro no banco. `MEDIA_ROOT` relativo é resolvido
+com `base_path()` e é rejeitado quando aponta para `public/`. Objetos legados que
+existem somente no R2 não são copiados automaticamente; sua migração física para
+o diretório local é uma pendência operacional separada.
 
 ## Superfícies
 

@@ -14,7 +14,6 @@ class HttpSecurityBoundaryTest extends TestCase
         config([
             'app.url' => 'https://www.example.test',
             'app.admin_url' => 'https://admin.example.test',
-            'services.r2.account_id' => 'account123',
         ]);
     }
 
@@ -70,8 +69,7 @@ class HttpSecurityBoundaryTest extends TestCase
         $this->assertStringContainsString("script-src-attr 'none'", $csp);
         $this->assertStringContainsString("frame-src 'none'", $csp);
         $this->assertStringContainsString("worker-src 'none'", $csp);
-        $this->assertStringContainsString('https://account123.r2.cloudflarestorage.com', $csp);
-        $this->assertStringNotContainsString('https://*.r2.cloudflarestorage.com', $csp);
+        $this->assertStringNotContainsString('r2.cloudflarestorage.com', $csp);
     }
 
     public function test_oauth_callback_never_exposes_its_query_to_referrers(): void

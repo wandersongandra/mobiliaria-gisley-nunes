@@ -64,6 +64,9 @@ Route::prefix('api/admin')
     ->group(function (): void {
         Route::post('/properties/{id}/photos/upload', [AdminPropertyController::class, 'uploadPhoto'])
             ->middleware(['capability:media.manage', 'throttle:upload']);
+        Route::put('/uploads/{path}', [AdminPropertyController::class, 'uploadPresigned'])
+            ->where('path', '.*')
+            ->middleware(['capability:media.manage', 'throttle:upload']);
     });
 
 Route::prefix('api/admin')

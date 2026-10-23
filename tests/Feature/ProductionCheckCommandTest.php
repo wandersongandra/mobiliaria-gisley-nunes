@@ -24,10 +24,7 @@ class ProductionCheckCommandTest extends TestCase
             'session.http_only' => true,
             'session.same_site' => 'lax',
             'cache.default' => 'file',
-            'services.r2.account_id' => 'account',
-            'services.r2.bucket' => 'bucket',
-            'services.r2.access_key_id' => 'key',
-            'services.r2.secret_access_key' => 'not-printed-secret',
+            'services.media.root' => storage_path('app/private/media'),
             'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
             'services.google_oauth.client_secret' => 'not-printed-secret',
             'gisley.admin.bootstrap_open_ids' => ['bootstrap-open-id'],
@@ -44,11 +41,10 @@ class ProductionCheckCommandTest extends TestCase
             ->expectsOutputToContain('[OK] required PHP extensions are available')
             ->expectsOutputToContain('[OK] session.upload_progress is disabled')
             ->expectsOutputToContain('[OK] post_max_size is bounded')
-            ->expectsOutputToContain('[OK] storage and bootstrap cache directories are writable')
+            ->expectsOutputToContain('[OK] local media and bootstrap cache directories are writable')
             ->expectsOutputToContain('[OK] session cookies are host-bound, secure and HttpOnly')
             ->expectsOutputToContain('[OK] session and cache drivers do not require a persistent worker')
             ->expectsOutputToContain('[OK] queue driver does not require a persistent worker')
-            ->expectsOutputToContain('[OK] R2 configuration is present')
             ->expectsOutputToContain('[OK] OAuth configuration uses secure endpoints and callback path')
             ->expectsOutputToContain('[OK] bootstrap identity is configured and valid')
             ->expectsOutputToContain('[OK] trusted proxy CIDRs are configured')
@@ -124,6 +120,18 @@ class ProductionCheckCommandTest extends TestCase
 
         $this->artisan('app:production-check')
             ->expectsOutputToContain('[FAIL] session cookies are host-bound, secure and HttpOnly')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_media_root_inside_the_document_root(): void
+    {
+        config([
+            'app.env' => 'production',
+            'services.media.root' => public_path('media'),
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] local media and bootstrap cache directories are writable')
             ->assertFailed();
     }
 

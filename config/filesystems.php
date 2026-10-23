@@ -1,14 +1,19 @@
 <?php
 
+$mediaRoot = trim((string) env('MEDIA_ROOT', storage_path('app/private/media')));
+if ($mediaRoot !== '' && preg_match('~^(?:[A-Za-z]:[\\\\/]|[\\\\/]{1,2})~', $mediaRoot) !== 1) {
+    $mediaRoot = base_path($mediaRoot);
+}
+
 return [
     'default' => env('FILESYSTEM_DISK', 'local'),
 
     'disks' => [
-        // Fotos do catálogo ficam somente no R2. O upload passa pelo backend
-        // para não depender de CORS administrativo no bucket.
+        // O disco privado é usado pela camada LocalMediaStorage. A aplicação
+        // entrega os arquivos por controllers que validam o registro no banco.
         'local' => [
             'driver' => 'local',
-            'root' => storage_path('app/private'),
+            'root' => $mediaRoot,
             'serve' => false,
             'throw' => false,
             'report' => false,
