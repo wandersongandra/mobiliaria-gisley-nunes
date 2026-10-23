@@ -74,9 +74,12 @@ class AuthController extends Controller
 
     public function callback(Request $request): RedirectResponse|Response
     {
-        $code = (string) $request->query('code', '');
-        $state = (string) $request->query('state', '');
-        $savedState = (string) $request->session()->pull('oauth_state', '');
+        $rawCode = $request->query('code', '');
+        $rawState = $request->query('state', '');
+        $rawSavedState = $request->session()->pull('oauth_state', '');
+        $code = is_string($rawCode) ? $rawCode : '';
+        $state = is_string($rawState) ? $rawState : '';
+        $savedState = is_string($rawSavedState) ? $rawSavedState : '';
 
         if (
             $code === '' || strlen($code) > 4096

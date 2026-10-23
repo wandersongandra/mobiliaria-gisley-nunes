@@ -16,6 +16,7 @@ let propertySearchTimer = 0;
 let propertyLoadSequence = 0;
 let leadLoadSequence = 0;
 let teamLoading = false;
+let teamRefreshQueued = false;
 let leadsLoaded = false;
 let propertyRequestController = null;
 let leadRequestController = null;
@@ -102,6 +103,7 @@ function clearSensitiveState() {
   leadLoadSequence += 1;
   teamLoadSequence += 1;
   teamLoading = false;
+  teamRefreshQueued = false;
   state.user = null;
   state.csrfToken = '';
   state.properties = [];
@@ -655,7 +657,9 @@ function switchView(name) {
     else link.removeAttribute('aria-current');
   });
   if (activeView) {
-    const heading = activeView.querySelector('h1, h2, h3');
+    const heading = activeView.id === 'dashboard-view'
+      ? dashboardHeading
+      : activeView.querySelector('h1, h2, h3');
     if (heading) {
       heading.tabIndex = -1;
       heading.focus();
@@ -668,6 +672,9 @@ function switchView(name) {
 
 function viewFromHash() {
   const view = window.location.hash.slice(1);
+  if (view === 'admin-main') {
+    return document.querySelector('.admin-view:not([hidden])')?.id || 'dashboard-view';
+  }
   const link = [...document.querySelectorAll('.side-nav a[data-view]')]
     .find((item) => item.dataset.view === view && !item.hidden);
   return link?.dataset.view || 'dashboard-view';
@@ -916,7 +923,10 @@ function renderTeamInvitations() {
 }
 
 async function loadTeam() {
-  if (teamLoading) return;
+  if (teamLoading) {
+    teamRefreshQueued = true;
+    return;
+  }
   teamLoading = true;
   const controller = new AbortController();
   teamRequestController?.abort();
@@ -943,6 +953,10 @@ async function loadTeam() {
     if (generation === teamLoadSequence) {
       teamRequestController = null;
       teamLoading = false;
+      if (teamRefreshQueued) {
+        teamRefreshQueued = false;
+        void loadTeam();
+      }
     }
   }
 }

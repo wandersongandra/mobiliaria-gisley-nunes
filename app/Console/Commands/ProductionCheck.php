@@ -16,12 +16,14 @@ class ProductionCheck extends Command
         $checks = [
             'APP_ENV is production' => config('app.env') === 'production',
             'APP_DEBUG is disabled' => config('app.debug') === false,
-            'PHP version is supported' => version_compare(PHP_VERSION, '8.2.0', '>='),
+            'PHP version is patched against PHP2Shell (CVE-2026-109618/109619)' => $this->isPatchedPhpVersion(),
             'APP_KEY has a supported cipher length' => $this->hasValidAppKey(),
             'APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts' => $this->hasSecureSeparatedOrigins(),
             'MySQL connection settings are present' => config('database.default') === 'mysql'
                 && $this->configured(['database.connections.mysql.host', 'database.connections.mysql.database', 'database.connections.mysql.username', 'database.connections.mysql.password']),
             'required PHP extensions are available' => $this->requiredExtensionsAvailable(),
+            'session.upload_progress is disabled (PHP2Shell mitigation)' => $this->isUploadProgressDisabled(),
+            'post_max_size is bounded to prevent OOM in upload handler' => $this->hasBoundedPostMaxSize(),
             'storage and bootstrap cache directories are writable' => is_writable(storage_path()) && is_writable(base_path('bootstrap/cache')),
             'session cookies are host-bound, secure and HttpOnly' => $this->hasSecureSessionCookie(),
             'session and cache drivers do not require a persistent worker' => in_array(config('session.driver'), ['file', 'database'], true)
@@ -114,13 +116,32 @@ class ProductionCheck extends Command
 
     private function canonicalOrigin(string $url): ?string
     {
-        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        $parts = parse_url($url);
+        if ($parts === false) {
+            return null;
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
         if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
             return null;
         }
 
-        $port = parse_url($url, PHP_URL_PORT);
+        // APP_URL e ADMIN_ORIGIN precisam ser origens, não URLs de recurso.
+        // Aceitamos apenas a barra final convencional; caminho, query,
+        // fragmento ou credenciais mudariam redirects e URLs geradas.
+        $path = array_key_exists('path', $parts) ? (string) $parts['path'] : '';
+        if ($path !== '' && $path !== '/') {
+            return null;
+        }
+        if (array_key_exists('query', $parts)
+            || array_key_exists('fragment', $parts)
+            || array_key_exists('user', $parts)
+            || array_key_exists('pass', $parts)) {
+            return null;
+        }
+
+        $port = $parts['port'] ?? null;
         if (is_int($port) && ! (($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80))) {
             return $scheme.'://'.$host.':'.$port;
         }
@@ -165,6 +186,105 @@ class ProductionCheck extends Command
         }
 
         return true;
+    }
+
+    /**
+     * Verifica se a versão do PHP está patched contra PHP2Shell
+     * (CVE-2026-109618 e CVE-2026-109619). Cada branch suportada tem uma
+     * patch release mínima: 8.2.35, 8.3.36, 8.4.27, 8.5.12.
+     */
+    private function isPatchedPhpVersion(): bool
+    {
+        $patches = [
+            '8.2' => '8.2.35',
+            '8.3' => '8.3.36',
+            '8.4' => '8.4.27',
+            '8.5' => '8.5.12',
+        ];
+
+        foreach ($patches as $branch => $minPatched) {
+            if (version_compare(PHP_VERSION, $branch.'.0', '>=') && version_compare(PHP_VERSION, $branch.'.999', '<')) {
+                return version_compare(PHP_VERSION, $minPatched, '>=');
+            }
+        }
+
+        // Branch não mapeada precisa de uma atualização explícita deste gate;
+        // não presumimos que uma versão futura esteja livre dos CVEs.
+        return false;
+    }
+
+    /**
+     * Verifica se session.upload_progress está desabilitado, bloqueando o
+     * caminho de ataque confirmado para CVE-2026-109619 onde o parser
+     * multipart invoca session handling antes do script da aplicação rodar.
+     *
+     * Em CLI (onde o artisan command roda), os INI settings podem diferir do
+     * FPM. Nesse caso, validamos a diretiva versionada em public/.user.ini;
+     * o deploy ainda precisa da sonda HTTP para provar o valor efetivo no FPM.
+     */
+    private function isUploadProgressDisabled(): bool
+    {
+        $value = PHP_SAPI === 'cli'
+            ? $this->userIniValue('session.upload_progress.enabled')
+            : (string) ini_get('session.upload_progress.enabled');
+
+        return in_array(strtolower(trim((string) $value)), ['0', 'off', 'false'], true);
+    }
+
+    /**
+     * Verifica se post_max_size está limitado, prevenindo que um upload
+     * malicioso exausta memory_limit dentro do handler de upload-progress
+     * (superfície do CVE-2026-109618).
+     *
+     * Em CLI, lê a mesma diretiva versionada em public/.user.ini; em FPM,
+     * consulta o valor efetivo carregado pelo runtime.
+     */
+    private function hasBoundedPostMaxSize(): bool
+    {
+        $value = PHP_SAPI === 'cli'
+            ? $this->userIniValue('post_max_size')
+            : (string) ini_get('post_max_size');
+        $value = strtolower(trim((string) $value));
+        if ($value === '' || $value === '-1' || $value === '0') {
+            return false;
+        }
+
+        $bytes = $this->parseIniSize($value);
+
+        return $bytes > 0 && $bytes <= 64 * 1024 * 1024;
+    }
+
+    private function userIniValue(string $directive): ?string
+    {
+        $path = base_path('public/.user.ini');
+        if (! is_readable($path)) {
+            return null;
+        }
+
+        $contents = file_get_contents($path);
+        if (! is_string($contents)) {
+            return null;
+        }
+
+        $pattern = '/^\s*'.preg_quote($directive, '/').'\s*=\s*([^;\r\n]+)\s*(?:;.*)?$/mi';
+        if (preg_match($pattern, $contents, $matches) !== 1) {
+            return null;
+        }
+
+        return trim($matches[1], " \t\"'");
+    }
+
+    private function parseIniSize(string $value): int
+    {
+        $unit = strtolower(substr($value, -1));
+        $numeric = (int) $value;
+
+        return match ($unit) {
+            'g' => $numeric * 1024 * 1024 * 1024,
+            'm' => $numeric * 1024 * 1024,
+            'k' => $numeric * 1024,
+            default => $numeric,
+        };
     }
 
     private function hasValidTrustedProxies(): bool

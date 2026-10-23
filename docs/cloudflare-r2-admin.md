@@ -74,6 +74,31 @@ O navegador do CRM envia os arquivos diretamente para a URL temporária do R2. R
 
 Se houver um ambiente de homologação, adicione explicitamente a origem dele; não use `*` em produção.
 
+### Formatos e ferramentas
+
+O formato nativo do R2 documentado para Wrangler/API é o objeto `rules` com
+`allowed.origins`, `allowed.methods` e `allowed.headers` (PascalCase não é
+aceito como substituto pelo comando Wrangler). Para listar uma configuração de
+homologação:
+
+```powershell
+pnpm dlx wrangler@4.145.0 r2 bucket cors list <STAGING_BUCKET>
+```
+
+Para aplicar, somente após o portão de identificação do bucket de staging e
+revisão humana:
+
+```powershell
+pnpm dlx wrangler@4.145.0 r2 bucket cors set <STAGING_BUCKET> --file <RULES_ALLOWED_JSON>
+```
+
+`docs/cors.proposed.json` mantém a variante PascalCase para interoperabilidade
+com ferramentas S3 que explicitamente documentem esse contrato. Ela precisa
+ser convertida/validada antes do uso; enviar o formato errado ao Wrangler ou à
+API nativa deve falhar com erro de schema/HTTP e não autoriza assumir que a
+configuração foi alterada. O `cors.json` local não é sobrescrito nem incluído
+na PR.
+
 ## 5. Configurar o painel
 
 No backend:
