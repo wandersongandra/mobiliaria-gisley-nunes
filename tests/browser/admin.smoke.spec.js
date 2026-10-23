@@ -163,7 +163,7 @@ test('cadastro de imóvel envia o contrato compatível e mantém o modal dentro 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#new-property-top').click();
   await page.locator('input[name="title"]').fill('Casa de teste contratual');
-  await page.locator('input[name="location"]').fill('Centro · Belo Horizonte');
+  await page.locator('#property-dialog input[name="location"]').fill('Centro · Belo Horizonte');
   await page.locator('input[name="published"]').uncheck();
   await page.locator('#save-property').click();
 
