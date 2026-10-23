@@ -1,6 +1,9 @@
 name: HostGator deploy (gated)
 
 on:
+  push:
+    branches:
+      - migration/laravel-backend-2026-10-02
   workflow_dispatch:
     inputs:
       ref:
@@ -26,7 +29,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ inputs.ref == 'migration/laravel-backend-2026-10-02' && inputs.confirm == 'ENABLE_HOSTGATOR_DEPLOY' && vars.HOSTGATOR_DEPLOY_ENABLED == 'true' }}
+    if: ${{ vars.HOSTGATOR_DEPLOY_ENABLED == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/migration/laravel-backend-2026-10-02') || (github.event_name == 'workflow_dispatch' && inputs.ref == 'migration/laravel-backend-2026-10-02' && inputs.confirm == 'ENABLE_HOSTGATOR_DEPLOY')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -37,8 +40,8 @@ jobs:
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       HOSTGATOR_SSH_PRIVATE_KEY: ${{ secrets.HOSTGATOR_SSH_PRIVATE_KEY }}
       HOSTGATOR_KNOWN_HOSTS: ${{ secrets.HOSTGATOR_KNOWN_HOSTS }}
-      REQUESTED_REF: ${{ inputs.ref }}
-      DEPLOY_SHA: ${{ inputs.sha }}
+      REQUESTED_REF: ${{ github.event_name == 'push' && 'migration/laravel-backend-2026-10-02' || inputs.ref }}
+      DEPLOY_SHA: ${{ github.event_name == 'push' && github.sha || inputs.sha }}
 
     steps:
       - name: Validate immutable target
