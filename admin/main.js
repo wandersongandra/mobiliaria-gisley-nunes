@@ -400,6 +400,8 @@ async function saveProperty(event) {
   data.status = isManager && form.elements.published.checked ? 'published' : 'draft';
   // `published` is a UI-only field; the backend contract accepts `status`.
   delete data.published;
+  // The API treats an explicit empty priceLabel as invalid; absent lets it derive the label.
+  if (!String(data.priceLabel ?? '').trim()) delete data.priceLabel;
 
   let propertySaved = false;
   const publishAfterUpload = data.status === 'published'
