@@ -200,7 +200,7 @@ class AdminPropertyController extends Controller
         }
 
         $contentType = strtolower(trim((string) $request->header('Content-Type', '')));
-        $size = (int) $request->header('Content-Length', 0);
+        $size = (int) $request->header('Content-Length', '0');
         if ($size < 1 || $size > 12 * 1024 * 1024) {
             throw new RuntimeException('INVALID_FILE');
         }
