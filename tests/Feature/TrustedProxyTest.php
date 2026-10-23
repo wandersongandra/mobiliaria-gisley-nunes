@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\ConfigureTrustedProxies;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class TrustedProxyTest extends TestCase
@@ -34,6 +35,23 @@ class TrustedProxyTest extends TestCase
 
         $this->assertSame('198.51.100.20', $this->trustedIp($request));
         $this->assertTrue($request->isSecure());
+    }
+
+    public function test_api_error_response_survives_a_configured_https_proxy(): void
+    {
+        Route::get('/api/test-proxy-error', static function (): never {
+            abort(404);
+        });
+
+        config(['gisley.network.trusted_proxies' => ['203.0.113.0/24']]);
+
+        $this->withHeaders([
+            'Host' => 'localhost',
+            'X-Forwarded-For' => '198.51.100.20, 203.0.113.8',
+            'X-Forwarded-Proto' => 'https',
+        ])->getJson('/api/test-proxy-error')
+            ->assertNotFound()
+            ->assertJson(['error' => 'NOT_FOUND']);
     }
 
     private function trustedIp(Request $request): string

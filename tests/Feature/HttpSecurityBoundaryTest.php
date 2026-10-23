@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class HttpSecurityBoundaryTest extends TestCase
@@ -44,6 +45,13 @@ class HttpSecurityBoundaryTest extends TestCase
             ->assertJson(['error' => 'NOT_FOUND']);
     }
 
+    public function test_release_metadata_requires_an_authenticated_admin_session(): void
+    {
+        $this->getJson('/api/admin/release')
+            ->assertUnauthorized()
+            ->assertJson(['error' => 'AUTH_REQUIRED']);
+    }
+
     public function test_security_headers_cover_browser_isolation_and_admin_noindex(): void
     {
         $response = $this->withHeaders(['Host' => 'admin.example.test'])
@@ -73,5 +81,47 @@ class HttpSecurityBoundaryTest extends TestCase
         $response->assertHeader('Referrer-Policy', 'no-referrer');
         $response->assertHeader('Cache-Control', 'no-store, private');
         $response->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    }
+
+    public function test_unhandled_http_errors_use_the_api_error_contract(): void
+    {
+        Route::get('/api/test-http-error', static function (): never {
+            abort(500);
+        });
+
+        $this->getJson('/api/test-http-error')
+            ->assertStatus(500)
+            ->assertJson(['error' => 'INTERNAL_ERROR']);
+    }
+
+    public function test_api_not_found_and_method_not_allowed_are_json(): void
+    {
+        Route::get('/api/test-http-not-found', static function (): never {
+            abort(404);
+        });
+        Route::get('/api/test-http-method', static function (): never {
+            abort(405);
+        });
+
+        $this->getJson('/api/test-http-not-found')
+            ->assertNotFound()
+            ->assertJson(['error' => 'NOT_FOUND']);
+
+        $this->getJson('/api/test-http-method')
+            ->assertStatus(405)
+            ->assertJson(['error' => 'METHOD_NOT_ALLOWED']);
+    }
+
+    public function test_non_api_http_errors_keep_the_html_response_contract(): void
+    {
+        Route::get('/test-http-not-found', static function (): never {
+            abort(404);
+        });
+
+        $response = $this->get('/test-http-not-found');
+
+        $response->assertNotFound();
+        $this->assertStringContainsString('text/html', (string) $response->headers->get('Content-Type'));
+        $this->assertStringNotContainsString('"error"', $response->getContent() ?: '');
     }
 }

@@ -65,6 +65,25 @@ function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (cha
 function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(value)) : 'agora'; }
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }
 
+function buildPropertyPayload(rawData, { isManager, wantsPublished, isFeatured }) {
+  const data = { ...rawData };
+  data.featured = Boolean(isManager && isFeatured);
+  data.status = isManager && wantsPublished ? 'published' : 'draft';
+  delete data.published;
+  if (!String(data.priceLabel ?? '').trim()) delete data.priceLabel;
+  return data;
+}
+
+function buildInitialPropertyPayload(data, preserveDraft) {
+  const payload = { ...data };
+  if (preserveDraft) {
+    payload.status = 'draft';
+    payload.featured = false;
+  }
+  delete payload.published;
+  return payload;
+}
+
 function confirmAction({ title = 'Confirmar ação', message = 'Deseja continuar?' } = {}) {
   if (!confirmDialog) return Promise.resolve(false);
   const titleNode = $('#confirm-dialog-title');
@@ -414,23 +433,19 @@ async function saveProperty(event) {
   setButtonPending(button, true, 'Salvando…');
   toast('Salvando alterações…');
 
-  const data = Object.fromEntries(new FormData(form));
   const isManager = state.user?.role === 'manager';
-  data.featured = isManager && form.elements.featured.checked;
-  data.status = isManager && form.elements.published.checked ? 'published' : 'draft';
-  // `published` is a UI-only field; the backend contract accepts `status`.
-  delete data.published;
-  // The API treats an explicit empty priceLabel as invalid; absent lets it derive the label.
-  if (!String(data.priceLabel ?? '').trim()) delete data.priceLabel;
+  const data = buildPropertyPayload(Object.fromEntries(new FormData(form)), {
+    isManager,
+    wantsPublished: Boolean(form.elements.published?.checked),
+    isFeatured: Boolean(form.elements.featured?.checked),
+  });
 
   let propertySaved = false;
   const publishAfterUpload = data.status === 'published'
     && state.pendingFiles.length > 0
     && !state.editing?.photos?.some((photo) => photo.is_cover);
   try {
-    const initialData = publishAfterUpload
-      ? { ...data, status: 'draft', published: false, featured: false }
-      : data;
+    const initialData = buildInitialPropertyPayload(data, publishAfterUpload);
     const result = await request(
       state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties',
       { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(initialData) }

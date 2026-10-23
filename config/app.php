@@ -12,4 +12,9 @@ return [
     'faker_locale' => 'pt_BR',
     'key' => env('APP_KEY'),
     'cipher' => 'AES-256-CBC',
+    'release' => [
+        'sha' => env('APP_RELEASE_SHA', 'unknown'),
+        'built_at' => env('APP_RELEASE_BUILT_AT', 'unknown'),
+        'asset_version' => env('APP_ASSET_VERSION', 'unknown'),
+    ],
 ];

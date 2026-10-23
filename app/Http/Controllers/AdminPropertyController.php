@@ -11,6 +11,7 @@ use App\Services\R2Storage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
@@ -209,7 +210,7 @@ class AdminPropertyController extends Controller
 
         $bytes = file_get_contents($filePath);
         $imageDetails = @getimagesizefromstring($bytes === false ? '' : $bytes);
-        $imageMime = is_array($imageDetails) ? (string) ($imageDetails['mime'] ?? '') : '';
+        $imageMime = is_array($imageDetails) ? (string) $imageDetails['mime'] : '';
         $contentType = strtolower((string) $imageMime);
         if (! isset(self::MIME_EXTENSIONS[$contentType])) {
             throw new RuntimeException('INVALID_FILE');
@@ -257,10 +258,7 @@ class AdminPropertyController extends Controller
                 ['propertyId' => $propertyId, 'storagePath' => $storagePath],
             );
         } catch (\Throwable $error) {
-            try {
-                $this->storage->delete($storagePath);
-            } catch (\Throwable) {
-            }
+            $this->cleanupStorageAfterFailure($storagePath, $propertyId, $photoId);
             throw $error;
         }
 
@@ -324,10 +322,7 @@ class AdminPropertyController extends Controller
             || $image['height'] !== $height;
 
         if ($invalid) {
-            try {
-                $this->storage->delete($storagePath);
-            } catch (\Throwable) {
-            }
+            $this->cleanupStorageAfterFailure($storagePath, $propertyId);
             throw new RuntimeException('INVALID_ASSET');
         }
 
@@ -357,10 +352,7 @@ class AdminPropertyController extends Controller
             );
         } catch (\Throwable $error) {
             if ($error->getMessage() !== 'ASSET_ALREADY_REGISTERED') {
-                try {
-                    $this->storage->delete($storagePath);
-                } catch (\Throwable) {
-                }
+                $this->cleanupStorageAfterFailure($storagePath, $propertyId, $photoId);
             }
             throw $error;
         }
@@ -478,6 +470,19 @@ class AdminPropertyController extends Controller
         );
 
         return response()->json(['photos' => $this->adminPhotos($photos)]);
+    }
+
+    private function cleanupStorageAfterFailure(string $storagePath, string $propertyId, ?string $photoId = null): void
+    {
+        try {
+            $this->storage->delete($storagePath);
+        } catch (\Throwable $error) {
+            Log::warning('admin.property_photo.cleanup_failed', [
+                'property_id' => $propertyId,
+                'photo_id' => $photoId,
+                'exception' => $error::class,
+            ]);
+        }
     }
 
     private function draftOnlyRequest(Request $request): bool
