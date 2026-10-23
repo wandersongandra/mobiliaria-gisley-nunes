@@ -525,19 +525,59 @@ async function imageDimensions(file) {
   });
 }
 
-function imageContentType(file) {
+function imageSignatureContentType(bytes) {
+  const value = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  if (value.length >= 3 && value[0] === 0xff && value[1] === 0xd8 && value[2] === 0xff) return 'image/jpeg';
+  if (value.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, index) => value[index] === byte)) return 'image/png';
+  if (value.length >= 12
+    && String.fromCharCode(...value.slice(0, 4)) === 'RIFF'
+    && String.fromCharCode(...value.slice(8, 12)) === 'WEBP') return 'image/webp';
+  if (value.length >= 16 && String.fromCharCode(...value.slice(4, 8)) === 'ftyp') {
+    const brands = String.fromCharCode(...value.slice(8, Math.min(value.length, 32)));
+    if (brands.includes('avif') || brands.includes('avis')) return 'image/avif';
+  }
+  return '';
+}
+
+async function imageContentType(file) {
   const declaredType = String(file?.type || '').toLowerCase();
   const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
   if (allowedTypes.has(declaredType)) return declaredType;
 
   const extension = String(file?.name || '').split('.').pop()?.toLowerCase();
-  return {
+  const byExtension = {
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     png: 'image/png',
     webp: 'image/webp',
     avif: 'image/avif'
-  }[extension] || '';
+  }[extension];
+  if (byExtension) return byExtension;
+
+  if (file?.slice && typeof file.slice(0, 32).arrayBuffer === 'function') {
+    try {
+      return imageSignatureContentType(await file.slice(0, 32).arrayBuffer());
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+function imageUploadName(file, contentType) {
+  const extensions = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/avif': 'avif'
+  };
+  const extension = extensions[contentType] || 'jpg';
+  const original = String(file?.name || '').trim();
+  const originalExtension = original.split('.').pop()?.toLowerCase();
+  const validExtensions = new Set(['jpg', 'jpeg', 'png', 'webp', 'avif']);
+  if (original && validExtensions.has(originalExtension)) return original;
+  const base = (original.replace(/\.[^.]*$/, '') || 'imagem').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'imagem';
+  return `${base}.${extension}`;
 }
 
 async function uploadPendingFiles(propertyId) {
@@ -545,7 +585,8 @@ async function uploadPendingFiles(propertyId) {
 
   while (state.pendingFiles.length) {
     const file = state.pendingFiles[0];
-    const contentType = imageContentType(file);
+    const contentType = await imageContentType(file);
+    const fileName = imageUploadName(file, contentType);
     const existingPhotoCount = state.editing?.photos?.length || 0;
     toast(`Enviando foto ${uploadedCount + 1}…`);
 
@@ -566,7 +607,7 @@ async function uploadPendingFiles(propertyId) {
       method: 'POST',
       body: JSON.stringify({
         propertyId,
-        fileName: file.name,
+        fileName,
         contentType,
         size: file.size
       })
@@ -583,7 +624,7 @@ async function uploadPendingFiles(propertyId) {
       method: 'POST',
       body: JSON.stringify({
         storagePath: presign.storagePath,
-        altText: file.name.replace(/\.[^.]+$/, ''),
+        altText: fileName.replace(/\.[^.]+$/, ''),
         sortOrder: existingPhotoCount,
         isCover: !state.editing?.photos?.some((photo) => photo.is_cover),
         contentType,
@@ -1278,9 +1319,12 @@ $('#logout-button')?.addEventListener('click', () => { void performLogout(); });
 $('#logout-all-button')?.addEventListener('click', () => { void performLogout({ all: true }); });
 form.addEventListener('submit', saveProperty);
 $('#photo-upload-trigger')?.addEventListener('click', () => $('#photo-input')?.click());
-$('#photo-input').addEventListener('change', (event) => {
+$('#photo-input').addEventListener('change', async (event) => {
   const incoming = Array.from(event.target.files || []);
-  const valid = incoming.filter((file) => imageContentType(file) && file.size > 0 && file.size <= 12 * 1024 * 1024);
+  const classified = await Promise.all(incoming.map(async (file) => ({ file, contentType: await imageContentType(file) })));
+  const valid = classified
+    .filter(({ file, contentType }) => contentType && file.size > 0 && file.size <= 12 * 1024 * 1024)
+    .map(({ file }) => file);
   const available = Math.max(0, 40 - ((state.editing?.photos?.length || 0) + state.pendingFiles.length));
   state.pendingFiles.push(...valid.slice(0, available));
 
