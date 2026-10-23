@@ -221,3 +221,17 @@ html{background:#f5f3ee}body{min-height:100vh}.admin-app{min-height:100vh}.admin
 .team-row.is-inactive{background:rgba(18,60,70,.035)}
 .team-row.is-inactive .team-person strong{color:#536668}
 .team-row.is-inactive .team-permission small{font-weight:800;color:#85503d}
+
+
+/* Modal QA: keep the editor fully visible and scrollable on every viewport. */
+dialog.property-dialog {
+  max-height: calc(100dvh - 32px);
+  max-height: calc(100vh - 32px);
+  margin: auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+dialog.property-dialog form { min-height: 0; }
+@media (prefers-reduced-motion: reduce) {
+  dialog.property-dialog { scroll-behavior: auto; }
+}
