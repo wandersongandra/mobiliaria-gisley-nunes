@@ -59,6 +59,28 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['error' => 'CSRF_TOKEN_MISMATCH'], 419);
             }
 
+            if ($e instanceof HttpExceptionInterface) {
+                $status = $e->getStatusCode();
+                $error = match ($status) {
+                    400 => 'BAD_REQUEST',
+                    401 => 'AUTH_REQUIRED',
+                    403 => 'FORBIDDEN',
+                    404 => 'NOT_FOUND',
+                    405 => 'METHOD_NOT_ALLOWED',
+                    409 => 'CONFLICT',
+                    413 => 'PAYLOAD_TOO_LARGE',
+                    422 => 'UNPROCESSABLE_ENTITY',
+                    429 => 'TOO_MANY_REQUESTS',
+                    default => $status >= 400 && $status < 500 ? 'HTTP_ERROR' : 'INTERNAL_ERROR',
+                };
+
+                if ($status >= 500) {
+                    report($e);
+                }
+
+                return response()->json(['error' => $error], $status);
+            }
+
             report($e);
 
             $message = $e->getMessage();

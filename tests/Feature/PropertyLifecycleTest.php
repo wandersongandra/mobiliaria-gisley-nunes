@@ -27,6 +27,43 @@ class PropertyLifecycleTest extends TestCase
         $this->assertDatabaseCount('morada_properties', 2);
     }
 
+    public function test_property_service_rejects_the_ui_only_published_field(): void
+    {
+        $this->expectExceptionMessage('INVALID_PROPERTY');
+
+        app(PropertyService::class)->saveProperty(
+            $this->propertyInput('Campo inválido', ['published' => false])
+        );
+    }
+
+    public function test_admin_create_and_update_use_status_and_featured_contract(): void
+    {
+        config(['app.url' => 'https://test.local', 'app.admin_url' => 'https://test.local']);
+        $session = $this->createManagerSession();
+        $payload = $this->propertyInput('Casa do contrato', ['status' => 'draft', 'featured' => true]);
+
+        $created = $this->withSession($session)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->postJson('/api/admin/properties', $payload)
+            ->assertCreated()
+            ->assertJsonPath('property.status', 'draft')
+            ->assertJsonPath('property.is_featured', true);
+
+        $propertyId = (string) $created->json('property.id');
+        $this->assertNotSame('', $propertyId);
+
+        $this->withSession($session)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->putJson('/api/admin/properties/'.$propertyId, array_merge($payload, [
+                'title' => 'Casa do contrato atualizada',
+                'featured' => false,
+            ]))
+            ->assertOk()
+            ->assertJsonPath('property.title', 'Casa do contrato atualizada')
+            ->assertJsonPath('property.status', 'draft')
+            ->assertJsonPath('property.is_featured', false);
+    }
+
     public function test_explicit_slug_collision_is_reported_as_a_conflict(): void
     {
         $service = app(PropertyService::class);

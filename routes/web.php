@@ -71,6 +71,8 @@ Route::prefix('api/admin')
     ->group(function (): void {
         Route::get('/properties', [AdminPropertyController::class, 'index'])
             ->middleware('capability:property.read');
+        Route::get('/release', [AuthController::class, 'release'])
+            ->middleware('capability:audit.read');
         Route::post('/properties', [AdminPropertyController::class, 'store'])
             ->middleware('capability:property.write');
         Route::get('/properties/{id}', [AdminPropertyController::class, 'show'])

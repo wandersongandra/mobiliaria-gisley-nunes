@@ -36,6 +36,7 @@ class RouteSurfaceTest extends TestCase
         'GET api/admin/photos/{id}/media',
         'GET api/admin/properties',
         'GET api/admin/properties/{id}',
+        'GET api/admin/release',
         'GET api/admin/session',
         'GET api/admin/site',
         'GET api/admin/team',

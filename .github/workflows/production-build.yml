@@ -48,6 +48,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: shivammathur/setup-php@4424c9aab975b57bd706ee5a39c6b4334d6e4f60 # 2.40.0
+        with:
+          php-version: '8.3.36'
+          coverage: none
+
       - name: Install production dependencies only
         run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
 

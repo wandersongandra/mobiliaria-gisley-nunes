@@ -6,6 +6,7 @@ use App\Services\PropertyService;
 use App\Services\R2Storage;
 use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Mockery;
@@ -205,6 +206,69 @@ class UploadLifecycleTest extends TestCase
             ['width' => 1, 'height' => 1, 'mime' => 'image/png'],
             R2Storage::imageInfoFromBytes($png, 'image/png')
         );
+    }
+
+    public function test_multipart_upload_validates_the_real_image_and_uses_the_storage_fake(): void
+    {
+        config([
+            'app.url' => 'https://test.local',
+            'app.admin_url' => 'https://test.local',
+        ]);
+        $propertyId = $this->createDraftProperty();
+        $session = $this->createManagerSession();
+        $storage = Mockery::mock(R2Storage::class)->makePartial();
+        $storage->shouldReceive('safeFileName')->once()->andReturn('fachada');
+        $storage->shouldReceive('putFile')->once()->withArgs(function (
+            string $path,
+            string $filePath,
+            string $contentType,
+            int $size
+        ) use ($propertyId): bool {
+            return str_starts_with($path, R2Storage::PREFIX.$propertyId.'/')
+                && is_file($filePath)
+                && $contentType === 'image/jpeg'
+                && $size > 0;
+        });
+        $storage->shouldReceive('assetUrl')->once()->andReturn('/media/fachada.jpg');
+        $this->app->instance(R2Storage::class, $storage);
+
+        $response = $this->withSession($session)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->post('/api/admin/properties/'.$propertyId.'/photos/upload', [
+                'photo' => UploadedFile::fake()->image('fachada.jpg', 800, 600),
+                'altText' => 'Fachada do imóvel',
+                'sortOrder' => 0,
+                'isCover' => true,
+            ]);
+
+        $response->assertCreated()->assertJsonPath('photos.0.alt_text', 'Fachada do imóvel');
+        $this->assertDatabaseHas('morada_property_photos', [
+            'property_id' => $propertyId,
+            'mime_type' => 'image/jpeg',
+            'width' => 800,
+            'height' => 600,
+        ]);
+    }
+
+    public function test_multipart_upload_rejects_non_image_bytes_even_with_an_image_extension(): void
+    {
+        config([
+            'app.url' => 'https://test.local',
+            'app.admin_url' => 'https://test.local',
+        ]);
+        $propertyId = $this->createDraftProperty();
+        $session = $this->createManagerSession();
+        $storage = Mockery::mock(R2Storage::class)->makePartial();
+        $storage->shouldNotReceive('putFile');
+        $this->app->instance(R2Storage::class, $storage);
+
+        $this->withSession($session)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->post('/api/admin/properties/'.$propertyId.'/photos/upload', [
+                'photo' => UploadedFile::fake()->createWithContent('fachada.jpg', 'not-an-image'),
+            ])
+            ->assertStatus(400)
+            ->assertJson(['error' => 'INVALID_FILE']);
     }
 
     public function test_image_inspection_rejects_an_image_with_excessive_pixel_area(): void

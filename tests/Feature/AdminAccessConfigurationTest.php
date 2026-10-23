@@ -24,6 +24,35 @@ class AdminAccessConfigurationTest extends TestCase
         $this->assertFalse(app(AdminAccessService::class)->isBootstrap('other-user'));
     }
 
+    public function test_authenticated_manager_can_read_non_sensitive_release_metadata(): void
+    {
+        $openId = 'release-metadata-test';
+        config([
+            'gisley.admin.bootstrap_open_ids' => [$openId],
+            'app.release' => [
+                'sha' => '0123456789abcdef0123456789abcdef01234567',
+                'built_at' => '2026-10-23T00:00:00Z',
+                'asset_version' => 'assets-test',
+            ],
+        ]);
+
+        $request = Request::create('/');
+        $request->setLaravelSession($this->app['session']->driver());
+        app(AdminAccessService::class)->establish($request, [
+            'openId' => $openId,
+            'email' => 'release-manager@example.test',
+            'name' => 'Release Manager',
+        ], 'manager');
+
+        $this->withSession($request->session()->all())
+            ->getJson('/api/admin/release')
+            ->assertOk()
+            ->assertJsonPath('release.environment', 'testing')
+            ->assertJsonPath('release.backend_sha', '0123456789abcdef0123456789abcdef01234567')
+            ->assertJsonPath('release.built_at', '2026-10-23T00:00:00Z')
+            ->assertJsonPath('release.asset_version', 'assets-test');
+    }
+
     public function test_verified_google_bootstrap_emails_are_matched_exactly(): void
     {
         config(['gisley.admin.bootstrap_emails' => ['owner@example.com']]);

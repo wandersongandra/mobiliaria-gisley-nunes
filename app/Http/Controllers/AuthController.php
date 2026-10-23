@@ -208,6 +208,21 @@ class AuthController extends Controller
             ->header('Pragma', 'no-cache');
     }
 
+    public function release(Request $request): JsonResponse
+    {
+        $this->access->requireCurrent($request);
+
+        return response()->json([
+            'release' => [
+                'environment' => (string) config('app.env'),
+                'backend_sha' => (string) config('app.release.sha', 'unknown'),
+                'built_at' => (string) config('app.release.built_at', 'unknown'),
+                'asset_version' => (string) config('app.release.asset_version', 'unknown'),
+            ],
+        ])->header('Cache-Control', 'no-store')
+            ->header('Pragma', 'no-cache');
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $admin = $this->access->current($request);

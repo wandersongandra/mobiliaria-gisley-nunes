@@ -35,11 +35,51 @@ class ProductionCheckCommandTest extends TestCase
             'gisley.network.trusted_proxies' => ['203.0.113.0/24'],
         ]);
 
-        $this->artisan('app:production-check')
+        $command = $this->artisan('app:production-check')
             ->expectsOutputToContain('[OK] APP_ENV is production')
-            ->expectsOutputToContain('Production configuration checks passed.')
-            ->doesntExpectOutputToContain('not-printed-secret')
-            ->assertSuccessful();
+            ->expectsOutputToContain('[OK] APP_DEBUG is disabled')
+            ->expectsOutputToContain('[OK] APP_KEY has a supported cipher length')
+            ->expectsOutputToContain('[OK] APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts')
+            ->expectsOutputToContain('[OK] MySQL connection settings are present')
+            ->expectsOutputToContain('[OK] required PHP extensions are available')
+            ->expectsOutputToContain('[OK] session.upload_progress is disabled')
+            ->expectsOutputToContain('[OK] post_max_size is bounded')
+            ->expectsOutputToContain('[OK] storage and bootstrap cache directories are writable')
+            ->expectsOutputToContain('[OK] session cookies are host-bound, secure and HttpOnly')
+            ->expectsOutputToContain('[OK] session and cache drivers do not require a persistent worker')
+            ->expectsOutputToContain('[OK] queue driver does not require a persistent worker')
+            ->expectsOutputToContain('[OK] R2 configuration is present')
+            ->expectsOutputToContain('[OK] OAuth configuration uses secure endpoints and callback path')
+            ->expectsOutputToContain('[OK] bootstrap identity is configured and valid')
+            ->expectsOutputToContain('[OK] trusted proxy CIDRs are configured')
+            ->doesntExpectOutputToContain('not-printed-secret');
+
+        if ($this->isPatchedPhpVersion()) {
+            $command->expectsOutputToContain('Production configuration checks passed.')
+                ->assertSuccessful();
+        } else {
+            $command->expectsOutputToContain('[FAIL] PHP version is patched')
+                ->assertFailed();
+        }
+    }
+
+    private function isPatchedPhpVersion(): bool
+    {
+        $patches = [
+            '8.2' => '8.2.35',
+            '8.3' => '8.3.36',
+            '8.4' => '8.4.27',
+            '8.5' => '8.5.12',
+        ];
+
+        foreach ($patches as $branch => $minimum) {
+            if (version_compare(PHP_VERSION, $branch.'.0', '>=')
+                && version_compare(PHP_VERSION, $branch.'.999', '<')) {
+                return version_compare(PHP_VERSION, $minimum, '>=');
+            }
+        }
+
+        return false;
     }
 
     public function test_production_check_rejects_an_invalid_bootstrap_identity(): void
@@ -94,6 +134,20 @@ class ProductionCheckCommandTest extends TestCase
             'app.debug' => false,
             'app.url' => 'https://example.test',
             'app.admin_url' => 'https://example.test:8443',
+        ]);
+
+        $this->artisan('app:production-check')
+            ->expectsOutputToContain('[FAIL] APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts')
+            ->assertFailed();
+    }
+
+    public function test_production_check_rejects_origins_with_a_path_or_query_string(): void
+    {
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'app.url' => 'https://www.example.test/public?tenant=1',
+            'app.admin_url' => 'https://admin.example.test/',
         ]);
 
         $this->artisan('app:production-check')

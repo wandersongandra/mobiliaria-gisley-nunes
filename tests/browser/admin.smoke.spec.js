@@ -195,3 +195,120 @@ test('cadastro de imóvel envia o contrato compatível e mantém o modal dentro 
   expect(bounds.top).toBeGreaterThanOrEqual(0);
   expect(bounds.bottom).toBeLessThanOrEqual(bounds.viewport);
 });
+
+test('gerente com upload pendente cria/edita como rascunho e publica somente no PUT final', async ({ page }) => {
+  const firstPayloads = [];
+  const finalPayloads = [];
+  const uploadedPropertyIds = [];
+  let editInitialSeen = false;
+  const onePixelPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  );
+
+  await openAdmin(page, {
+    '/api/admin/properties': async (route) => {
+      const request = route.request();
+      if (request.method() === 'POST') {
+        const payload = request.postDataJSON();
+        firstPayloads.push({ method: request.method(), payload });
+        return route.fulfill({ json: { property: {
+          id: 'property-create-upload', title: payload.title, location: payload.location,
+          city: payload.city, purpose: payload.purpose, type: payload.type,
+          status: payload.status, featured: payload.featured, photos: []
+        } } });
+      }
+      if (request.method() === 'PUT') {
+        const payload = request.postDataJSON();
+        firstPayloads.push({ method: request.method(), payload });
+        return route.fulfill({ json: { property: {
+          id: 'property-edit-upload', title: payload.title, location: payload.location,
+          city: payload.city, purpose: payload.purpose, type: payload.type,
+          status: payload.status, featured: payload.featured, photos: []
+        } } });
+      }
+      if (firstPayloads.length > 0) {
+        return route.fulfill({ json: { properties: [{
+          id: 'property-edit-upload', title: 'Casa editada', location: 'Centro · Belo Horizonte',
+          type: 'Casa', status: 'published', is_featured: true, photos: []
+        }], pagination: { current_page: 1, last_page: 1, total: 1, from: 1, to: 1 }, summary: { total: 1, active: 1, published: 1, draft: 0 } } });
+      }
+      return route.fulfill({ json: { properties: [], pagination: { current_page: 1, last_page: 1, total: 0, from: null, to: null }, summary: { total: 0, active: 0, published: 0, draft: 0 } } });
+    },
+    '/api/admin/properties/property-create-upload': async (route) => {
+      const request = route.request();
+      if (request.method() !== 'PUT') return route.fulfill({ status: 405, json: { message: 'Method not allowed' } });
+      const payload = request.postDataJSON();
+      finalPayloads.push({ method: request.method(), payload });
+      return route.fulfill({ json: { property: {
+        id: 'property-create-upload', title: 'Casa de upload', location: 'Centro · Belo Horizonte',
+        city: 'Belo Horizonte', purpose: 'Comprar', type: 'Casa', status: payload.status,
+        featured: payload.featured, photos: [{ id: 'photo-1', is_cover: true }]
+      } } });
+    },
+    '/api/admin/properties/property-edit-upload': async (route) => {
+      const request = route.request();
+      if (request.method() !== 'PUT') return route.fulfill({ status: 405, json: { message: 'Method not allowed' } });
+      const payload = request.postDataJSON();
+      if (!editInitialSeen) {
+        editInitialSeen = true;
+        firstPayloads.push({ method: request.method(), payload });
+        return route.fulfill({ json: { property: {
+          id: 'property-edit-upload', title: 'Casa editada', location: 'Centro · Belo Horizonte',
+          city: 'Belo Horizonte', purpose: 'Comprar', type: 'Casa', status: payload.status,
+          featured: payload.featured, photos: []
+        } } });
+      }
+      finalPayloads.push({ method: request.method(), payload });
+      return route.fulfill({ json: { property: {
+        id: 'property-edit-upload', title: 'Casa editada', location: 'Centro · Belo Horizonte',
+        city: 'Belo Horizonte', purpose: 'Comprar', type: 'Casa', status: payload.status,
+        featured: payload.featured, photos: [{ id: 'photo-2', is_cover: true }]
+      } } });
+    },
+    '/api/admin/properties/property-create-upload/photos/upload': async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') throw new Error(`upload de criação usou ${request.method()}; esperado POST`);
+      uploadedPropertyIds.push(new URL(request.url()).pathname.split('/')[4]);
+      return route.fulfill({ json: { photos: [{ id: 'photo-1', is_cover: true }] } });
+    },
+    '/api/admin/properties/property-edit-upload/photos/upload': async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') throw new Error(`upload de edição usou ${request.method()}; esperado POST`);
+      uploadedPropertyIds.push(new URL(request.url()).pathname.split('/')[4]);
+      return route.fulfill({ json: { photos: [{ id: 'photo-2', is_cover: true }] } });
+    }
+  });
+
+  await page.locator('#new-property-top').click();
+  await page.locator('input[name="title"]').fill('Casa de upload');
+  await page.locator('#property-dialog input[name="location"]').fill('Centro · Belo Horizonte');
+  await page.locator('input[name="published"]').check();
+  await page.locator('input[name="featured"]').check();
+  await page.locator('#photo-input').setInputFiles({ name: 'casa.png', mimeType: 'image/png', buffer: onePixelPng });
+  await expect(page.locator('.photo-tile.pending')).toHaveCount(1);
+  await page.locator('#save-property').click();
+
+  await expect.poll(() => firstPayloads.length).toBe(1);
+  await expect.poll(() => finalPayloads.length).toBe(1);
+  expect(firstPayloads[0]).toMatchObject({ method: 'POST', payload: { status: 'draft', featured: false } });
+  expect(firstPayloads[0].payload).not.toHaveProperty('published');
+  expect(uploadedPropertyIds).toEqual(['property-create-upload']);
+  expect(finalPayloads[0]).toMatchObject({ method: 'PUT', payload: { status: 'published', featured: true } });
+  expect(finalPayloads[0].payload).not.toHaveProperty('published');
+
+  await page.locator('[data-view="properties-view"]').click();
+  await expect(page.locator('[data-edit="property-edit-upload"]')).toBeVisible();
+  await page.locator('[data-edit="property-edit-upload"]').click();
+  await page.locator('#photo-input').setInputFiles({ name: 'casa-editada.png', mimeType: 'image/png', buffer: onePixelPng });
+  await expect(page.locator('.photo-tile.pending')).toHaveCount(1);
+  await page.locator('#save-property').click();
+
+  await expect.poll(() => firstPayloads.length).toBe(2);
+  await expect.poll(() => finalPayloads.length).toBe(2);
+  expect(firstPayloads[1]).toMatchObject({ method: 'PUT', payload: { status: 'draft', featured: false } });
+  expect(firstPayloads[1].payload).not.toHaveProperty('published');
+  expect(uploadedPropertyIds).toEqual(['property-create-upload', 'property-edit-upload']);
+  expect(finalPayloads[1]).toMatchObject({ method: 'PUT', payload: { status: 'published', featured: true } });
+  expect(finalPayloads[1].payload).not.toHaveProperty('published');
+});
