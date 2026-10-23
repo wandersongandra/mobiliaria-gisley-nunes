@@ -143,8 +143,9 @@ if (!\$patched) {
     \$patched = false;
 }
 
-\$up = strtolower((string) ini_get('session.upload_progress.enabled'));
-\$upDisabled = (\$up === '0' || \$up === 'off' || \$up === 'false');
+\$upRaw = ini_get('session.upload_progress.enabled');
+\$up = \$upRaw === false ? null : strtolower(trim(\$upRaw));
+\$upDisabled = \$upRaw !== false && in_array(\$up, ['', '0', 'off', 'false'], true);
 
 \$pms = strtolower(trim((string) ini_get('post_max_size')));
 \$pmsBounded = (\$pms !== '' && \$pms !== '-1' && \$pms !== '0');
