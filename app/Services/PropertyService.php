@@ -215,6 +215,9 @@ class PropertyService
     public function getPropertyBySlug(string $slug): ?array
     {
         $slug = $this->normalizeSlug($slug);
+        if ($slug === null) {
+            return null;
+        }
 
         $row = DB::table('morada_properties as p')
             ->leftJoin('morada_property_photos as ph', function ($join): void {
@@ -738,11 +741,11 @@ class PropertyService
         return '';
     }
 
-    private function normalizeSlug(string $value): string
+    private function normalizeSlug(string $value): ?string
     {
         $value = strtolower(trim($value));
         if (! preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $value)) {
-            throw new RuntimeException('NOT_FOUND');
+            return null;
         }
 
         return substr($value, 0, 180);

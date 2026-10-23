@@ -169,6 +169,14 @@ class PublicPageRenderTest extends TestCase
         $response->assertSee('Imóvel não encontrado | Gisley Nunes Imóveis');
     }
 
+    public function test_malformed_property_slug_renders_the_html_not_found_page_instead_of_a_server_error(): void
+    {
+        $response = $this->get('/imoveis/slug%20invalido');
+
+        $response->assertNotFound();
+        $response->assertSee('Imóvel não encontrado | Gisley Nunes Imóveis');
+    }
+
     public function test_unknown_neighborhood_slug_renders_the_html_not_found_page(): void
     {
         $response = $this->get('/bairros/bairro-inexistente');
