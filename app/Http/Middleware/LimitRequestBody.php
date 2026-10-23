@@ -14,12 +14,19 @@ class LimitRequestBody
             return $next($request);
         }
 
-        $limitKb = max(1, min(2048, (int) $kilobytes));
+        $limitKb = max(1, min(16384, (int) $kilobytes));
         $maxBytes = $limitKb * 1024;
 
         $declared = $request->headers->get('Content-Length');
         if (is_string($declared) && preg_match('/^[0-9]+$/D', $declared) === 1 && (int) $declared > $maxBytes) {
             return $this->tooLarge($limitKb);
+        }
+
+        // PHP parses multipart uploads into UploadedFile objects. Avoid reading
+        // the whole binary body a second time while still enforcing the
+        // Content-Length limit above.
+        if (str_starts_with(strtolower((string) $request->headers->get('Content-Type')), 'multipart/form-data')) {
+            return $next($request);
         }
 
         if (strlen($request->getContent()) > $maxBytes) {

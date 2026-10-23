@@ -181,6 +181,92 @@ class AdminPropertyController extends Controller
         ]);
     }
 
+    public function uploadPhoto(Request $request, string $id): JsonResponse
+    {
+        $propertyId = $this->assertId($id);
+        $admin = $this->admin($request);
+        $property = $this->properties->getProperty($propertyId);
+        if (! $property) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
+        if (! $this->canManageMedia($admin, $property)) {
+            return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
+        }
+        if (count($property['photos'] ?? []) >= PropertyService::MAX_PHOTOS) {
+            return response()->json(['error' => 'PHOTO_LIMIT_REACHED'], 409);
+        }
+
+        $file = $request->file('photo');
+        if (! $file || ! $file->isValid()) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $filePath = $file->getRealPath();
+        $size = is_string($filePath) && is_file($filePath) ? (int) filesize($filePath) : 0;
+        if (! is_string($filePath) || $size < 1 || $size > 12 * 1024 * 1024) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $bytes = file_get_contents($filePath);
+        $imageDetails = @getimagesizefromstring($bytes === false ? '' : $bytes);
+        $imageMime = is_array($imageDetails) ? (string) ($imageDetails['mime'] ?? '') : '';
+        $contentType = strtolower((string) $imageMime);
+        if (! isset(self::MIME_EXTENSIONS[$contentType])) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $image = R2Storage::imageInfoFromBytes($bytes === false ? '' : $bytes, $contentType);
+        if ($image === null) {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
+        $baseName = pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME);
+        $fileName = $this->storage->safeFileName($baseName ?: 'imagem').'.'.self::MIME_EXTENSIONS[$contentType][0];
+        $storagePath = R2Storage::PREFIX.$propertyId.'/'.Str::uuid().'-'.$fileName;
+        $altText = trim((string) $request->input('altText', ''));
+        $sortOrder = (int) $request->input('sortOrder', 0);
+        $isCover = filter_var($request->input('isCover', false), FILTER_VALIDATE_BOOL);
+
+        if (mb_strlen($altText) > 255 || $sortOrder < 0 || $sortOrder >= PropertyService::MAX_PHOTOS) {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
+        $this->storage->putFile($storagePath, $filePath, $contentType, $size);
+        $photoId = (string) Str::uuid();
+        try {
+            $photos = $this->criticalAudit->run(
+                $admin,
+                'photo.add',
+                'photo',
+                $photoId,
+                fn (): array => $this->properties->addPhoto([
+                    'id' => $photoId,
+                    'property_id' => $propertyId,
+                    'storage_path' => $storagePath,
+                    'url' => $this->storage->assetUrl($storagePath),
+                    'alt_text' => $altText !== '' ? $altText : 'Foto de '.$property['title'],
+                    'sort_order' => $sortOrder,
+                    'is_cover' => $isCover ? 1 : 0,
+                    'storage_provider' => 'r2',
+                    'mime_type' => $contentType,
+                    'file_size' => $size,
+                    'width' => $image['width'],
+                    'height' => $image['height'],
+                    'uploaded_by' => $admin['email'],
+                ], ! $this->access->hasCapability($admin, 'property.publish')),
+                ['propertyId' => $propertyId, 'storagePath' => $storagePath],
+            );
+        } catch (\Throwable $error) {
+            try {
+                $this->storage->delete($storagePath);
+            } catch (\Throwable) {
+            }
+            throw $error;
+        }
+
+        return response()->json(['photos' => $this->adminPhotos($photos)], 201);
+    }
+
     public function addPhoto(Request $request, string $id): JsonResponse
     {
         $propertyId = $this->assertId($id);

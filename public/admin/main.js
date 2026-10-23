@@ -100,7 +100,7 @@ function setFormPending(targetForm, pending, label = '') {
 async function request(url, options = {}) {
   const headers = { Accept: 'application/json', ...(options.headers || {}) };
   const method = String(options.method || 'GET').toUpperCase();
-  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrfToken) {
     headers['X-CSRF-Token'] = state.csrfToken;
   }
@@ -603,35 +603,15 @@ async function uploadPendingFiles(propertyId) {
       || dimensions.width > 20000 || dimensions.height > 20000) {
       throw new Error('INVALID_IMAGE_DIMENSIONS');
     }
-    const presign = await request('/api/admin/uploads/presign', {
-      method: 'POST',
-      body: JSON.stringify({
-        propertyId,
-        fileName,
-        contentType,
-        size: file.size
-      })
-    });
+    const body = new FormData();
+    body.append('photo', file, fileName);
+    body.append('altText', fileName.replace(/\.[^.]+$/, ''));
+    body.append('sortOrder', String(existingPhotoCount));
+    body.append('isCover', String(!state.editing?.photos?.some((photo) => photo.is_cover)));
 
-    const upload = await fetch(presign.uploadUrl, {
-      method: 'PUT',
-      headers: presign.uploadHeaders || { 'Content-Type': contentType },
-      body: file
-    });
-    if (!upload.ok) throw new Error('UPLOAD_FAILED');
-
-    const result = await request(`/api/admin/properties/${propertyId}/photos`, {
+    const result = await request(`/api/admin/properties/${propertyId}/photos/upload`, {
       method: 'POST',
-      body: JSON.stringify({
-        storagePath: presign.storagePath,
-        altText: fileName.replace(/\.[^.]+$/, ''),
-        sortOrder: existingPhotoCount,
-        isCover: !state.editing?.photos?.some((photo) => photo.is_cover),
-        contentType,
-        size: file.size,
-        width: dimensions.width,
-        height: dimensions.height
-      })
+      body
     });
 
     state.editing = { ...state.editing, photos: result.photos };

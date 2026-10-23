@@ -70,6 +70,7 @@ class RouteSurfaceTest extends TestCase
         'PATCH api/admin/team/{email}',
         'POST api/admin/properties',
         'POST api/admin/properties/{id}/photos',
+        'POST api/admin/properties/{id}/photos/upload',
         'POST api/admin/team',
         'POST api/admin/team/invitations',
         'POST api/admin/testimonials',

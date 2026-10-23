@@ -60,6 +60,13 @@ Route::get('/api/admin/session', [AuthController::class, 'session'])
     ->middleware(['admin-origin', 'throttle:auth-session']);
 
 Route::prefix('api/admin')
+    ->middleware(['admin-origin', 'body-limit:13312', 'same-origin', 'admin', 'throttle:admin'])
+    ->group(function (): void {
+        Route::post('/properties/{id}/photos/upload', [AdminPropertyController::class, 'uploadPhoto'])
+            ->middleware(['capability:media.manage', 'throttle:upload']);
+    });
+
+Route::prefix('api/admin')
     ->middleware(['admin-origin', 'body-limit:256', 'same-origin', 'admin', 'throttle:admin'])
     ->group(function (): void {
         Route::get('/properties', [AdminPropertyController::class, 'index'])

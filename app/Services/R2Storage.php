@@ -139,6 +139,35 @@ class R2Storage
         return (string) $request->getUri();
     }
 
+    public function putFile(string $path, string $filePath, string $contentType, int $size): void
+    {
+        $key = $this->assertKey($path);
+        $contentType = strtolower(trim($contentType));
+        if (! in_array($contentType, self::IMAGE_MIME_TYPES, true)
+            || $size < 1 || $size > 12 * 1024 * 1024
+            || ! is_file($filePath) || ! is_readable($filePath)) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $stream = fopen($filePath, 'rb');
+        if ($stream === false) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        try {
+            $this->client()->putObject([
+                'Bucket' => config('services.r2.bucket'),
+                'Key' => $key,
+                'Body' => $stream,
+                'ContentLength' => $size,
+                'ContentType' => $contentType,
+                'IfNoneMatch' => '*',
+            ]);
+        } finally {
+            fclose($stream);
+        }
+    }
+
     public function listPropertyObjects(?string $continuationToken = null): array
     {
         $params = [

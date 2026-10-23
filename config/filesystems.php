@@ -4,8 +4,8 @@ return [
     'default' => env('FILESYSTEM_DISK', 'local'),
 
     'disks' => [
-        // Fotos do catálogo ficam somente no R2. Não expor uma rota Laravel
-        // para o disco local privado evita criar um segundo canal de arquivos.
+        // Fotos do catálogo ficam somente no R2. O upload passa pelo backend
+        // para não depender de CORS administrativo no bucket.
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),

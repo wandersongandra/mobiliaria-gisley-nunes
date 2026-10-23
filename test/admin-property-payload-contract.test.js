@@ -18,4 +18,6 @@ test('admin upload tolera arquivo sem MIME ou extensão quando a assinatura é d
   assert.match(source, /await file\.slice\(0, 32\)\.arrayBuffer\(\)/);
   assert.match(source, /function imageUploadName\(file, contentType\)/);
   assert.match(source, /const classified = await Promise\.all\(incoming\.map\(async \(file\)/);
+  assert.match(source, /new FormData\(\)/);
+  assert.match(source, /\/api\/admin\/properties\/\$\{propertyId\}\/photos\/upload/);
 });
