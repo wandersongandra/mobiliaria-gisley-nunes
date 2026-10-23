@@ -18,12 +18,8 @@ class SecurityHeaders
         /** @var Response $response */
         $response = $next($request);
 
-        $r2AccountId = trim((string) config('services.r2.account_id'));
-        $r2Origin = preg_match('/^[A-Za-z0-9]+$/D', $r2AccountId) === 1
-            ? 'https://'.$r2AccountId.'.r2.cloudflarestorage.com'
-            : null;
-        $imageSources = "'self' https://images.unsplash.com data: blob:".($r2Origin ? ' '.$r2Origin : '');
-        $connectSources = "'self'".($r2Origin ? ' '.$r2Origin : '');
+        $imageSources = "'self' https://images.unsplash.com data: blob:";
+        $connectSources = "'self'";
 
         $response->headers->remove('X-Powered-By');
         $response->headers->set('X-Content-Type-Options', 'nosniff');

@@ -11,7 +11,7 @@ class CleanupOrphanedPropertyUploads extends Command
 {
     protected $signature = 'gisley:cleanup-orphaned-property-uploads';
 
-    protected $description = 'Remove old R2 property uploads that were never registered';
+    protected $description = 'Remove old local property uploads that were never registered';
 
     private const MAX_AGE_HOURS = 24;
 
@@ -53,7 +53,7 @@ class CleanupOrphanedPropertyUploads extends Command
         } while ($continuationToken !== null);
 
         $this->info(sprintf(
-            'Scanned %d R2 objects; removed %d orphan upload(s) older than %d hours.',
+            'Scanned %d local objects; removed %d orphan upload(s) older than %d hours.',
             $scanned,
             $removed,
             self::MAX_AGE_HOURS

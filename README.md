@@ -8,7 +8,7 @@ O runtime principal está sendo migrado de **Node.js/Express para Laravel/PHP + 
 
 - Laravel / PHP 8.2+
 - MySQL
-- Cloudflare R2 para fotos
+- storage local privado em `MEDIA_ROOT` para fotos
 - painel administrativo em `/admin`
 - autenticação por OAuth com convite de equipe
 - papéis Gestor e Corretor/Editor
@@ -62,7 +62,7 @@ php artisan route:cache
 php artisan view:cache
 ```
 
-Configure também o cron do Laravel Scheduler descrito abaixo; ele remove uploads órfãos do R2 e anonimiza leads vencidos.
+Configure também o cron do Laravel Scheduler descrito abaixo; ele remove uploads órfãos do disco privado local e anonimiza leads vencidos.
 
 ## Configuração de produção
 
@@ -77,7 +77,7 @@ Defina as variáveis no `.env` fora do Document Root. Não use os valores de exe
 | `TRUSTED_PROXIES` | CIDRs ou IPs dos proxies Cloudflare que chegam à origem, separados por vírgula. Nunca use `*` nem IPs de clientes. |
 | `GISELY_ADMIN_OPEN_IDS` | Lista separada por vírgulas de IDs autorizados como gestores iniciais. |
 | `GISELY_ADMIN_IDLE_TIMEOUT_MINUTES`, `GISELY_MAX_ADMIN_SESSIONS` | Limite de inatividade e sessões administrativas simultâneas. |
-| `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_UPLOAD_EXPIRES_SECONDS` | Upload pré-assinado e limpeza dos arquivos no Cloudflare R2. |
+| `MEDIA_ROOT` | Diretório privado, fora do Document Root, onde as novas fotos são gravadas. Caminhos relativos são resolvidos a partir da raiz do projeto; o padrão é `storage/app/private/media`. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GISELY_ADMIN_BOOTSTRAP_EMAILS` | Cliente OAuth Web do Google e e-mails Google verificados autorizados no primeiro bootstrap. |
 
 Consulte `.env.example` para a lista completa. Após alterar variáveis, limpe e gere novamente o cache da configuração com `php artisan config:clear && php artisan config:cache`.
@@ -94,7 +94,7 @@ No cPanel, crie uma tarefa para executar o Scheduler a cada minuto. Substitua pe
 * * * * * cd /CAMINHO/ABSOLUTO/DO/PROJETO && /CAMINHO/DO/PHP artisan schedule:run >/dev/null 2>&1
 ```
 
-O Scheduler limpa diariamente, às 03:00, uploads R2 sem registro no banco após 24 horas. Às 03:30, anonimiza nome, e-mail, mensagem e caminho do imóvel de leads fechados ou perdidos há mais de dois anos. Sem o cron, essas rotinas não executam.
+O Scheduler limpa diariamente, às 03:00, uploads locais sem registro no banco após 24 horas. Às 03:30, anonimiza nome, e-mail, mensagem e caminho do imóvel de leads fechados ou perdidos há mais de dois anos. Sem o cron, essas rotinas não executam.
 
 ## Backup e restauração do MySQL
 
@@ -110,7 +110,7 @@ Para restaurar, crie primeiro um banco vazio de recuperação pelo cPanel e impo
 mysql --host=DB_HOST --user=DB_USER --password DB_RESTORE_NAME < gisley-backup.sql
 ```
 
-As fotos ficam no R2 e não estão dentro do dump MySQL; mantenha uma política independente de retenção ou cópia dos objetos no provedor. Teste a restauração periodicamente em um banco separado.
+As novas fotos ficam no diretório `MEDIA_ROOT` e não estão dentro do dump MySQL; mantenha uma política independente de retenção ou cópia desse diretório. A aplicação não copia automaticamente objetos legados do R2: registros antigos só voltarão a funcionar depois de uma migração física autorizada, preservando o `storage_path`, para dentro de `MEDIA_ROOT`. Até lá, a entrega local desses arquivos permanece indisponível. Teste a restauração periodicamente em um banco separado.
 
 ## Health check do runtime
 

@@ -68,22 +68,20 @@ class PublicPageRenderTest extends TestCase
             ->assertHeader('Strict-Transport-Security', 'max-age=31536000');
     }
 
-    public function test_csp_media_sources_use_the_explicit_asset_allowlist(): void
+    public function test_csp_media_sources_use_the_private_application_origin(): void
     {
-        config(['services.r2.account_id' => 'account123']);
-
         $response = $this->get('/');
         $csp = (string) $response->headers->get('Content-Security-Policy');
 
         $this->assertStringContainsString(
-            "img-src 'self' https://images.unsplash.com data: blob: https://account123.r2.cloudflarestorage.com",
+            "img-src 'self' https://images.unsplash.com data: blob:",
             $csp
         );
         $this->assertStringContainsString(
-            "media-src 'self' https://account123.r2.cloudflarestorage.com",
+            "media-src 'self'",
             $csp
         );
-        $this->assertStringNotContainsString('https://*.r2.cloudflarestorage.com', $csp);
+        $this->assertStringNotContainsString('r2.cloudflarestorage.com', $csp);
         $this->assertStringNotContainsString("img-src 'self' https: data:", $csp);
         $this->assertStringNotContainsString("media-src 'self' https:;", $csp);
     }

@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Services\LocalMediaStorage;
 use Illuminate\Console\Command;
 use Illuminate\Encryption\Encrypter;
+use RuntimeException;
 
 class ProductionCheck extends Command
 {
@@ -24,14 +26,12 @@ class ProductionCheck extends Command
             'required PHP extensions are available' => $this->requiredExtensionsAvailable(),
             'session.upload_progress is disabled' => $this->isUploadProgressDisabled(),
             'post_max_size is bounded' => $this->hasBoundedPostMaxSize(),
-            'storage and bootstrap cache directories are writable' => is_writable(storage_path()) && is_writable(base_path('bootstrap/cache')),
+            'local media and bootstrap cache directories are writable' => $this->hasWritableMediaRoot()
+                && is_writable(base_path('bootstrap/cache')),
             'session cookies are host-bound, secure and HttpOnly' => $this->hasSecureSessionCookie(),
             'session and cache drivers do not require a persistent worker' => in_array(config('session.driver'), ['file', 'database'], true)
                 && in_array(config('cache.default'), ['file', 'database'], true),
             'queue driver does not require a persistent worker' => in_array(config('queue.default'), ['sync', 'database'], true),
-            'R2 configuration is present' => $this->configured([
-                'services.r2.account_id', 'services.r2.bucket', 'services.r2.access_key_id', 'services.r2.secret_access_key',
-            ]),
             'OAuth configuration uses secure endpoints and callback path' => $this->hasSecureOAuthConfiguration(),
             'bootstrap identity is configured and valid' => $this->hasValidBootstrapIdentity(),
             'trusted proxy CIDRs are configured' => $this->hasValidTrustedProxies(),
@@ -63,6 +63,17 @@ class ProductionCheck extends Command
         }
 
         return true;
+    }
+
+    private function hasWritableMediaRoot(): bool
+    {
+        try {
+            $root = LocalMediaStorage::configuredMediaRoot();
+        } catch (RuntimeException) {
+            return false;
+        }
+
+        return is_dir($root) && is_writable($root);
     }
 
     private function hasSecureSeparatedOrigins(): bool

@@ -9,7 +9,7 @@ Substituir o runtime Node.js/Express por PHP/Laravel sem alterar a experiência 
 - **HostGator / Apache / PHP-FPM:** Laravel, páginas públicas, API e painel.
 - **MySQL:** tabelas `morada_*`, mantendo os nomes do backend anterior para facilitar migração de dados.
 - **Cloudflare:** DNS/WAF/CDN.
-- **Cloudflare R2:** fotos dos imóveis com upload direto por URL pré-assinada.
+- **Mídia local:** novas fotos dos imóveis ficam em `MEDIA_ROOT`, fora do Document Root, e são entregues pelo Laravel.
 - **Node.js:** não é necessário em runtime. Os assets públicos são entregues como JS/CSS estáticos.
 
 ## Contratos preservados
@@ -24,7 +24,7 @@ Substituir o runtime Node.js/Express por PHP/Laravel sem alterar a experiência 
 - convites de equipe e papéis `manager` / `editor`
 - auditoria
 - expiração e revogação server-side de sessões
-- R2
+- storage local privado
 
 ## Deploy HostGator
 
@@ -41,7 +41,7 @@ Substituir o runtime Node.js/Express por PHP/Laravel sem alterar a experiência 
    * * * * * cd /CAMINHO/ABSOLUTO/DO/PROJETO && /CAMINHO/DO/PHP artisan schedule:run >/dev/null 2>&1
    ```
 
-   O scheduler limpa diariamente às 03:00 uploads R2 sem registro no banco após 24 horas e anonimiza às 03:30 leads fechados ou perdidos há mais de dois anos. Sem o cron, essas rotinas não serão executadas.
+   O scheduler limpa diariamente às 03:00 uploads locais sem registro no banco após 24 horas e anonimiza às 03:30 leads fechados ou perdidos há mais de dois anos. Sem o cron, essas rotinas não serão executadas.
 
 ## Variáveis de ambiente
 
@@ -51,7 +51,7 @@ Configure no `.env`, fora do Document Root e sem versionar credenciais:
 - MySQL: `DB_CONNECTION=mysql`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`.
 - Sessão e cache: `SESSION_DRIVER=file`, `SESSION_SECURE_COOKIE=true`, `SESSION_LIFETIME`, `CACHE_STORE=file`.
 - Gestores: `GISELY_ADMIN_OPEN_IDS`, `GISELY_ADMIN_IDLE_TIMEOUT_MINUTES`, `GISELY_MAX_ADMIN_SESSIONS`.
-- Cloudflare R2: `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_UPLOAD_EXPIRES_SECONDS`.
+- Mídia local: `MEDIA_ROOT=storage/app/private/media` ou um caminho absoluto privado fora de `public/`. Caminhos relativos são resolvidos a partir da raiz do projeto.
 - Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
   `GISELY_ADMIN_BOOTSTRAP_EMAILS` para a lista explícita de e-mails Google
   verificados autorizados no primeiro bootstrap.
@@ -72,6 +72,6 @@ curl --fail --silent --show-error https://SEU_DOMINIO/health/ready | grep -Fx '{
 
 Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. Comparar o corpo evita considerar uma página estática de fallback como uma resposta válida. `live` verifica o runtime Laravel e `ready` confirma também o banco, sem expor detalhes internos. `/_app/health` permanece como alias compatível. Não exponha `phpinfo()`.
 
-As instruções de backup e restauração do MySQL estão em `README.md`. Restaure primeiro em um banco vazio separado e valide antes de apontá-lo para o domínio. As fotos ficam no R2 e precisam de uma política independente de cópia/recuperação.
+As instruções de backup e restauração do MySQL estão em `README.md`. Restaure primeiro em um banco vazio separado e valide antes de apontá-lo para o domínio. O diretório `MEDIA_ROOT` precisa de uma política independente de cópia/recuperação. A migração física de objetos que ainda estejam somente no R2 não é automática e permanece pendente até uma cópia autorizada e verificada.
 
 Nunca deixe `.env`, `vendor/`, `storage/logs/` ou arquivos de banco acessíveis pelo Document Root.

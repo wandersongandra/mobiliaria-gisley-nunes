@@ -1,4 +1,6 @@
-# Cloudflare R2 + painel da Gisley Nunes
+# Cloudflare R2 + painel da Gisley Nunes (legado)
+
+> Este documento descreve a arquitetura anterior. O sistema atual usa `MEDIA_ROOT` local privado na HostGator; não configure R2 para novos ambientes.
 
 Esta configuração separa o site público e o CRM, mantendo o bucket R2 privado:
 

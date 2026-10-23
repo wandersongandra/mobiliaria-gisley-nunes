@@ -13,7 +13,7 @@ Respostas administrativas e de autenticação usam `Cache-Control: no-store`. Mu
 | `GET /api/properties/{slug}` | Não | Imóvel publicado | `404` para slug inválido/inexistente. |
 | `GET /api/site` | Não | Configuração e depoimentos públicos | Cache público. |
 | `POST /api/contact` | Origens explicitamente permitidas | nome, email, interesse, mensagem, propertyPath, honeypot | 8/10 min por IP; `400` para entrada inválida, `201` para aceito. |
-| `GET /media/{path}` | Não | Redireciona a URL R2 curta de foto publicada | `404` se não registrada/publicada. |
+| `GET /media/{path}` | Não | Entrega pelo Laravel uma foto publicada existente em `MEDIA_ROOT`, fora do Document Root | `404` se não registrada/publicada ou se o arquivo local não existir. |
 
 As páginas HTML, `robots.txt`, `sitemap.xml` e `llms.txt` são públicas e não recebem IDs internos administrativos.
 
@@ -42,11 +42,11 @@ Estas rotas existem no código e são relevantes para a operação, mas não amp
 | --- | --- | --- |
 | `GET/POST /api/admin/properties` | `property.read` / `property.write` | Lista paginada ou cria; `403`, `409`, `422`. |
 | `GET/PUT/DELETE /api/admin/properties/{id}` | `property.read` / `property.write` / `property.archive` | UUID obrigatório; delete arquiva. |
-| `POST /api/admin/properties/{id}/photos/upload` | `media.manage` | **Fluxo oficial:** recebe `multipart/form-data` (`photo`, com `altText`, `sortOrder` e `isCover` opcionais), valida o conteúdo real, faz o upload pelo backend ao R2 e registra a foto; retorna `photos` com `201`. |
-| `POST /api/admin/uploads/presign` | `media.manage` | **Alternativa explícita:** emite presign R2 curto e os headers assinados para upload direto; não registra a foto sozinho. |
-| `POST /api/admin/properties/{id}/photos` | `media.manage` | **Alternativa explícita:** registra uma foto já enviada ao R2 após conferir metadados, MIME e dimensões reais; `409` para limite/duplicidade. |
-| `GET /api/admin/photos/{id}/media` | `property.read` | Redirect R2 curto. |
-| `DELETE /api/admin/photos/{id}` | `media.manage` | Remove registro e tenta remoção R2. |
+| `POST /api/admin/properties/{id}/photos/upload` | `media.manage` | **Fluxo oficial:** recebe `multipart/form-data` (`photo`, com `altText`, `sortOrder` e `isCover` opcionais), valida o conteúdo real, grava o arquivo local em `MEDIA_ROOT` e registra a foto; retorna `photos` com `201`. |
+| `POST /api/admin/uploads/presign` | `media.manage` | **Compatibilidade explícita:** retorna uma URL PUT autenticada da própria aplicação para gravar em `MEDIA_ROOT`; não registra a foto sozinho. |
+| `POST /api/admin/properties/{id}/photos` | `media.manage` | **Alternativa explícita:** registra uma foto já gravada localmente após conferir metadados, MIME e dimensões reais; `409` para limite/duplicidade. |
+| `GET /api/admin/photos/{id}/media` | `property.read` | Entrega o arquivo local por controller autenticado. |
+| `DELETE /api/admin/photos/{id}` | `media.manage` | Remove registro e tenta remoção do arquivo local. |
 | `PUT /api/admin/properties/{id}/photos/order`, `PUT /api/admin/photos/{id}/cover` | `media.manage` | UUIDs e ordenação estrita. |
 | `GET/PUT /api/admin/site` | `site.read` / `site.manage` | Configuração pública. |
 | `POST/DELETE /api/admin/testimonials[/{id}]` | `testimonial.manage` | Cria/remove depoimento. |
@@ -70,4 +70,4 @@ O fluxo canônico do painel é:
 3. O endpoint multipart **registra** a foto após o upload; `isCover=true` pode definir a capa na mesma operação. A capa também pode ser definida explicitamente por `PUT /api/admin/photos/{id}/cover`.
 4. **Publicar** por `PUT /api/admin/properties/{id}` com `status=published`, somente depois de existir uma foto de capa.
 
-O fluxo `presign` → upload direto ao R2 → `POST /api/admin/properties/{id}/photos` é uma alternativa explícita, não o fluxo padrão do painel. `presign` não substitui o registro e nenhuma rota de upload autoriza publicação sem a validação de capa.
+O fluxo `presign` → PUT autenticado na aplicação → `POST /api/admin/properties/{id}/photos` é uma alternativa explícita, não o fluxo padrão do painel. `presign` não substitui o registro e nenhuma rota de upload autoriza publicação sem a validação de capa. A troca para storage local não migra objetos antigos do R2; uma cópia física autorizada e verificada para `MEDIA_ROOT` continua pendente.
