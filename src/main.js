@@ -216,6 +216,8 @@ function initListing() {
   }
 
   function renderEmptyState(hasItems) {
+    const listingSection = grid.closest('.listings-section');
+    listingSection?.setAttribute('data-listing-state', hasItems ? 'filled' : 'empty');
     if (!empty) return;
     if (hasItems) {
       empty.hidden = true;

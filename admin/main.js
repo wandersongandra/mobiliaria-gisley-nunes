@@ -30,6 +30,26 @@ const form = $('#property-form');
 const skipLink = document.querySelector('.skip-link');
 const dashboardMain = dashboard?.querySelector('main');
 
+function publicSiteOrigin() {
+  const configured = document.documentElement.dataset.publicOrigin?.trim();
+  if (configured) return configured.replace(/\/+$/, '');
+
+  const host = window.location.hostname.toLowerCase();
+  if (host === 'painel.gisleynunesimoveis.com.br') return 'https://www.gisleynunesimoveis.com.br';
+  if (host.startsWith('painel.')) return `${window.location.protocol}//${host.slice('painel.'.length)}`;
+  if (['localhost', '127.0.0.1', '::1'].includes(host)) return 'https://www.gisleynunesimoveis.com.br';
+  return window.location.origin;
+}
+
+function syncPublicSiteLinks() {
+  const origin = publicSiteOrigin();
+  document.querySelectorAll('[data-public-site-link]').forEach((link) => {
+    link.href = `${origin}/`;
+  });
+}
+
+syncPublicSiteLinks();
+
 loginScreen?.setAttribute('role', 'main');
 
 const dashboardHeading = $('#page-title');
@@ -257,7 +277,7 @@ function renderProperties() {
 
 function fillForm(property = {}) {
   for (const [key, value] of Object.entries({ title: property.title || '', location: property.location || '', city: property.city || 'Belo Horizonte', purpose: property.purpose || 'Comprar', type: property.type || 'Apartamento', price: property.price || '', priceLabel: property.price_label || '', bedrooms: property.bedrooms ?? 2, bathrooms: property.bathrooms ?? 2, areaM2: property.area_m2 ?? 80, suites: property.suites ?? 0, parkingSpots: property.parking_spots ?? 0, condoFee: property.condo_fee ?? 0, iptu: property.iptu ?? 0, description: property.description || '' })) { if (form.elements[key]) form.elements[key].value = value; }
-  form.elements.published.checked = property.status !== 'draft' && property.status !== 'archived';
+  form.elements.published.checked = property.status === 'published';
   form.elements.featured.checked = Boolean(property.is_featured);
 }
 function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
@@ -435,7 +455,7 @@ async function saveProperty(event) {
     } else if (propertySaved) {
       await loadProperties();
       renderEditorPhotos();
-      toast(['INVALID_IMAGE', 'INVALID_IMAGE_DIMENSIONS'].includes(error.message)
+      toast(['INVALID_IMAGE', 'INVALID_IMAGE_TYPE', 'INVALID_IMAGE_DIMENSIONS'].includes(error.message)
         ? 'A imagem excede as dimensões permitidas. Escolha outra foto.'
         : state.pendingFiles.length
           ? 'Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.'
@@ -505,13 +525,31 @@ async function imageDimensions(file) {
   });
 }
 
+function imageContentType(file) {
+  const declaredType = String(file?.type || '').toLowerCase();
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+  if (allowedTypes.has(declaredType)) return declaredType;
+
+  const extension = String(file?.name || '').split('.').pop()?.toLowerCase();
+  return {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    avif: 'image/avif'
+  }[extension] || '';
+}
+
 async function uploadPendingFiles(propertyId) {
   let uploadedCount = 0;
 
   while (state.pendingFiles.length) {
     const file = state.pendingFiles[0];
+    const contentType = imageContentType(file);
     const existingPhotoCount = state.editing?.photos?.length || 0;
     toast(`Enviando foto ${uploadedCount + 1}…`);
+
+    if (!contentType) throw new Error('INVALID_IMAGE_TYPE');
 
     let dimensions;
     try {
@@ -529,14 +567,14 @@ async function uploadPendingFiles(propertyId) {
       body: JSON.stringify({
         propertyId,
         fileName: file.name,
-        contentType: file.type,
+        contentType,
         size: file.size
       })
     });
 
     const upload = await fetch(presign.uploadUrl, {
       method: 'PUT',
-      headers: presign.uploadHeaders || { 'Content-Type': file.type },
+      headers: presign.uploadHeaders || { 'Content-Type': contentType },
       body: file
     });
     if (!upload.ok) throw new Error('UPLOAD_FAILED');
@@ -548,7 +586,7 @@ async function uploadPendingFiles(propertyId) {
         altText: file.name.replace(/\.[^.]+$/, ''),
         sortOrder: existingPhotoCount,
         isCover: !state.editing?.photos?.some((photo) => photo.is_cover),
-        contentType: file.type,
+        contentType,
         size: file.size,
         width: dimensions.width,
         height: dimensions.height
@@ -1241,9 +1279,8 @@ $('#logout-all-button')?.addEventListener('click', () => { void performLogout({ 
 form.addEventListener('submit', saveProperty);
 $('#photo-upload-trigger')?.addEventListener('click', () => $('#photo-input')?.click());
 $('#photo-input').addEventListener('change', (event) => {
-  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
   const incoming = Array.from(event.target.files || []);
-  const valid = incoming.filter((file) => allowed.has(file.type) && file.size > 0 && file.size <= 12 * 1024 * 1024);
+  const valid = incoming.filter((file) => imageContentType(file) && file.size > 0 && file.size <= 12 * 1024 * 1024);
   const available = Math.max(0, 40 - ((state.editing?.photos?.length || 0) + state.pendingFiles.length));
   state.pendingFiles.push(...valid.slice(0, available));
 

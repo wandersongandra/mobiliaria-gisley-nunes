@@ -143,6 +143,19 @@ test('upload de fotos pode ser aberto pelo teclado e o painel cabe no celular', 
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 
+test('admin aponta para o site público e inicia novos imóveis como rascunho', async ({ page }) => {
+  await openAdmin(page);
+
+  await expect(page.locator('.side-nav [data-public-site-link]')).toHaveAttribute(
+    'href',
+    'https://www.gisleynunesimoveis.com.br/'
+  );
+
+  await page.locator('#new-property-top').click();
+  await expect(page.locator('input[name="published"]')).not.toBeChecked();
+  await page.locator('.dialog-close').click();
+});
+
 
 test('cadastro de imóvel envia o contrato compatível e mantém o modal dentro da janela', async ({ page }) => {
   let savedPayload = null;
@@ -164,7 +177,7 @@ test('cadastro de imóvel envia o contrato compatível e mantém o modal dentro 
   await page.locator('#new-property-top').click();
   await page.locator('input[name="title"]').fill('Casa de teste contratual');
   await page.locator('#property-dialog input[name="location"]').fill('Centro · Belo Horizonte');
-  await page.locator('input[name="published"]').uncheck();
+  await expect(page.locator('input[name="published"]')).not.toBeChecked();
   await page.locator('#save-property').click();
 
   await expect.poll(() => savedPayload).not.toBeNull();

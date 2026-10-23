@@ -1028,6 +1028,35 @@ h1,h2,h3{font-feature-settings:"liga" 1,"kern" 1}
 
 .property-mobile-cta{display:none}
 
+/* Critical visual pass — empty catalog and long-form detail need a tighter editorial rhythm. */
+.listings-section[data-listing-state="empty"]{
+  padding-bottom:88px;
+}
+.listings-section[data-listing-state="empty"] .section-heading{
+  margin-bottom:24px;
+}
+.listings-section[data-listing-state="empty"] .empty-state{
+  min-height:188px;
+  padding:48px 20px 18px;
+}
+
+@media (max-width:600px){
+  .listings-section[data-listing-state="empty"]{
+    padding-bottom:68px;
+  }
+  .listings-section[data-listing-state="empty"] .empty-state{
+    min-height:150px;
+    padding:34px 12px 10px;
+  }
+  .property-description{
+    margin-top:46px;
+  }
+  .property-description-copy{
+    font-size:clamp(18px,5.2vw,22px);
+    line-height:1.55;
+  }
+}
+
 @media (max-width:600px){
   .property-mobile-cta{
     position:sticky;
