@@ -4,7 +4,6 @@ namespace App\Services;
 
 use DateTimeImmutable;
 use FilesystemIterator;
-use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
@@ -154,7 +153,7 @@ class LocalMediaStorage
      * Persiste um corpo PUT em arquivo novo, sem permitir sobrescrita por replay.
      * O chamador permanece responsável por fechar o stream recebido.
      *
-     * @param resource $stream
+     * @param  resource  $stream
      */
     public function putStream(string $path, $stream, string $contentType, int $size): void
     {
@@ -452,6 +451,7 @@ class LocalMediaStorage
             }
             if ($segment === '..') {
                 array_pop($segments);
+
                 continue;
             }
             $segments[] = $segment;

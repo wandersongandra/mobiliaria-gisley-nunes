@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AdminPropertyController extends Controller
 {
@@ -400,7 +401,7 @@ class AdminPropertyController extends Controller
         return response()->json(['photos' => $this->adminPhotos($photos)], 201);
     }
 
-    public function photoMedia(string $id): JsonResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function photoMedia(string $id): JsonResponse|BinaryFileResponse
     {
         $this->assertId($id);
         $photo = $this->properties->getPhoto($id);
