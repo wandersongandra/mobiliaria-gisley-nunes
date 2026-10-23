@@ -142,3 +142,43 @@ test('upload de fotos pode ser aberto pelo teclado e o painel cabe no celular', 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
+
+
+test('cadastro de imóvel envia o contrato compatível e mantém o modal dentro da janela', async ({ page }) => {
+  let savedPayload = null;
+  await openAdmin(page, {
+    '/api/admin/properties': async (route) => {
+      if (route.request().method() === 'POST') {
+        savedPayload = await route.request().postDataJSON();
+        return route.fulfill({ json: { property: {
+          id: 'property-test-1', title: savedPayload.title, location: savedPayload.location,
+          city: savedPayload.city, purpose: savedPayload.purpose, type: savedPayload.type,
+          status: savedPayload.status, featured: savedPayload.featured, photos: []
+        } } });
+      }
+      return route.fulfill({ json: { properties: [], pagination: { current_page: 1, last_page: 1, total: 0, from: null, to: null }, summary: { total: 0, active: 0, published: 0, draft: 0 } } });
+    }
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#new-property-top').click();
+  await page.locator('input[name="title"]').fill('Casa de teste contratual');
+  await page.locator('input[name="location"]').fill('Centro · Belo Horizonte');
+  await page.locator('input[name="published"]').uncheck();
+  await page.locator('#save-property').click();
+
+  await expect.poll(() => savedPayload).not.toBeNull();
+  expect(savedPayload.status).toBe('draft');
+  expect(savedPayload).not.toHaveProperty('published');
+  expect(savedPayload).toHaveProperty('featured', false);
+  await expect(page.locator('#property-dialog')).toBeHidden();
+
+  await page.locator('#new-property-top').click();
+  await expect(page.locator('#dialog-title')).toBeVisible();
+  const bounds = await page.locator('#property-dialog').evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom, viewport: window.innerHeight };
+  });
+  expect(bounds.top).toBeGreaterThanOrEqual(0);
+  expect(bounds.bottom).toBeLessThanOrEqual(bounds.viewport);
+});
