@@ -396,9 +396,10 @@ async function saveProperty(event) {
 
   const data = Object.fromEntries(new FormData(form));
   const isManager = state.user?.role === 'manager';
-  data.published = isManager && form.elements.published.checked;
   data.featured = isManager && form.elements.featured.checked;
-  data.status = data.published ? 'published' : 'draft';
+  data.status = isManager && form.elements.published.checked ? 'published' : 'draft';
+  // `published` is a UI-only field; the backend contract accepts `status`.
+  delete data.published;
 
   let propertySaved = false;
   const publishAfterUpload = data.status === 'published'
