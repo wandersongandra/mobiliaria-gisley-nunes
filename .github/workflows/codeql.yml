@@ -2,7 +2,9 @@ name: CodeQL
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - migration/laravel-backend-2026-10-02
   pull_request:
   schedule:
     - cron: '23 4 * * 1'
