@@ -188,6 +188,9 @@ function initListing() {
   };
   let catalog = [];
   let pagination = { current_page: 1, last_page: 1, total: 0 };
+  // Facets are computed over all published properties, independently of filters.
+  // Distinguish an empty inventory from a search that matched nothing.
+  let hasPublishedProperties = null;
   let facetsInitialized = false;
   let initialRenderPending = true;
   let activeController = null;
@@ -206,7 +209,7 @@ function initListing() {
   function renderFilterSummary(resultCount) {
     if (!filterSummary) return;
     filterSummary.removeAttribute('role');
-    const active = activeFilterLabels();
+    const active = hasPublishedProperties === false ? [] : activeFilterLabels();
 
     filterSummary.innerHTML = active.length
       ? `<span><strong>${resultCount}</strong> ${resultCount === 1 ? 'imóvel encontrado' : 'imóveis encontrados'}</span><div class="active-filters">${active.map((label) => `<span class="filter-chip">${escapeHTML(label)}</span>`).join('')}<button type="button" id="clear-filters-inline">Limpar filtros</button></div>`
@@ -226,7 +229,7 @@ function initListing() {
       return;
     }
 
-    const active = activeFilterLabels();
+    const active = hasPublishedProperties === false ? [] : activeFilterLabels();
     empty.hidden = false;
     empty.setAttribute('role', 'status');
     empty.setAttribute('aria-live', 'polite');
@@ -410,6 +413,9 @@ function initListing() {
       const rawProperties = Array.isArray(payload?.properties) ? payload.properties : [];
       catalog = filterStaticPreview(rawProperties).map(normalizeProperty);
       pagination = payload?.pagination || pagination;
+      hasPublishedProperties = Array.isArray(payload?.facets?.types)
+        ? payload.facets.types.length > 0
+        : null;
       if (document.body.dataset.preview === 'static') {
         pagination = {
           ...pagination,

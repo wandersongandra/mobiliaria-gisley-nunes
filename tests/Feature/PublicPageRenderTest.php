@@ -111,6 +111,22 @@ class PublicPageRenderTest extends TestCase
             ->assertSee('listing-card-server', false);
     }
 
+    public function test_empty_catalog_has_a_contact_fallback_without_javascript(): void
+    {
+        foreach (['/', '/imoveis?purpose=Comprar'] as $path) {
+            $html = $this->get($path)->assertOk()->getContent();
+
+            $this->assertStringContainsString('class="empty-state" id="empty-state"', $html);
+            $this->assertStringContainsString('href="/contato"', $html);
+            $this->assertStringContainsString('Falar com a equipe', $html);
+            $this->assertDoesNotMatchRegularExpression(
+                '/<div class="empty-state" id="empty-state"\s+hidden/',
+                $html,
+                'A orientação comercial deve estar visível sem JavaScript.'
+            );
+        }
+    }
+
     public function test_json_surfaces_are_not_indexable(): void
     {
         $this->get('/api/site')

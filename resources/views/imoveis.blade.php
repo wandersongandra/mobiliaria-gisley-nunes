@@ -33,7 +33,12 @@
             @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
           @endforeach
         </div>
-        <div class="empty-state" id="empty-state" hidden></div>
+        <div class="empty-state" id="empty-state" @if(!empty($initialProperties)) hidden @endif>
+          @if(empty($initialProperties))
+            <span class="empty-state-message">Não há imóveis para exibir nesta seleção. Conte à equipe o que você procura.</span>
+            <a class="button button-primary empty-state-action" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a>
+          @endif
+        </div>
         @if(($catalogPagination['lastPage'] ?? 1) > 1)
           <nav class="catalog-pagination catalog-pagination-ssr" data-ssr-pagination aria-label="Paginação do catálogo sem JavaScript">
             @if(($catalogPagination['currentPage'] ?? 1) > 1)<a href="/imoveis?page={{ $catalogPagination['currentPage'] - 1 }}" rel="prev">Anterior</a>@endif

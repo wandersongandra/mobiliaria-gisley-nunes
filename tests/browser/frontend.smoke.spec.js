@@ -86,6 +86,44 @@ test('catálogo estático mantém filtros na URL e aplica o fixture local', asyn
   await expect(page.locator('[data-listing-card] h3')).toHaveText(['Loft Harmonia']);
 });
 
+test('catálogo sem imóveis publicados oferece contato mesmo com finalidade na URL', async ({ page }) => {
+  await page.route('**/api/v2/properties**', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      properties: [],
+      pagination: { current_page: 1, per_page: 20, last_page: 1, total: 0, from: null, to: null },
+      facets: { locations: [], types: [] }
+    })
+  }));
+
+  await page.goto('/imoveis?purpose=Comprar');
+  await expect(page.locator('#empty-state')).toContainText('Ainda não há imóveis publicados.');
+  await expect(page.locator('#empty-state a[href="/contato"]')).toBeVisible();
+  await expect(page.locator('#clear-filters')).toHaveCount(0);
+  await expect(page.locator('#clear-filters-inline')).toHaveCount(0);
+  await expect(page).toHaveURL(/purpose=Comprar/);
+
+  for (const width of [320, 390, 768, 1280]) {
+    await expectNoHorizontalOverflow(page, width);
+  }
+});
+
+test('busca sem resultado mantém opção de limpar filtros quando há outros imóveis', async ({ page }) => {
+  await page.route('**/api/v2/properties**', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      properties: [],
+      pagination: { current_page: 1, per_page: 20, last_page: 1, total: 0, from: null, to: null },
+      facets: { locations: ['Lourdes'], types: ['Casa'] }
+    })
+  }));
+
+  await page.goto('/imoveis?purpose=Alugar');
+  await expect(page.locator('#empty-state')).toContainText('Não encontramos um imóvel com esses filtros.');
+  await expect(page.locator('#clear-filters')).toBeVisible();
+  await expect(page.locator('#empty-state a[href="/contato"]')).toHaveCount(0);
+});
+
 test('catálogo anuncia falha de carregamento e oferece nova tentativa', async ({ page }) => {
   await page.route('**/api/v2/properties**', (route) => route.abort());
   await page.goto('/imoveis/');
