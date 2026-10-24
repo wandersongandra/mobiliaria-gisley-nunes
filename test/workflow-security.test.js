@@ -6,6 +6,7 @@ const normalizeNewlines = (content) => content.replace(/\r\n/g, '\n');
 const ci = normalizeNewlines(await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'));
 const codeql = normalizeNewlines(await readFile(new URL('../.github/workflows/codeql.yml', import.meta.url), 'utf8'));
 const laravelCi = normalizeNewlines(await readFile(new URL('../.github/workflows/laravel-ci.yml', import.meta.url), 'utf8'));
+const hostgatorDeploy = normalizeNewlines(await readFile(new URL('../.github/workflows/hostgator-deploy-gated.yml', import.meta.url), 'utf8'));
 const dependabot = normalizeNewlines(await readFile(new URL('../.github/dependabot.yml', import.meta.url), 'utf8'));
 
 test('workflows não concedem escrita de conteúdo nem usam pull_request_target', () => {
@@ -23,6 +24,17 @@ test('todas as GitHub Actions estão fixadas em SHA completo com versão de atua
 
 test('CI bloqueia dependências de produção com avisos moderados ou superiores', () => {
   assert.match(ci, /pnpm audit --prod --audit-level=moderate/);
+});
+
+test('CodeQL cobre o backend PHP e o branch efetivo de produção', () => {
+  assert.match(codeql, /- migration\/laravel-backend-2026-10-02/);
+  assert.match(codeql, /languages: javascript-typescript,php/);
+});
+
+test('deploy gated resolve explicitamente o ref para push e dispatch manual', () => {
+  assert.match(hostgatorDeploy, /ref: \$\{\{ github\.event_name == 'push' && github\.ref \|\| inputs\.ref \}\}/);
+  assert.match(hostgatorDeploy, /REQUESTED_REF: \$\{\{ github\.event_name == 'push' && 'migration\/laravel-backend-2026-10-02' \|\| inputs\.ref \}\}/);
+  assert.match(hostgatorDeploy, /DEPLOY_SHA: \$\{\{ github\.event_name == 'push' && github\.sha \|\| inputs\.sha \}\}/);
 });
 
 test('Laravel CI aguarda MySQL com retry limitado antes de configurar triggers', () => {
