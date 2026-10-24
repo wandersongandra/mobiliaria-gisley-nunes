@@ -4,7 +4,23 @@ Options -Indexes
     Require all denied
 </FilesMatch>
 
+# Defense in depth when the document root is ever mispointed at this
+# directory or a deployment leaves a sensitive build artifact here.
+<FilesMatch "^(?:\.env(?:\..*)?|\.git|.*\.log|artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|pnpm-lock\.yaml|phpunit\.xml|vite\.config\.js)$">
+    Require all denied
+</FilesMatch>
+
 <IfModule mod_headers.c>
+    # Static files are served by Apache and do not pass through Laravel's
+    # SecurityHeaders middleware. Keep the browser baseline consistent for
+    # those responses as well.
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+    Header always set X-Permitted-Cross-Domain-Policies "none"
+    Header always set Strict-Transport-Security "max-age=31536000"
+
     # Remove provider-injected wildcard CORS from authentication and CRM routes.
     # The public catalogue may keep its separate CORS policy. Both Apache
     # response-header tables must be cleared, including error/preflight replies.

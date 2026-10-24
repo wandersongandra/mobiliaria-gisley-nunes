@@ -107,7 +107,10 @@ class SecurityContractTest extends TestCase
         $this->withSession($session)->withHeaders($headers)
             ->postJson('/api/auth/logout')
             ->assertOk()
-            ->assertJson(['ok' => true]);
+            ->assertJson(['ok' => true])
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('Pragma', 'no-cache')
+            ->assertHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
 
         $this->assertDatabaseHas('morada_audit_log', [
             'action' => 'auth.logout',
@@ -118,7 +121,10 @@ class SecurityContractTest extends TestCase
         $this->withSession($session)->withHeaders($headers)
             ->postJson('/api/auth/logout-all')
             ->assertOk()
-            ->assertJson(['ok' => true]);
+            ->assertJson(['ok' => true])
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('Pragma', 'no-cache')
+            ->assertHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
 
         $audit = DB::table('morada_audit_log')->where('action', 'auth.logout_all')->first();
         $this->assertNotNull($audit);

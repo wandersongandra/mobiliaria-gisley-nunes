@@ -241,7 +241,7 @@ class AuthController extends Controller
             ], 503);
         }
 
-        return response()->json(['ok' => true]);
+        return $this->logoutResponse();
     }
 
     public function logoutAll(Request $request): JsonResponse
@@ -263,7 +263,15 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return response()->json(['ok' => true]);
+        return $this->logoutResponse();
+    }
+
+    private function logoutResponse(): JsonResponse
+    {
+        return response()->json(['ok' => true])
+            ->header('Cache-Control', 'no-store, private')
+            ->header('Pragma', 'no-cache')
+            ->header('Clear-Site-Data', '"cache", "cookies", "storage"');
     }
 
     private function exchangeCode(string $code, string $redirectUri): array
