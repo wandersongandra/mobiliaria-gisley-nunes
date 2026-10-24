@@ -26,9 +26,12 @@ test('CI bloqueia dependências de produção com avisos moderados ou superiores
   assert.match(ci, /pnpm audit --prod --audit-level=moderate/);
 });
 
-test('CodeQL cobre o backend PHP e o branch efetivo de produção', () => {
+test('CodeQL executa no branch efetivo de produção', () => {
   assert.match(codeql, /- migration\/laravel-backend-2026-10-02/);
-  assert.match(codeql, /languages: javascript-typescript,php/);
+  assert.match(codeql, /languages: javascript-typescript/);
+  assert.match(ci, /PHP syntax/);
+  assert.match(ci, /composer run format:check/);
+  assert.match(ci, /composer run analyse/);
 });
 
 test('deploy gated resolve explicitamente o ref para push e dispatch manual', () => {
