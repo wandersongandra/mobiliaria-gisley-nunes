@@ -4,6 +4,22 @@ Options -Indexes
     Require all denied
 </FilesMatch>
 
+<IfModule mod_headers.c>
+    # Remove provider-injected wildcard CORS from authentication and CRM routes.
+    # The public catalogue may keep its separate CORS policy. Both Apache
+    # response-header tables must be cleared, including error/preflight replies.
+    # THE_REQUEST retains the original path after Laravel's internal index.php rewrite.
+    Header unset Access-Control-Allow-Origin "expr=%{THE_REQUEST} =~ m#^\S+\s+/(?:api/(?:admin|auth)|admin|oauth/google/return)(?:/|\?|\s)#"
+    Header always unset Access-Control-Allow-Origin "expr=%{THE_REQUEST} =~ m#^\S+\s+/(?:api/(?:admin|auth)|admin|oauth/google/return)(?:/|\?|\s)#"
+    Header unset Access-Control-Allow-Credentials "expr=%{THE_REQUEST} =~ m#^\S+\s+/(?:api/(?:admin|auth)|admin|oauth/google/return)(?:/|\?|\s)#"
+    Header always unset Access-Control-Allow-Credentials "expr=%{THE_REQUEST} =~ m#^\S+\s+/(?:api/(?:admin|auth)|admin|oauth/google/return)(?:/|\?|\s)#"
+
+    # Unversioned JS/CSS revalidate. Only content-hash query URLs can be
+    # retained immutably; HTML and authenticated API responses are excluded.
+    Header set Cache-Control "public, max-age=0, must-revalidate" "expr=%{REQUEST_URI} =~ m#^/(?:assets|admin)/.*\.(?:js|css)$#"
+    Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{REQUEST_URI} =~ m#^/(?:assets|admin)/.*\.(?:js|css)$# && %{QUERY_STRING} =~ m#^v=[a-f0-9]{64}$#"
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews

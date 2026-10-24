@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,15 @@ async function equalFiles(left, right) {
 for (const filename of ['index.html', 'main.js', 'styles.css', 'refinements.css']) {
   if (!await equalFiles(`admin/${filename}`, `public/admin/${filename}`)) {
     throw new Error(`ADMIN_ARTIFACT_DRIFT:${filename}`);
+  }
+}
+
+const adminHtml = await readFile(path.join(root, 'admin', 'index.html'), 'utf8');
+for (const filename of ['main.js', 'styles.css', 'refinements.css']) {
+  const bytes = await readFile(path.join(root, 'admin', filename));
+  const version = createHash('sha256').update(bytes).digest('hex');
+  if (!adminHtml.includes(`/admin/${filename}?v=${version}"`)) {
+    throw new Error(`ADMIN_ASSET_VERSION_MISMATCH:${filename}`);
   }
 }
 

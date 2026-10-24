@@ -43,7 +43,12 @@
             @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
           @endforeach
         </div>
-        <div class="empty-state" id="empty-state" hidden></div>
+        <div class="empty-state" id="empty-state" @if(!empty($initialProperties)) hidden @endif>
+          @if(empty($initialProperties))
+            <span class="empty-state-message">Ainda não há imóveis publicados. Fale com a equipe para contar o que você procura.</span>
+            <a class="button button-primary empty-state-action" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a>
+          @endif
+        </div>
       </section>
 
       <section class="experience-section" id="experiencia" aria-labelledby="experience-title"><div class="shell experience-grid"><div class="experience-intro"><p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> como ajudamos</p><h2 id="experience-title">Escolha com<br /><em>mais segurança.</em></h2><p>A equipe organiza as opções, esclarece as dúvidas e acompanha a negociação.</p><a class="button button-light" href="/sobre">Conheça a Gisley Nunes <span aria-hidden="true">↗</span></a></div><div class="stats process-stats"><div class="stat"><strong>01</strong><span>entender sua<br />busca</span></div><div class="stat"><strong>02</strong><span>separar imóveis<br />adequados</span></div><div class="stat"><strong>03</strong><span>agendar visitas<br />e comparar</span></div><div class="stat"><strong>04</strong><span>acompanhar proposta<br />e negociação</span></div></div></div></section>
