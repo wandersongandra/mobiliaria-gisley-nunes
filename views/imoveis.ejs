@@ -5,7 +5,7 @@
       <section class="page-hero shell catalog-hero">
         <div>
           <p class="eyebrow"><span class="eyebrow-dot"></span> catálogo de imóveis</p>
-          <h1>Imóveis para comprar<br /><em>ou alugar.</em></h1>
+          <h1>Imóveis à venda e para alugar<br /><em>em Belo Horizonte.</em></h1>
         </div>
         <div class="page-hero-aside">
           <span>Seleção disponível</span>

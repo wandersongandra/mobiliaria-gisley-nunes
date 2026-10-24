@@ -136,8 +136,8 @@ const neighborhoods = catalogNeighborhoods(properties);
 await render('home.ejs', 'index.html', {
   assets,
   page: page({
-    title: 'Imóveis em Belo Horizonte e região | Gisley Nunes',
-    description: 'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
+    title: 'Imóveis em Belo Horizonte | Gisley Nunes Imóveis',
+    description: 'Encontre imóveis à venda e para alugar em Belo Horizonte e região. Fale com a Gisley Nunes sobre sua busca.',
     pathname: '/'
   })
 });
@@ -145,8 +145,8 @@ await render('home.ejs', 'index.html', {
 await render('imoveis.ejs', 'imoveis/index.html', {
   assets,
   page: page({
-    title: 'Imóveis para comprar ou alugar em Belo Horizonte | Gisley Nunes',
-    description: 'Explore imóveis para comprar ou alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
+    title: 'Imóveis à venda e para alugar em Belo Horizonte | Gisley Nunes',
+    description: 'Encontre imóveis à venda e para alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
     pathname: '/imoveis'
   })
 });
@@ -154,8 +154,8 @@ await render('imoveis.ejs', 'imoveis/index.html', {
 await render('servicos.ejs', 'servicos/index.html', {
   assets,
   page: page({
-    title: 'Comprar, alugar ou anunciar imóveis | Gisley Nunes',
-    description: 'Veja como a Gisley Nunes pode ajudar você a comprar, alugar ou anunciar um imóvel em Belo Horizonte e região.',
+    title: 'Serviços imobiliários em Belo Horizonte | Gisley Nunes',
+    description: 'Compre, alugue ou anuncie um imóvel em Belo Horizonte com a Gisley Nunes. Veja como começar seu atendimento.',
     pathname: '/servicos'
   }),
   pageLd: escapeLd(breadcrumbLd([
@@ -168,8 +168,8 @@ await render('bairros.ejs', 'bairros/index.html', {
   assets,
   neighborhoods,
   page: page({
-    title: 'Bairros com imóveis em Belo Horizonte | Gisley Nunes',
-    description: 'Explore bairros com imóveis publicados em Belo Horizonte e região. Encontre opções por localização e fale com a equipe.',
+    title: 'Imóveis por bairro em Belo Horizonte | Gisley Nunes',
+    description: 'Encontre imóveis disponíveis por bairro em Belo Horizonte e região. Consulte as opções e fale com a Gisley Nunes.',
     pathname: '/bairros'
   }),
   pageLd: escapeLd(collectionPageLd({
@@ -209,8 +209,8 @@ for (const neighborhood of neighborhoods) {
 await render('sobre.ejs', 'sobre/index.html', {
   assets,
   page: page({
-    title: 'Sobre | Gisley Nunes Imóveis',
-    description: 'Conheça a Gisley Nunes e sua forma de trabalhar com imóveis em Belo Horizonte e região.',
+    title: 'Gisley Nunes: imobiliária em Belo Horizonte',
+    description: 'Conheça a Gisley Nunes, imobiliária em Belo Horizonte e região para compra, locação e anúncio de imóveis.',
     pathname: '/sobre'
   })
 });
@@ -218,8 +218,8 @@ await render('sobre.ejs', 'sobre/index.html', {
 await render('contato.ejs', 'contato/index.html', {
   assets,
   page: page({
-    title: 'Contato | Gisley Nunes Imóveis',
-    description: 'Fale com a Gisley Nunes por WhatsApp, e-mail ou formulário sobre comprar, alugar ou anunciar um imóvel.',
+    title: 'Contato | Gisley Nunes Imóveis em Belo Horizonte',
+    description: 'Fale com a Gisley Nunes para comprar, alugar ou anunciar um imóvel em Belo Horizonte e região.',
     pathname: '/contato'
   })
 });
@@ -282,12 +282,11 @@ await writeFile(path.join(outDir, 'api', 'site', 'index.html'), JSON.stringify({
 
 const sitemapEntries = [
   { path: '/', priority: '1.0', changefreq: 'weekly' },
-  { path: '/imoveis', priority: '0.9', changefreq: 'daily' },
   { path: '/sobre', priority: '0.5', changefreq: 'monthly' },
   { path: '/contato', priority: '0.5', changefreq: 'monthly' },
   { path: '/servicos', priority: '0.7', changefreq: 'monthly' },
-  { path: '/bairros', priority: '0.7', changefreq: 'weekly' },
-  { path: '/privacidade', priority: '0.1', changefreq: 'yearly' },
+  ...(properties.length ? [{ path: '/imoveis', priority: '0.9', changefreq: 'daily' }] : []),
+  ...(neighborhoods.length ? [{ path: '/bairros', priority: '0.7', changefreq: 'weekly' }] : []),
   ...neighborhoods.map((neighborhood) => ({ path: `/bairros/${neighborhood.slug}`, priority: '0.7', changefreq: 'weekly' })),
   ...properties.map((property) => ({
     path: `/imoveis/${property.slug}`,

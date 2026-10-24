@@ -41,6 +41,36 @@ class SeoMigrationCompatibilityTest extends TestCase
             ->assertDontSee('/privacidade', false);
     }
 
+    public function test_empty_catalog_pages_are_noindex_and_omitted_from_the_sitemap(): void
+    {
+        $this->get('/imoveis')
+            ->assertOk()
+            ->assertSee('<meta name="robots" content="noindex,follow"', false);
+
+        $this->get('/bairros')
+            ->assertOk()
+            ->assertSee('<meta name="robots" content="noindex,follow"', false);
+
+        $this->get('/sitemap.xml')
+            ->assertOk()
+            ->assertDontSee('/imoveis', false)
+            ->assertDontSee('/bairros', false);
+    }
+
+    public function test_public_metadata_uses_the_local_search_intent_without_a_keywords_meta_tag(): void
+    {
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('<title>Imóveis em Belo Horizonte | Gisley Nunes Imóveis</title>', false)
+            ->assertSee('Encontre imóveis à venda e para alugar em Belo Horizonte e região.', false)
+            ->assertDontSee('name="keywords"', false);
+
+        $this->get('/servicos')
+            ->assertOk()
+            ->assertSee('<title>Serviços imobiliários em Belo Horizonte | Gisley Nunes</title>', false)
+            ->assertSee('Comprar, alugar<br /><em>ou anunciar em Belo Horizonte.</em>', false);
+    }
+
     public function test_operational_routes_are_disallowed_in_robots(): void
     {
         $response = $this->get('/robots.txt')->assertOk();

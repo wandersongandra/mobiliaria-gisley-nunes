@@ -5,7 +5,7 @@
       <section class="page-hero shell contact-hero">
         <div>
           <p class="eyebrow"><span class="eyebrow-dot"></span> contato</p>
-          <h1>Fale com a Gisley Nunes<br /><em>Imóveis.</em></h1>
+          <h1>Fale com a Gisley Nunes<br /><em>em Belo Horizonte.</em></h1>
         </div>
         <p class="page-lead">Escolha um canal e conte se você quer comprar, alugar ou anunciar um imóvel.</p>
       </section>
