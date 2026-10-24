@@ -4,7 +4,11 @@ namespace Tests\Feature;
 
 use App\Services\AdminAccessService;
 use App\Services\PropertyService;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class BackendContractTest extends TestCase
@@ -26,6 +30,17 @@ class BackendContractTest extends TestCase
             ->assertOk()
             ->assertExactJson(['status' => 'ok'])
             ->assertHeaderContains('Cache-Control', 'no-store');
+    }
+
+    public function test_health_routes_are_stateless_and_do_not_start_sessions_or_csrf(): void
+    {
+        foreach (['/_app/health', '/health/live', '/health/ready'] as $uri) {
+            $route = Route::getRoutes()->match(Request::create($uri, 'GET'));
+            $middleware = $route->gatherMiddleware();
+
+            $this->assertNotContains(StartSession::class, $middleware, $uri);
+            $this->assertNotContains(ValidateCsrfToken::class, $middleware, $uri);
+        }
     }
 
     public function test_every_response_exposes_a_safe_request_identifier(): void

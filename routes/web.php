@@ -8,11 +8,24 @@ use App\Http\Controllers\HealthController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PublicApiController;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
-Route::get('/_app/health', [HealthController::class, 'live']);
-Route::get('/health/live', [HealthController::class, 'live']);
-Route::get('/health/ready', [HealthController::class, 'ready']);
+$healthMiddleware = [
+    EncryptCookies::class,
+    AddQueuedCookiesToResponse::class,
+    StartSession::class,
+    ShareErrorsFromSession::class,
+    ValidateCsrfToken::class,
+];
+
+Route::get('/_app/health', [HealthController::class, 'live'])->withoutMiddleware($healthMiddleware);
+Route::get('/health/live', [HealthController::class, 'live'])->withoutMiddleware($healthMiddleware);
+Route::get('/health/ready', [HealthController::class, 'ready'])->withoutMiddleware($healthMiddleware);
 
 Route::get('/', [PageController::class, 'home']);
 Route::get('/imoveis', [PageController::class, 'imoveis']);
