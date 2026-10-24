@@ -18,12 +18,12 @@ class PublicPageRenderTest extends TestCase
     public static function publicPageProvider(): array
     {
         return [
-            'home' => ['/', 'Imóveis em Belo Horizonte e região | Gisley Nunes'],
-            'imoveis' => ['/imoveis', 'Imóveis para comprar ou alugar em Belo Horizonte | Gisley Nunes'],
-            'servicos' => ['/servicos', 'Comprar, alugar ou anunciar imóveis | Gisley Nunes'],
-            'bairros' => ['/bairros', 'Bairros com imóveis em Belo Horizonte | Gisley Nunes'],
-            'sobre' => ['/sobre', 'Sobre | Gisley Nunes Imóveis'],
-            'contato' => ['/contato', 'Contato | Gisley Nunes Imóveis'],
+            'home' => ['/', 'Imóveis em Belo Horizonte | Gisley Nunes Imóveis'],
+            'imoveis' => ['/imoveis', 'Imóveis à venda e para alugar em Belo Horizonte | Gisley Nunes'],
+            'servicos' => ['/servicos', 'Serviços imobiliários em Belo Horizonte | Gisley Nunes'],
+            'bairros' => ['/bairros', 'Imóveis por bairro em Belo Horizonte | Gisley Nunes'],
+            'sobre' => ['/sobre', 'Gisley Nunes: imobiliária em Belo Horizonte'],
+            'contato' => ['/contato', 'Contato | Gisley Nunes Imóveis em Belo Horizonte'],
             'privacidade' => ['/privacidade', 'Política de privacidade | Gisley Nunes Imóveis'],
         ];
     }
@@ -149,7 +149,7 @@ class PublicPageRenderTest extends TestCase
     {
         $this->get('/imoveis?page%5B%5D=2&location%5B%5D=x&purpose%5B%5D=Alugar&type%5B%5D=Casa&price_band%5B%5D=3')
             ->assertOk()
-            ->assertSee('Imóveis para comprar ou alugar em Belo Horizonte');
+            ->assertSee('Imóveis à venda e para alugar em Belo Horizonte');
     }
 
     public function test_contact_forms_post_to_the_contact_endpoint_instead_of_putting_data_in_the_url(): void

@@ -39,16 +39,24 @@ class DiscoveryController extends Controller
     public function sitemap(): Response
     {
         $properties = $this->properties->publicCatalog();
+        $neighborhoods = $this->properties->neighborhoods($properties);
         $entries = [
             ['path' => '/', 'priority' => '1.0', 'changefreq' => 'weekly'],
-            ['path' => '/imoveis', 'priority' => '0.9', 'changefreq' => 'daily'],
             ['path' => '/sobre', 'priority' => '0.5', 'changefreq' => 'monthly'],
             ['path' => '/contato', 'priority' => '0.5', 'changefreq' => 'monthly'],
             ['path' => '/servicos', 'priority' => '0.7', 'changefreq' => 'monthly'],
-            ['path' => '/bairros', 'priority' => '0.7', 'changefreq' => 'weekly'],
         ];
 
-        foreach ($this->properties->neighborhoods($properties) as $n) {
+        // Catálogo e diretório não entram no sitemap enquanto não houver
+        // conteúdo publicado que sustente uma página indexável.
+        if ($properties !== []) {
+            $entries[] = ['path' => '/imoveis', 'priority' => '0.9', 'changefreq' => 'daily'];
+        }
+        if ($neighborhoods !== []) {
+            $entries[] = ['path' => '/bairros', 'priority' => '0.7', 'changefreq' => 'weekly'];
+        }
+
+        foreach ($neighborhoods as $n) {
             if ($n['count'] >= self::MIN_INDEXABLE_NEIGHBORHOOD_PROPERTIES) {
                 $entries[] = ['path' => '/bairros/'.$n['slug'], 'priority' => '0.7', 'changefreq' => 'weekly'];
             }

@@ -32,8 +32,8 @@ class PageController extends Controller
         }
 
         $data = $this->pageData(
-            'Imóveis em Belo Horizonte e região | Gisley Nunes',
-            'Encontre imóveis para comprar ou alugar em Belo Horizonte e região. Veja a seleção e fale com a Gisley Nunes.',
+            'Imóveis em Belo Horizonte | Gisley Nunes Imóveis',
+            'Encontre imóveis à venda e para alugar em Belo Horizonte e região. Fale com a Gisley Nunes sobre sua busca.',
             '/'
         );
         $catalog = $this->properties->paginatePublicProperties(1, 6);
@@ -67,10 +67,12 @@ class PageController extends Controller
             $catalog->items()
         );
         $data = $this->pageData(
-            'Imóveis para comprar ou alugar em Belo Horizonte | Gisley Nunes',
-            'Explore imóveis para comprar ou alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
+            'Imóveis à venda e para alugar em Belo Horizonte | Gisley Nunes',
+            'Encontre imóveis à venda e para alugar em Belo Horizonte e região. Filtre por bairro, tipo, quartos e faixa de preço.',
             '/imoveis',
-            robots: $request->query->count() > 0 ? 'noindex,follow' : 'index,follow,max-image-preview:large'
+            robots: $request->query->count() > 0 || $catalog->total() === 0
+                ? 'noindex,follow'
+                : 'index,follow,max-image-preview:large'
         );
         $data['initialProperties'] = $properties;
         $data['initialCatalogTotal'] = $catalog->total();
@@ -80,7 +82,7 @@ class PageController extends Controller
             'total' => $catalog->total(),
         ];
         $data['pageLd'] = $this->collectionPageLd(
-            'Imóveis para comprar ou alugar em Belo Horizonte',
+            'Imóveis à venda e para alugar em Belo Horizonte',
             $data['page']['canonical'],
             $data['initialProperties'],
             $data['initialCatalogTotal']
@@ -129,8 +131,8 @@ class PageController extends Controller
     public function servicos(Request $request)
     {
         $data = $this->pageData(
-            'Comprar, alugar ou anunciar imóveis | Gisley Nunes',
-            'Veja como a Gisley Nunes pode ajudar você a comprar, alugar ou anunciar um imóvel em Belo Horizonte e região.',
+            'Serviços imobiliários em Belo Horizonte | Gisley Nunes',
+            'Compre, alugue ou anuncie um imóvel em Belo Horizonte com a Gisley Nunes. Veja como começar seu atendimento.',
             '/servicos'
         );
         $data['pageLd'] = $this->jsonLd([
@@ -147,12 +149,14 @@ class PageController extends Controller
 
     public function bairros(Request $request)
     {
+        $neighborhoods = $this->properties->neighborhoods($this->properties->publicCatalog());
         $data = $this->pageData(
-            'Bairros com imóveis em Belo Horizonte | Gisley Nunes',
-            'Explore bairros com imóveis publicados em Belo Horizonte e região. Encontre opções por localização e fale com a equipe.',
-            '/bairros'
+            'Imóveis por bairro em Belo Horizonte | Gisley Nunes',
+            'Encontre imóveis disponíveis por bairro em Belo Horizonte e região. Consulte as opções e fale com a Gisley Nunes.',
+            '/bairros',
+            robots: empty($neighborhoods) ? 'noindex,follow' : 'index,follow,max-image-preview:large'
         );
-        $data['neighborhoods'] = $this->properties->neighborhoods($this->properties->publicCatalog());
+        $data['neighborhoods'] = $neighborhoods;
         $data['pageLd'] = $this->jsonLd([
             '@context' => 'https://schema.org',
             '@type' => 'CollectionPage',
@@ -240,8 +244,8 @@ class PageController extends Controller
     public function sobre(Request $request)
     {
         return view('sobre', $this->pageData(
-            'Sobre | Gisley Nunes Imóveis',
-            'Conheça a Gisley Nunes e sua forma de trabalhar com imóveis em Belo Horizonte e região.',
+            'Gisley Nunes: imobiliária em Belo Horizonte',
+            'Conheça a Gisley Nunes, imobiliária em Belo Horizonte e região para compra, locação e anúncio de imóveis.',
             '/sobre'
         ));
     }
@@ -249,8 +253,8 @@ class PageController extends Controller
     public function contato(Request $request)
     {
         return view('contato', $this->pageData(
-            'Contato | Gisley Nunes Imóveis',
-            'Fale com a Gisley Nunes por WhatsApp, e-mail ou formulário sobre comprar, alugar ou anunciar um imóvel.',
+            'Contato | Gisley Nunes Imóveis em Belo Horizonte',
+            'Fale com a Gisley Nunes para comprar, alugar ou anunciar um imóvel em Belo Horizonte e região.',
             '/contato'
         ));
     }
