@@ -24,7 +24,9 @@ class RequestBodyLimitTest extends TestCase
         );
 
         $this->assertSame(411, $response->getStatusCode());
-        $this->assertSame('CONTENT_LENGTH_REQUIRED', $response->getData(true)['error']);
+        $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertIsArray($payload);
+        $this->assertSame('CONTENT_LENGTH_REQUIRED', $payload['error'] ?? null);
     }
 
     public function test_declared_payload_over_limit_is_rejected_without_reading_the_body(): void
@@ -43,6 +45,8 @@ class RequestBodyLimitTest extends TestCase
         );
 
         $this->assertSame(413, $response->getStatusCode());
-        $this->assertSame('PAYLOAD_TOO_LARGE', $response->getData(true)['error']);
+        $payload = json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertIsArray($payload);
+        $this->assertSame('PAYLOAD_TOO_LARGE', $payload['error'] ?? null);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Services\LocalMediaStorage;
 use Illuminate\Console\Command;
 use Illuminate\Encryption\Encrypter;
+use PDO;
 use RuntimeException;
 
 class ProductionCheck extends Command

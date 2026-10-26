@@ -16,7 +16,7 @@ class HostAuthorityBoundaryTest extends TestCase
         ]);
         $this->app->instance('env', 'production');
 
-        $request = Request::create('https://admin.example.test:8443/admin', 'GET');
+        $request = Request::create('https://admin.example.test:8443/admin/other', 'GET');
         $response = app(RequireAdminOrigin::class)->handle(
             $request,
             static fn () => response('ok'),
