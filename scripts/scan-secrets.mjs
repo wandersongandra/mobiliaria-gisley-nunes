@@ -30,20 +30,39 @@ const allowedFragments = [
   'troque-por-um-segredo',
   'secret-test',
   'usuario:senha',
-  '<SECRET',
-  '<ACCESS',
-  'example',
+  '<secret',
+  '<access',
   'changeme',
   'change-me',
   'placeholder'
 ];
 
-function allowed(match, captured = '', location = '') {
-  const value = String(match || '').toLowerCase();
-  if (allowedFragments.some((fragment) => value.includes(fragment.toLowerCase()))) return true;
-  const historicalFixture = /(^|[:\\/])test[\\/]/.test(String(location))
-    || /(^|[:\\/])\.env\.example$/.test(String(location));
-  return historicalFixture && Boolean(captured) && allowedSecretFingerprints.has(fingerprint(captured));
+function isFixtureLocation(location) {
+  const normalized = String(location || '').replaceAll('\\\\', '/');
+
+  return /(^|:)test\\//.test(normalized)
+    || /(^|:)\\.env\\.example(?::|$)/.test(normalized);
+}
+
+function allowed(match, captured = '', location = '', name = '') {
+  // Never allow a value merely because it contains a word such as
+  // "example". Allow-listing is restricted to known fixture locations and
+  // known placeholder values.
+  if (!isFixtureLocation(location)) return false;
+
+  if (captured && allowedSecretFingerprints.has(fingerprint(captured))) {
+    return true;
+  }
+
+  if (name !== 'sensitive-env') return false;
+
+  const value = String(match || '').trim().toLowerCase();
+
+  return allowedFragments.some((fragment) => (
+    value === fragment
+    || value.endsWith('=' + fragment)
+    || value.endsWith(':' + fragment)
+  ));
 }
 
 function scanText(text, { scope, location }) {
@@ -53,7 +72,7 @@ function scanText(text, { scope, location }) {
     for (const match of String(text || '').matchAll(re)) {
       const value = match[0];
       const captured = String(match[1] || match[2] || match[3] || '').replace(/^['"]|['"]$/g, '');
-      if (allowed(value, captured, location)) continue;
+      if (allowed(value, captured, location, name)) continue;
       if (name === 'sensitive-env' && captured.length < 20) continue;
       findings.push({
         scope,
