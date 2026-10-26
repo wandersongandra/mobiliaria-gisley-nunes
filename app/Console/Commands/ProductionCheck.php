@@ -23,6 +23,7 @@ class ProductionCheck extends Command
             'APP_URL and ADMIN_ORIGIN use distinct HTTPS hosts' => $this->hasSecureSeparatedOrigins(),
             'MySQL connection settings are present' => config('database.default') === 'mysql'
                 && $this->configured(['database.connections.mysql.host', 'database.connections.mysql.database', 'database.connections.mysql.username', 'database.connections.mysql.password']),
+            'remote MySQL TLS verification is configured' => $this->hasMysqlTlsConfiguration(),
             'required PHP extensions are available' => $this->requiredExtensionsAvailable(),
             'session.upload_progress is disabled' => $this->isUploadProgressDisabled(),
             'post_max_size is bounded' => $this->hasBoundedPostMaxSize(),
@@ -259,6 +260,26 @@ class ProductionCheck extends Command
             'k' => $numeric * 1024,
             default => $numeric,
         };
+    }
+
+    private function hasMysqlTlsConfiguration(): bool
+    {
+        $host = strtolower(trim((string) config('database.connections.mysql.host')));
+        if (in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+            return true;
+        }
+
+        if (! defined('PDO::MYSQL_ATTR_SSL_CA') || ! defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) {
+            return false;
+        }
+
+        $options = config('database.connections.mysql.options', []);
+        $ca = $options[PDO::MYSQL_ATTR_SSL_CA] ?? null;
+        $verify = $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] ?? null;
+
+        return is_string($ca)
+            && trim($ca) !== ''
+            && filter_var($verify, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) === true;
     }
 
     private function requiredExtensionsAvailable(): bool
