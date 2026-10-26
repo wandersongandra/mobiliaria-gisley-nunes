@@ -30,6 +30,7 @@ class ProductionDatabaseTlsTest extends TestCase
         ]);
 
         $command = $this->artisan('app:production-check');
-        $command->expectsOutputToContain('[OK] remote MySQL TLS verification is configured');
+        $command->expectsOutputToContain('[OK] remote MySQL TLS verification is configured')
+            ->assertSuccessful();
     }
 }
