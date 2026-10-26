@@ -16,8 +16,8 @@ Configurar manualmente:
 - bloquear push direto, force push e exclusão;
 - exigir revisão de CODEOWNERS para workflows, autenticação, migrations, deploy e dependências;
 - habilitar Secret Scanning e Push Protection;
-- criar o ambiente `production) com aprovação obrigatória;
-- restringir os segredos de deploy ao ambiente `production);
+- criar o ambiente `production` com aprovação obrigatória;
+- restringir os segredos de deploy ao ambiente `production`;
 - revisar periodicamente colaboradores, tokens, chaves SSH e instalações GitHub;
 - adicionar um segundo revisor independente em `.github/CODEOWNERS`.
 
