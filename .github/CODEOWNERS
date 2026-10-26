@@ -1,0 +1,19 @@
+# Revisão obrigatória para mudanças sensíveis.
+# Adicione um segundo revisor independente antes de proteger a branch.
+* @wandersongandra
+
+.github/ @wandersongandra
+app/Http/Middleware/ @wandersongandra
+app/Services/Auth* @wandersongandra
+app/Services/Admin* @wandersongandra
+app/Services/CriticalAuditService.php @wandersongandra
+app/Console/Commands/ProductionCheck.php @wandersongandra
+config/ @wandersongandra
+database/migrations/ @wandersongandra
+routes/ @wandersongandra
+scripts/deploy-*.sh @wandersongandra
+.github/workflows/ @wandersongandra
+composer.json @wandersongandra
+composer.lock @wandersongandra
+package.json @wandersongandra
+pnpm-lock.yaml @wandersongandra

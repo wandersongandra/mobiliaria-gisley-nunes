@@ -22,6 +22,14 @@ class LimitRequestBody
             return $this->tooLarge($limitKb);
         }
 
+        // A chunked request has no safe declared size for this middleware. Do
+        // not consume an unbounded body in the application layer; the reverse
+        // proxy/PHP limits remain the primary defense.
+        $transferEncoding = strtolower(trim((string) $request->headers->get('Transfer-Encoding', '')));
+        if ($transferEncoding !== '' && str_contains($transferEncoding, 'chunked') && $declared === null) {
+            return $this->lengthRequired($limitKb);
+        }
+
         // PHP parses multipart uploads into UploadedFile objects. Avoid reading
         // the whole binary body a second time while still enforcing the
         // Content-Length limit above.
@@ -40,6 +48,13 @@ class LimitRequestBody
     {
         return response()
             ->json(['error' => 'PAYLOAD_TOO_LARGE', 'max_kb' => $limitKb], 413)
+            ->header('Cache-Control', 'no-store');
+    }
+
+    private function lengthRequired(int $limitKb): Response
+    {
+        return response()
+            ->json(['error' => 'CONTENT_LENGTH_REQUIRED', 'max_kb' => $limitKb], 411)
             ->header('Cache-Control', 'no-store');
     }
 }

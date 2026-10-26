@@ -15,13 +15,13 @@ class RequireAdminOrigin
         }
 
         $adminOrigin = rtrim((string) config('app.admin_url'), '/');
-        $expectedHost = strtolower((string) parse_url($adminOrigin, PHP_URL_HOST));
-        if ($expectedHost === '' || ! str_starts_with($adminOrigin, 'https://')) {
+        $expectedAuthority = $this->configuredAuthority($adminOrigin);
+        if ($expectedAuthority === null || ! str_starts_with(strtolower($adminOrigin), 'https://')) {
             return response()->json(['error' => 'ADMIN_ORIGIN_NOT_CONFIGURED'], 503);
         }
 
-        $currentHost = $this->requestHost($request);
-        if ($currentHost !== null && hash_equals($expectedHost, $currentHost)) {
+        $currentAuthority = $this->requestAuthority($request);
+        if ($currentAuthority !== null && hash_equals($expectedAuthority, $currentAuthority)) {
             return $next($request);
         }
 
@@ -41,15 +41,42 @@ class RequireAdminOrigin
             : response('Not Found', 404);
     }
 
-    private function requestHost(Request $request): ?string
+    private function requestAuthority(Request $request): ?string
     {
         $raw = strtolower(trim((string) $request->headers->get('host', '')));
         if ($raw === '' || str_contains($raw, ',') || preg_match('/[\x00-\x20\x7F]/', $raw) === 1) {
             return null;
         }
 
-        $host = strtolower((string) parse_url('http://'.$raw, PHP_URL_HOST));
+        $parts = parse_url('http://'.$raw);
+        if (! is_array($parts)) {
+            return null;
+        }
 
-        return $host !== '' && preg_match('/^[a-z0-9.-]+$/D', $host) === 1 ? $host : null;
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if ($host === '' || preg_match('/^[a-z0-9.-]+$/D', $host) !== 1) {
+            return null;
+        }
+
+        $port = isset($parts['port']) ? (int) $parts['port'] : null;
+
+        return $port !== null && $port !== 443 ? $host.':'.$port : $host;
+    }
+
+    private function configuredAuthority(string $origin): ?string
+    {
+        $parts = parse_url($origin);
+        if (! is_array($parts)) {
+            return null;
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if ($host === '' || preg_match('/^[a-z0-9.-]+$/D', $host) !== 1) {
+            return null;
+        }
+
+        $port = isset($parts['port']) ? (int) $parts['port'] : null;
+
+        return $port !== null && $port !== 443 ? $host.':'.$port : $host;
     }
 }

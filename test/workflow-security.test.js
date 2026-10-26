@@ -34,11 +34,17 @@ test('CodeQL executa no branch efetivo de produção', () => {
   assert.match(ci, /composer run analyse/);
 });
 
-test('deploy gated resolve explicitamente o ref para push e dispatch manual', () => {
-  assert.match(hostgatorDeploy, /ref: \$\{\{ github\.event_name == 'push' && github\.ref \|\| inputs\.ref \}\}/);
-  assert.match(hostgatorDeploy, /REQUESTED_REF: \$\{\{ github\.event_name == 'push' && 'migration\/laravel-backend-2026-10-02' \|\| inputs\.ref \}\}/);
-  assert.match(hostgatorDeploy, /DEPLOY_SHA: \$\{\{ github\.event_name == 'push' && github\.sha \|\| inputs\.sha \}\}/);
-});
+test('deploy gated exige dispatch manual e alvo imutável', () => {
+  assert.match(hostgatorDeploy, /workflow_dispatch:/);
+  assert.doesNotMatch(hostgatorDeploy, /^\s+push:/m);
+  assert.match(hostgatorDeploy, /inputs\.confirm == 'ENABLE_HOSTGATOR_DEPLOY'/);
+  assert.match(hostgatorDeploy, /REQUESTED_REF: \$\{\{ inputs\.ref \}\}/);
+  assert.match(hostgatorDeploy, /DEPLOY_SHA: \$\{\{ inputs\.sha \}\}/);
+  assert.match(hostgatorDeploy, /ref: \$\{\{ inputs\.ref \}\}/);
+  assert.match(hostgatorDeploy, /refs\/heads\/\$REQUESTED_REF/);
+  assert.match(hostgatorDeploy, /\[\[ "\$HEALTH_URL" == https:\/\/\* \]\]/);
+  assert.match(hostgatorDeploy, /fetch-depth: 0/);
+});;
 
 test('Laravel CI aguarda MySQL com retry limitado antes de configurar triggers', () => {
   const waitStep = laravelCi.indexOf('- name: Wait for ephemeral MySQL');

@@ -50,3 +50,6 @@
 - A aplicação é single-tenant; não há isolamento por imobiliária/proprietário.
 - Definir retenção legal e backup independente para trilha de auditoria exige
   decisão operacional.
+## Operação e release
+
+O checklist de configuração externa e evidências de produção está em [SECURITY-OPERATIONS.md](SECURITY-OPERATIONS.md).
