@@ -38,10 +38,10 @@ const allowedFragments = [
 ];
 
 function isFixtureLocation(location) {
-  const normalized = String(location || '').replaceAll('\\\\', '/');
+  const normalized = String(location || '').replaceAll('\\', '/');
 
-  return /(^|:)test\\//.test(normalized)
-    || /(^|:)\\.env\\.example(?::|$)/.test(normalized);
+  return /(^|:)test\//.test(normalized)
+    || /(^|:)\.env\.example(?::|$)/.test(normalized);
 }
 
 function allowed(match, captured = '', location = '', name = '') {
