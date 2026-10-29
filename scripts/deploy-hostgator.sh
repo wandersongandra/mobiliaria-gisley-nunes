@@ -84,6 +84,9 @@ if [[ "$DEPLOY_SHA" != "$remote_sha" && "$ALLOW_HOSTGATOR_ROLLBACK" != "1" ]]; t
 fi
 
 previous_sha="$(git rev-parse HEAD)"
+if [[ "$RUN_MIGRATIONS" == '0' ]] && ! git diff --quiet "$previous_sha" "$DEPLOY_SHA" -- database/migrations/; then
+    fail 'migrations alteradas entre o checkout e o release: publicar exige RUN_MIGRATIONS=1 e backup validado'
+fi
 printf 'previous_sha=%s\nrequested_sha=%s\nbranch=%s\n' "$previous_sha" "$DEPLOY_SHA" "$DEPLOY_BRANCH" > "$DEPLOY_STATE_FILE"
 
 git checkout --detach "$DEPLOY_SHA"
@@ -242,6 +245,7 @@ if [[ "$RUN_MIGRATIONS" == '1' ]]; then
 else
     printf 'migrations não executadas; defina RUN_MIGRATIONS=1 em uma janela aprovada\n'
 fi
+"$PHP_BIN" artisan app:assert-migrations-current --no-ansi
 
 HEALTH_CACHE_BUSTER="$(openssl rand -hex 16)" || fail 'falha ao gerar cache-buster do health check'
 if [[ "$HEALTH_URL" == *\?* ]]; then
