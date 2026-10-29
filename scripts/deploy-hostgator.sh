@@ -278,6 +278,13 @@ done
 rm -f "$FPM_CHECK_FILE"
 FPM_CHECK_FILE=''
 
+# Keep release diagnostics tied to the exact commit being deployed. The values
+# are embedded in Laravel's config cache and never depend on the web worker's
+# ability to execute Git or read the repository at request time.
+export APP_RELEASE_SHA="$DEPLOY_SHA"
+export APP_RELEASE_BUILT_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+export APP_ASSET_VERSION="${DEPLOY_SHA:0:12}"
+
 "$PHP_BIN" artisan config:clear --no-ansi
 "$PHP_BIN" artisan route:clear --no-ansi
 "$PHP_BIN" artisan view:clear --no-ansi
