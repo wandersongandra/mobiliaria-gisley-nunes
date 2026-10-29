@@ -44,6 +44,7 @@ manualmente.
 ```text
 pnpm install --frozen-lockfile
 pnpm build
+pnpm test:admin-contract
 pnpm test:source
 pnpm security:secrets
 ```

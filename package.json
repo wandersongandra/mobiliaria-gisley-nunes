@@ -6,6 +6,7 @@
   "packageManager": "pnpm@10.4.1",
   "scripts": {
     "build": "node scripts/build-public-assets.mjs",
+    "test:admin-contract": "node scripts/verify-admin-payload-contract.mjs",
     "test:source": "node scripts/verify-frontend-source-of-truth.mjs",
     "security:secrets": "node scripts/scan-secrets.mjs"
   },

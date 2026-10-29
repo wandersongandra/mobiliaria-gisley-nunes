@@ -153,6 +153,9 @@ jobs:
       - name: Build frontend assets
         run: pnpm build
 
+      - name: Validate admin payload contract
+        run: pnpm test:admin-contract
+
       - name: Verify Laravel public artifacts
         run: pnpm test:source
 

@@ -57,6 +57,7 @@ Use, nesta ordem, a partir de um checkout limpo:
 ```text
 pnpm install --frozen-lockfile
 pnpm build
+pnpm test:admin-contract
 pnpm test:source
 pnpm security:secrets
 ```
