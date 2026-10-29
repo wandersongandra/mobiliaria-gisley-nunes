@@ -351,6 +351,44 @@ class UploadLifecycleTest extends TestCase
         }
     }
 
+    public function test_legacy_media_with_active_html_content_is_not_served_inline(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        try {
+            $propertyId = $this->createDraftProperty();
+            $photoId = (string) Str::uuid();
+            $key = R2Storage::PREFIX.$propertyId.'/'.$photoId.'.jpg';
+            $file = $root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $key);
+            File::ensureDirectoryExists(dirname($file));
+            File::put($file, '<!doctype html><html><script>alert(1)</script></html>');
+
+            DB::table('morada_property_photos')->insert([
+                'id' => $photoId,
+                'property_id' => $propertyId,
+                'storage_path' => $key,
+                'url' => '/media/'.$key,
+                'alt_text' => 'Foto legada',
+                'sort_order' => 0,
+                'is_cover' => 1,
+                'storage_provider' => 'local',
+                'mime_type' => 'image/jpeg',
+                'file_size' => filesize($file),
+                'width' => 800,
+                'height' => 600,
+                'uploaded_by' => 'manager@example.test',
+                'created_at' => now(),
+            ]);
+            DB::table('morada_properties')->where('id', $propertyId)->update(['status' => 'published']);
+
+            $this->get('/media/'.$key)->assertNotFound();
+            $this->withSession($this->createManagerSession())
+                ->get('/api/admin/photos/'.$photoId.'/media')
+                ->assertNotFound();
+        } finally {
+            File::deleteDirectory($root);
+        }
+    }
+
     public function test_legacy_presign_flow_uploads_to_local_storage_before_registration(): void
     {
         $root = $this->configureTemporaryMediaRoot();
@@ -363,19 +401,22 @@ class UploadLifecycleTest extends TestCase
             $session = $this->createManagerSession();
             $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
 
+            $file = UploadedFile::fake()->image('fachada.jpg', 640, 480);
+            $bytes = file_get_contents($file->getRealPath());
+            $this->assertIsString($bytes);
+
             $presign = $this->withSession($session)
                 ->withHeaders($headers)
                 ->postJson('/api/admin/uploads/presign', [
                     'propertyId' => $propertyId,
                     'fileName' => 'fachada.jpg',
                     'contentType' => 'image/jpeg',
-                    'size' => 1024,
+                    'size' => strlen($bytes),
                 ])
                 ->assertOk();
 
-            $file = UploadedFile::fake()->image('fachada.jpg', 640, 480);
-            $bytes = file_get_contents($file->getRealPath());
-            $this->assertIsString($bytes);
+            $authorization = (string) $presign->json('uploadHeaders.X-Upload-Authorization');
+            $this->assertNotSame('', $authorization);
 
             $upload = $this->withSession($session)
                 ->call(
@@ -389,6 +430,7 @@ class UploadLifecycleTest extends TestCase
                         'HTTP_HOST' => 'test.local',
                         'CONTENT_TYPE' => 'image/jpeg',
                         'CONTENT_LENGTH' => (string) strlen($bytes),
+                        'HTTP_X_UPLOAD_AUTHORIZATION' => $authorization,
                     ],
                     $bytes,
                 )
@@ -411,6 +453,53 @@ class UploadLifecycleTest extends TestCase
                 ])
                 ->assertCreated();
         } finally {
+            File::deleteDirectory($root);
+        }
+    }
+
+    public function test_upload_without_presign_authorization_is_rejected_before_writing(): void
+    {
+        config(['app.url' => 'https://test.local', 'app.admin_url' => 'https://test.local']);
+        $propertyId = $this->createDraftProperty();
+        $session = $this->createManagerSession();
+        $path = R2Storage::PREFIX.$propertyId.'/'.Str::uuid().'-fachada.jpg';
+
+        $this->withSession($session)->call(
+            'PUT',
+            '/api/admin/uploads/'.$path,
+            [],
+            $this->prepareCookiesForRequest(),
+            [],
+            [
+                'HTTP_ORIGIN' => 'https://test.local',
+                'HTTP_HOST' => 'test.local',
+                'CONTENT_TYPE' => 'image/jpeg',
+                'CONTENT_LENGTH' => '4',
+            ],
+            'fake',
+        )->assertForbidden()->assertJson(['error' => 'UPLOAD_AUTH_REQUIRED']);
+    }
+
+    public function test_local_stream_upload_rejects_excess_bytes_and_removes_partial_file(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        $storage = app(R2Storage::class);
+        $path = R2Storage::PREFIX.Str::uuid().'/oversized.jpg';
+        $stream = fopen('php://temp', 'w+b');
+        $this->assertIsResource($stream);
+        fwrite($stream, str_repeat('x', 1024));
+        rewind($stream);
+
+        try {
+            try {
+                $storage->putStream($path, $stream, 'image/jpeg', 4);
+                $this->fail('A request with an inaccurate Content-Length should be rejected.');
+            } catch (RuntimeException $error) {
+                $this->assertSame('INVALID_FILE', $error->getMessage());
+            }
+            $this->assertFalse($storage->exists($path));
+        } finally {
+            fclose($stream);
             File::deleteDirectory($root);
         }
     }

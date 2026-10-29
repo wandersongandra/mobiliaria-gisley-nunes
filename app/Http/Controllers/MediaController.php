@@ -25,8 +25,13 @@ class MediaController extends Controller
             return response()->json(['error' => 'NOT_FOUND'], 404);
         }
 
+        $mime = $this->storage->contentType($key);
+        if (! R2Storage::isSupportedImageContentType($mime)) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
+
         return response()->file($this->storage->path($key), [
-            'Content-Type' => $this->storage->contentType($key),
+            'Content-Type' => $mime,
             'Cache-Control' => 'public, max-age=31536000, immutable',
             'X-Content-Type-Options' => 'nosniff',
         ]);

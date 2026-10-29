@@ -99,8 +99,13 @@ class AuditIntegrityTest extends TestCase
                 'status' => 'draft',
                 'password' => 'super-sensitive-password',
                 'oauthCode' => 'temporary-auth-code',
+                'passwordConfirmation' => 'confirm-sensitive-password',
+                'awsSecretAccessKey' => 'temporary-aws-key',
+                'sessionJti' => 'temporary-session-id',
+                'tokenStoredAsHash' => true,
                 'nested' => [
                     'authorization' => 'Bearer temporary-token',
+                    'authorizationHeader' => 'Bearer another-temporary-token',
                     'note' => str_repeat('A', 2000),
                 ],
             ],
@@ -116,11 +121,18 @@ class AuditIntegrityTest extends TestCase
         $this->assertSame('draft', $details['status']);
         $this->assertSame('[REDACTED]', $details['password']);
         $this->assertSame('[REDACTED]', $details['oauthCode']);
+        $this->assertSame('[REDACTED]', $details['passwordConfirmation']);
+        $this->assertSame('[REDACTED]', $details['awsSecretAccessKey']);
+        $this->assertSame('[REDACTED]', $details['sessionJti']);
+        $this->assertTrue($details['tokenStoredAsHash']);
         $this->assertSame('[REDACTED]', $details['nested']['authorization']);
+        $this->assertSame('[REDACTED]', $details['nested']['authorizationHeader']);
         $this->assertSame(1024, strlen($details['nested']['note']));
         $this->assertStringNotContainsString('super-sensitive-password', $raw);
         $this->assertStringNotContainsString('temporary-auth-code', $raw);
         $this->assertStringNotContainsString('temporary-token', $raw);
+        $this->assertStringNotContainsString('temporary-aws-key', $raw);
+        $this->assertStringNotContainsString('temporary-session-id', $raw);
     }
 
     public function test_audit_log_accepts_inserts_but_rejects_updates_and_deletes(): void

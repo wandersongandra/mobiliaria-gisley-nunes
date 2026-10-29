@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\Route;
+use RuntimeException;
 use Tests\TestCase;
 
 class HttpSecurityBoundaryTest extends TestCase
@@ -90,6 +91,27 @@ class HttpSecurityBoundaryTest extends TestCase
         $this->getJson('/api/test-http-error')
             ->assertStatus(500)
             ->assertJson(['error' => 'INTERNAL_ERROR']);
+    }
+
+    public function test_invalid_profile_form_and_lead_inputs_return_client_errors_not_http_500(): void
+    {
+        foreach (['INVALID_PROFILE', 'INVALID_FORM_TEMPLATE', 'INVALID_LEAD_ACTIVITY'] as $code) {
+            $path = '/api/test-known-input-error-'.strtolower(str_replace('_', '-', $code));
+            Route::get($path, static function () use ($code): never {
+                throw new RuntimeException($code);
+            });
+
+            $this->getJson($path)
+                ->assertStatus(400)
+                ->assertJson(['error' => $code]);
+        }
+
+        Route::get('/api/test-form-conflict', static function (): never {
+            throw new RuntimeException('FORM_TEMPLATE_EXISTS');
+        });
+        $this->getJson('/api/test-form-conflict')
+            ->assertStatus(409)
+            ->assertJson(['error' => 'FORM_TEMPLATE_EXISTS']);
     }
 
     public function test_api_not_found_and_method_not_allowed_are_json(): void

@@ -86,7 +86,10 @@ class PublicApiController extends Controller
      */
     public function contact(Request $request): JsonResponse
     {
-        if (trim((string) $request->input('website', '')) !== '') {
+        $website = $request->input('website', '');
+        // ConvertEmptyStringsToNull converte o campo vazio legítimo em null.
+        // Apenas valores realmente preenchidos ou tipos anômalos são honeypot.
+        if ($website !== null && (! is_string($website) || trim($website) !== '')) {
             return response()->json(['ok' => true], 201);
         }
 

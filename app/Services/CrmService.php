@@ -159,7 +159,7 @@ class CrmService
             'Tenho outra dúvida',
         ];
 
-        $interest = (string) ($input['interest'] ?? 'Tenho outra dúvida');
+        $interest = $input['interest'] ?? 'Tenho outra dúvida';
         if (! in_array($interest, $interests, true)) {
             throw new RuntimeException('INVALID_CONTACT');
         }
@@ -466,7 +466,7 @@ class CrmService
             return false;
         }
 
-        return in_array($normalized, [
+        if (in_array($normalized, [
             'password',
             'secret',
             'client_secret',
@@ -481,7 +481,14 @@ class CrmService
             'authorization_code',
             'pairing_code',
             'invitation_token',
-        ], true);
+            'private_key',
+        ], true)) {
+            return true;
+        }
+
+        // Protege também variantes compostas introduzidas por novos fluxos,
+        // como passwordConfirmation, awsSecretAccessKey e sessionJti.
+        return preg_match('/(?:^|_)(?:password|secret|token|credential|authorization|cookie|session)(?:_|$)/D', $normalized) === 1;
     }
 
     public function listAudit(int $limit = 100): array
@@ -546,9 +553,17 @@ class CrmService
         }
 
         $address = $this->text($input['address'] ?? '', 500, false, 'INVALID_PROFILE');
-        $birthDate = trim((string) ($input['birthDate'] ?? ''));
-        if ($birthDate !== '' && (! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $birthDate) || $birthDate > now()->toDateString())) {
+        $birthDate = $input['birthDate'] ?? '';
+        if (! is_string($birthDate)) {
             throw new RuntimeException('INVALID_PROFILE');
+        }
+        $birthDate = trim($birthDate);
+        if ($birthDate !== '') {
+            if (! preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $birthDate, $parts)
+                || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])
+                || $birthDate > now()->toDateString()) {
+                throw new RuntimeException('INVALID_PROFILE');
+            }
         }
 
         DB::table('morada_staff_access')->updateOrInsert(
@@ -940,6 +955,9 @@ class CrmService
 
     private function text(mixed $value, int $max, bool $required, string $error): string
     {
+        if ($value !== null && ! is_scalar($value)) {
+            throw new RuntimeException($error);
+        }
         $value = trim((string) $value);
         if (($required && $value === '') || mb_strlen($value) > $max || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', $value)) {
             throw new RuntimeException($error);
@@ -950,6 +968,9 @@ class CrmService
 
     public function email(mixed $value, string $error = 'INVALID_EMAIL'): string
     {
+        if ($value !== null && ! is_scalar($value)) {
+            throw new RuntimeException($error);
+        }
         $email = strtolower(trim((string) $value));
         if (strlen($email) > 255 || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new RuntimeException($error);

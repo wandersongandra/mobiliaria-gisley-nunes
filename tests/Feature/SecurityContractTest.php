@@ -233,6 +233,46 @@ class SecurityContractTest extends TestCase
             ->where('jti', $editor['admin_jti'])->value('revoked_at'));
     }
 
+    public function test_administrative_mutations_reject_nested_values_in_scalar_fields(): void
+    {
+        $manager = $this->createAdminSession('manager');
+        $editor = $this->createAdminSession('editor');
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
+        $editorEmail = (string) DB::table('morada_staff_access')
+            ->where('open_id', $editor['admin_open_id'])->value('email');
+
+        $this->withSession($manager)->withHeaders($headers)
+            ->postJson('/api/admin/team/invitations', [
+                'email' => 'invited@example.test', 'name' => ['array'], 'role' => 'editor',
+            ])
+            ->assertStatus(400)
+            ->assertJson(['error' => 'INVALID_INVITATION']);
+
+        $this->withSession($manager)->withHeaders($headers)
+            ->postJson('/api/admin/team', [
+                'email' => 'new@example.test', 'name' => 'Novo', 'role' => 'editor',
+                'pairingCode' => ['array'],
+            ])
+            ->assertStatus(400)
+            ->assertJson(['error' => 'INVALID_TEAM_MEMBER']);
+
+        $this->withSession($manager)->withHeaders($headers)
+            ->patchJson('/api/admin/team/'.rawurlencode($editorEmail), ['name' => ['array']])
+            ->assertStatus(400)
+            ->assertJson(['error' => 'INVALID_TEAM_MEMBER']);
+
+        $this->withSession($manager)->withHeaders($headers)
+            ->postJson('/api/admin/uploads/presign', [
+                'propertyId' => ['array'], 'fileName' => 'photo.jpg',
+                'contentType' => 'image/jpeg', 'size' => 1024,
+            ])
+            ->assertStatus(400)
+            ->assertJson(['error' => 'INVALID_FILE']);
+
+        $this->assertDatabaseCount('morada_staff_invitations', 0);
+        $this->assertDatabaseMissing('morada_staff_access', ['email' => 'new@example.test']);
+    }
+
     private function propertyInput(string $title, array $overrides = []): array
     {
         return array_merge([

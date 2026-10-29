@@ -83,6 +83,29 @@ class OwnerRequestsTest extends TestCase
         ]);
     }
 
+    public function test_profile_rejects_impossible_dates_and_arrays_without_persisting_them(): void
+    {
+        $editor = $this->createAdminSession('editor');
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
+
+        foreach (['2026-02-31', '2025-02-29', '0000-01-01', ['unexpected']] as $date) {
+            $this->withSession($editor)->withHeaders($headers)
+                ->putJson('/api/admin/profile', ['address' => 'Rua teste', 'birthDate' => $date])
+                ->assertStatus(400)
+                ->assertJson(['error' => 'INVALID_PROFILE']);
+        }
+
+        $this->withSession($editor)->withHeaders($headers)
+            ->putJson('/api/admin/profile', ['address' => 'Rua teste', 'birthDate' => '2000-02-29'])
+            ->assertOk()
+            ->assertJsonPath('profile.birthDate', '2000-02-29');
+
+        $this->assertDatabaseHas('morada_staff_access', [
+            'open_id' => $editor['admin_open_id'],
+            'birth_date' => '2000-02-29',
+        ]);
+    }
+
     public function test_form_templates_are_manager_only_and_json_is_stored_as_data(): void
     {
         $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
