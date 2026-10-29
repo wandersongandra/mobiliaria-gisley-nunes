@@ -12,6 +12,7 @@ TMP_DIR="$TEST_ROOT/tmp"
 GIT_STATE="$TEST_ROOT/git-checked-out"
 CURL_AUDIT_FILE="$TEST_ROOT/curl-audit"
 PHP_AUDIT_FILE="$TEST_ROOT/php-audit"
+RELEASE_AUDIT_FILE="$TEST_ROOT/release-audit"
 REAL_PHP_BIN="$(command -v php || true)"
 
 cleanup() {
@@ -81,6 +82,11 @@ fi
 
 if [[ "${1:-}" == 'artisan' ]]; then
     printf '%s\n' "$*" >> "$PHP_AUDIT_FILE"
+    if [[ "${2:-}" == 'config:cache' ]]; then
+        printf 'sha=%s\nbuilt_at=%s\nasset_version=%s\n' \
+            "${APP_RELEASE_SHA:-}" "${APP_RELEASE_BUILT_AT:-}" "${APP_ASSET_VERSION:-}" \
+            >> "$RELEASE_AUDIT_FILE"
+    fi
     if [[ "${2:-}" == 'app:assert-migrations-current' && "${PENDING_MIGRATIONS:-0}" == '1' ]]; then
         exit 1
     fi
@@ -171,6 +177,7 @@ run_deploy() {
         GIT_STATE="$GIT_STATE" \
         CURL_AUDIT_FILE="$CURL_AUDIT_FILE" \
         PHP_AUDIT_FILE="$PHP_AUDIT_FILE" \
+        RELEASE_AUDIT_FILE="$RELEASE_AUDIT_FILE" \
         GIT_DIFF_MIGRATIONS_CHANGED="${GIT_DIFF_MIGRATIONS_CHANGED:-0}" \
         PENDING_MIGRATIONS="${PENDING_MIGRATIONS:-0}" \
         CURL_MODE="${CURL_MODE:-success}" \
@@ -184,7 +191,7 @@ run_deploy_signal() {
     export DEPLOY_BRANCH='migration/laravel-backend-2026-10-02'
     export DEPLOY_SHA='2222222222222222222222222222222222222222'
     export PROJECT_ROOT LOCK_DIR DEPLOY_STATE_FILE TMPDIR COMPOSER_BIN PHP_BIN HEALTH_URL RUN_MIGRATIONS
-    export GIT_STATE CURL_AUDIT_FILE CURL_MODE REAL_PHP_BIN PHP_AUDIT_FILE
+    export GIT_STATE CURL_AUDIT_FILE CURL_MODE REAL_PHP_BIN PHP_AUDIT_FILE RELEASE_AUDIT_FILE
     LOCK_DIR="$PROJECT_ROOT/.deploy-lock"
     DEPLOY_STATE_FILE="$PROJECT_ROOT/.deploy-state"
     TMPDIR="$TMP_DIR"
@@ -197,6 +204,9 @@ run_deploy_signal() {
 
 run_deploy
 grep -Fxq 'artisan app:assert-migrations-current --no-ansi' "$PHP_AUDIT_FILE"
+grep -Fxq 'sha=2222222222222222222222222222222222222222' "$RELEASE_AUDIT_FILE"
+grep -Eq '^built_at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$RELEASE_AUDIT_FILE"
+grep -Fxq 'asset_version=222222222222' "$RELEASE_AUDIT_FILE"
 for public_file in "${PUBLIC_FILES[@]}"; do
     test "$(stat -c '%a' "$public_file")" = '644'
 done
