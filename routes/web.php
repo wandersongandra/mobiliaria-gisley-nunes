@@ -59,6 +59,17 @@ Route::prefix('api/auth')->middleware(['admin-origin', 'body-limit:32'])->group(
 Route::get('/api/admin/session', [AuthController::class, 'session'])
     ->middleware(['admin-origin', 'throttle:auth-session']);
 
+Route::post('/api/admin/properties/{id}/photos/upload', [AdminPropertyController::class, 'uploadPhoto'])
+    ->middleware([
+        'admin-origin',
+        'body-limit:16384',
+        'same-origin',
+        'admin',
+        'throttle:admin',
+        'capability:media.manage',
+        'throttle:upload',
+    ]);
+
 Route::prefix('api/admin')
     ->middleware(['admin-origin', 'body-limit:256', 'same-origin', 'admin', 'throttle:admin'])
     ->group(function (): void {
@@ -73,8 +84,6 @@ Route::prefix('api/admin')
         Route::delete('/properties/{id}', [AdminPropertyController::class, 'archive'])
             ->middleware(['capability:property.archive', 'throttle:destructive']);
 
-        Route::post('/uploads/presign', [AdminPropertyController::class, 'presign'])
-            ->middleware(['capability:media.manage', 'throttle:upload']);
         Route::post('/properties/{id}/photos', [AdminPropertyController::class, 'addPhoto'])
             ->middleware(['capability:media.manage', 'throttle:upload']);
         Route::get('/photos/{id}/media', [AdminPropertyController::class, 'photoMedia'])
@@ -95,7 +104,7 @@ Route::prefix('api/admin')
         Route::delete('/testimonials/{id}', [AdminCrmController::class, 'removeTestimonial'])
             ->middleware(['capability:testimonial.manage', 'throttle:destructive']);
 
-        Route::get('/leads/export', [AdminCrmController::class, 'exportLeads'])
+        Route::post('/leads/export', [AdminCrmController::class, 'exportLeads'])
             ->middleware(['capability:lead.read', 'throttle:export']);
         Route::get('/leads', [AdminCrmController::class, 'leads'])
             ->middleware('capability:lead.read');

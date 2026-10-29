@@ -14,7 +14,7 @@ class LimitRequestBody
             return $next($request);
         }
 
-        $limitKb = max(1, min(2048, (int) $kilobytes));
+        $limitKb = max(1, min(16384, (int) $kilobytes));
         $maxBytes = $limitKb * 1024;
 
         $declared = $request->headers->get('Content-Length');

@@ -33,14 +33,14 @@ As páginas HTML, `robots.txt`, `sitemap.xml` e `llms.txt` são públicas e não
 | --- | --- | --- |
 | `GET/POST /api/admin/properties` | `property.read` / `property.write` | Lista paginada ou cria; `403`, `409`, `422`. |
 | `GET/PUT/DELETE /api/admin/properties/{id}` | `property.read` / `property.write` / `property.archive` | UUID obrigatório; delete arquiva. |
-| `POST /api/admin/uploads/presign` | `media.manage` | Presign R2 curto; 120/10 min por IP. |
+| `POST /api/admin/properties/{id}/photos/upload` | `media.manage` | Multipart validado no Laravel antes do `PutObject` R2; limite de 12 MiB por arquivo e 16 MiB por requisição. |
 | `POST /api/admin/properties/{id}/photos` | `media.manage` | Registra foto após validar R2; `409` limite/duplicidade. |
 | `GET /api/admin/photos/{id}/media` | `property.read` | Redirect R2 curto. |
 | `DELETE /api/admin/photos/{id}` | `media.manage` | Remove registro e tenta remoção R2. |
 | `PUT /api/admin/properties/{id}/photos/order`, `PUT /api/admin/photos/{id}/cover` | `media.manage` | UUIDs e ordenação estrita. |
 | `GET/PUT /api/admin/site` | `site.read` / `site.manage` | Configuração pública. |
 | `POST/DELETE /api/admin/testimonials[/{id}]` | `testimonial.manage` | Cria/remove depoimento. |
-| `GET /api/admin/leads`, `/export` | `lead.read` | Filtros status/data; export streaming CSV/JSON. A exportação usa limite dedicado de 20 requisições/10 min por IP. |
+| `GET /api/admin/leads`, `POST /api/admin/leads/export` | `lead.read` | Filtros status/data; export streaming CSV/JSON. A exportação usa limite dedicado de 20 requisições/10 min por IP e exige CSRF/origem same-origin. |
 | `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | Atualiza/apaga lead. |
 | `GET /api/admin/audit` | `audit.read` | `limit` 1–250. |
 | `GET/POST/PATCH/DELETE /api/admin/team...` | `team.manage` | Equipe, convites e revogação. |

@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
-import { assertDatabaseConfiguration, assertStorageConfiguration, configuredAdminOrigin, isProduction, port } from './config.js';
-import { closePool, getPropertyBySlug, listProperties, migrate } from './db.js';
+import { assertDatabaseConfiguration, assertNodeRuntimeBoundary, assertStorageConfiguration, configuredAdminOrigin, hasDatabase, isProduction, port } from './config.js';
+import { closePool, getPropertyBySlug, listProperties } from './db.js';
 import { registerRoutes } from './routes.js';
 import { assertAuthConfiguration } from './auth.js';
 import { assertAssetsReady, assets } from './assets.js';
@@ -291,21 +291,14 @@ app.use(apiErrorHandler);
 
 async function start() {
   if (isProduction) {
+    assertNodeRuntimeBoundary();
     assertAssetsReady();
     assertSecurityConfiguration();
     assertAuthConfiguration();
     assertDatabaseConfiguration();
     assertStorageConfiguration();
   }
-  let migration;
-  try {
-    migration = await migrate();
-    if (isProduction && !migration.configured) throw new Error('DATABASE_NOT_CONFIGURED');
-  } catch (error) {
-    if (isProduction) throw error;
-    logOperationalError(console.warn, 'db.migration_deferred', error);
-    migration = { configured: false };
-  }
+  const databaseConfigured = hasDatabase();
   if (isProduction) {
     const publicHeaders = (res, filePath) => {
       const normalized = filePath.replace(/\\/g, '/');
@@ -339,7 +332,7 @@ async function start() {
   });
 
   const server = app.listen(port, '0.0.0.0', () => {
-    console.log(`[morada] listening on 0.0.0.0:${port} · database:${migration.configured ? 'ready' : 'fallback'}`);
+    console.log(`[morada] listening on 0.0.0.0:${port} · database:${databaseConfigured ? 'configured' : 'fallback'}`);
   });
 
   server.requestTimeout = 15_000;

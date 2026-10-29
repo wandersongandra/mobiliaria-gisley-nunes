@@ -3,32 +3,7 @@
 namespace App\Services;
 
 use Aws\S3\S3Client;
-use Aws\Signature\S3SignatureV4;
 use RuntimeException;
-
-/**
- * O signer padrão do SDK deixa Content-Type e If-None-Match fora da assinatura
- * de URLs pré-assinadas. O upload do CRM envia ambos e o contrato depende de
- * If-None-Match para impedir replay/sobrescrita da chave aleatória.
- */
-final class R2PresignSignatureV4 extends S3SignatureV4
-{
-    protected function getHeaderBlacklist()
-    {
-        $headers = parent::getHeaderBlacklist();
-        unset($headers['content-type'], $headers['if-none-match']);
-
-        return $headers;
-    }
-
-    protected function getPresignHeaderDenyList()
-    {
-        $headers = parent::getPresignHeaderDenyList();
-        unset($headers['content-type']);
-
-        return $headers;
-    }
-}
 
 class R2Storage
 {
@@ -37,6 +12,8 @@ class R2Storage
      * é ela quem valida caminhos e confere posse em belongsToProperty().
      */
     public const PREFIX = 'gisley/properties/';
+
+    public const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 
     /**
      * Limita a alocação potencial do decoder ao conferir a área antes de a
@@ -139,38 +116,26 @@ class R2Storage
         return '/media/'.implode('/', array_map('rawurlencode', explode('/', $key)));
     }
 
-    public function presignPut(string $path, string $contentType): string
+    public function putObject(string $path, string $bytes, string $contentType): void
     {
         $key = $this->assertKey($path);
         $contentType = strtolower(trim($contentType));
-        if (! in_array($contentType, self::IMAGE_MIME_TYPES, true)) {
+        $contentLength = strlen($bytes);
+
+        if ($contentLength < 1
+            || $contentLength > self::MAX_UPLOAD_BYTES
+            || self::imageInfoFromBytes($bytes, $contentType) === null) {
             throw new RuntimeException('INVALID_FILE');
         }
 
-        $client = $this->client();
-
-        $command = $client->getCommand('PutObject', [
+        $this->client()->putObject([
             'Bucket' => config('services.r2.bucket'),
             'Key' => $key,
+            'Body' => $bytes,
             'ContentType' => $contentType,
+            'ContentLength' => $contentLength,
             'IfNoneMatch' => '*',
         ]);
-
-        $handlerList = $command->getHandlerList();
-        $handlerList->remove('signer');
-        if (empty($command['ChecksumAlgorithm']) && empty($command['AddContentMD5'])) {
-            $handlerList->remove('s3.checksum');
-        }
-
-        $request = \Aws\serialize($command);
-        $signer = new R2PresignSignatureV4('s3', 'auto');
-        $request = $signer->presign(
-            $request,
-            $client->getCredentials()->wait(),
-            '+'.max(60, min(3600, (int) config('services.r2.upload_expires', 600))).' seconds'
-        );
-
-        return (string) $request->getUri();
     }
 
     public function listPropertyObjects(?string $continuationToken = null): array

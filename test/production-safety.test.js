@@ -21,3 +21,27 @@ test('produção sem banco nunca expõe imóveis demonstrativos', () => {
   assert.equal(result.count, 0);
   assert.equal(result.property, null);
 });
+
+test('backend Node falha fechado fora do runtime explícito de preview', () => {
+  const script = `
+    const { assertNodeRuntimeBoundary } = await import('./server/config.js');
+    try {
+      assertNodeRuntimeBoundary();
+      process.stdout.write('OK');
+    } catch (error) {
+      process.stdout.write(error.message);
+    }
+  `;
+  const run = (runtime) => execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: path.resolve('.'),
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      ...(runtime ? { GISELY_NODE_RUNTIME: runtime } : {})
+    },
+    encoding: 'utf8'
+  }).trim();
+
+  assert.equal(run(''), 'NODE_RUNTIME_DISABLED_FOR_PRODUCTION');
+  assert.equal(run('preview'), 'OK');
+});

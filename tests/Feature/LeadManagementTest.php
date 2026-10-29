@@ -160,21 +160,36 @@ class LeadManagementTest extends TestCase
             'name' => 'Outro contato',
             'created_at' => '2026-09-15 10:00:00',
         ]);
-        $filters = 'status=perdido&date_from=2026-09-01&date_to=2026-09-30';
+        $filters = [
+            'status' => 'perdido',
+            'date_from' => '2026-09-01',
+            'date_to' => '2026-09-30',
+        ];
 
         $this->withSession($session)
-            ->getJson('/api/admin/leads/export?format=json&'.$filters)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
+            ->postJson('/api/admin/leads/export', $filters + ['format' => 'json'])
             ->assertOk()
             ->assertJsonCount(1, 'leads')
             ->assertJsonPath('leads.0.name', '=1+1');
 
         $csv = $this->withSession($session)
-            ->get('/api/admin/leads/export?format=csv&'.$filters)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'])
+            ->post('/api/admin/leads/export', $filters + ['format' => 'csv'])
             ->assertOk()
             ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
         $this->assertStringContainsString("'=1+1", $csv->streamedContent());
         $this->assertStringNotContainsString('Outro contato', $csv->streamedContent());
+    }
+
+    public function test_lead_export_rejects_get_to_keep_pii_exports_csrf_protected(): void
+    {
+        $session = $this->createAdminSession('manager');
+
+        $this->withSession($session)
+            ->get('/api/admin/leads/export?format=csv')
+            ->assertNotFound();
     }
 
     private function createAdminSession(string $role): array

@@ -28,7 +28,7 @@ php artisan migrate
 php artisan serve
 ```
 
-O frontend público e o painel usam assets estáticos em `public/assets` e `public/admin`; Node.js não será necessário em produção.
+O frontend público e o painel usam assets estáticos em `public/assets` e `public/admin`; Node.js não será necessário em produção. O script `pnpm preview` só habilita explicitamente o runtime de preview; `pnpm start` falha fechado em `NODE_ENV=production`, e o preview não executa migrations.
 
 ## Produção — HostGator / PHP-FPM
 

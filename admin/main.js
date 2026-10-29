@@ -81,7 +81,7 @@ function setFormPending(targetForm, pending, label = '') {
 async function request(url, options = {}) {
   const headers = { Accept: 'application/json', ...(options.headers || {}) };
   const method = String(options.method || 'GET').toUpperCase();
-  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrfToken) {
     headers['X-CSRF-Token'] = state.csrfToken;
   }
@@ -92,6 +92,35 @@ async function request(url, options = {}) {
     throw new Error(body.error || (response.status === 422 ? 'VALIDATION_FAILED' : 'REQUEST_FAILED'));
   }
   return response.status === 204 ? null : response.json();
+}
+
+async function download(url, options = {}) {
+  const headers = { Accept: '*/*', ...(options.headers || {}) };
+  const method = String(options.method || 'GET').toUpperCase();
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrfToken) {
+    headers['X-CSRF-Token'] = state.csrfToken;
+  }
+
+  const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
+  if (response.status === 401) { showLogin(); throw new Error('AUTH_REQUIRED'); }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || (response.status === 422 ? 'VALIDATION_FAILED' : 'REQUEST_FAILED'));
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'leads-export';
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
 function clearSensitiveState() {
@@ -523,35 +552,15 @@ async function uploadPendingFiles(propertyId) {
       || dimensions.width > 20000 || dimensions.height > 20000) {
       throw new Error('INVALID_IMAGE_DIMENSIONS');
     }
-    const presign = await request('/api/admin/uploads/presign', {
-      method: 'POST',
-      body: JSON.stringify({
-        propertyId,
-        fileName: file.name,
-        contentType: file.type,
-        size: file.size
-      })
-    });
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    formData.append('altText', file.name.replace(/\.[^.]+$/, ''));
+    formData.append('sortOrder', String(existingPhotoCount));
+    formData.append('isCover', String(!state.editing?.photos?.some((photo) => photo.is_cover)));
 
-    const upload = await fetch(presign.uploadUrl, {
-      method: 'PUT',
-      headers: presign.uploadHeaders || { 'Content-Type': file.type },
-      body: file
-    });
-    if (!upload.ok) throw new Error('UPLOAD_FAILED');
-
-    const result = await request(`/api/admin/properties/${propertyId}/photos`, {
+    const result = await request(`/api/admin/properties/${propertyId}/photos/upload`, {
       method: 'POST',
-      body: JSON.stringify({
-        storagePath: presign.storagePath,
-        altText: file.name.replace(/\.[^.]+$/, ''),
-        sortOrder: existingPhotoCount,
-        isCover: !state.editing?.photos?.some((photo) => photo.is_cover),
-        contentType: file.type,
-        size: file.size,
-        width: dimensions.width,
-        height: dimensions.height
-      })
+      body: formData
     });
 
     state.editing = { ...state.editing, photos: result.photos };
@@ -1003,7 +1012,7 @@ function ensureLeadsPanel() {
   const panel = document.createElement('section');
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><a class="outline-button lead-export" data-lead-export="csv" href="/api/admin/leads/export?format=csv">Exportar CSV</a><a class="outline-button lead-export" data-lead-export="json" href="/api/admin/leads/export?format=json">Exportar JSON</a></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
+  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><button class="outline-button lead-export" data-lead-export="csv" type="button">Exportar CSV</button><button class="outline-button lead-export" data-lead-export="json" type="button">Exportar JSON</button></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
   metrics.insertAdjacentElement('afterend', panel);
   $('#lead-filters').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1035,6 +1044,21 @@ function ensureLeadsPanel() {
     state.leadFilters.page = button.dataset.leadPage === 'next' ? Math.min(last, current + 1) : Math.max(1, current - 1);
     void loadLeads();
   }));
+  panel.querySelectorAll('[data-lead-export]').forEach((button) => button.addEventListener('click', async () => {
+    const payload = { format: button.dataset.leadExport };
+    for (const key of ['status', 'date_from', 'date_to']) {
+      if (state.leadFilters[key]) payload[key] = state.leadFilters[key];
+    }
+
+    button.disabled = true;
+    try {
+      await download('/api/admin/leads/export', { method: 'POST', body: JSON.stringify(payload) });
+    } catch (error) {
+      toast(error.message === 'AUTH_REQUIRED' ? 'Sua sessão expirou.' : 'Não foi possível exportar os contatos.', 'error');
+    } finally {
+      button.disabled = false;
+    }
+  }));
   return panel;
 }
 
@@ -1058,15 +1082,6 @@ function renderLeads() {
     filters.elements.date_to.value = state.leadFilters.date_to;
     filters.elements.per_page.value = String(state.leadFilters.per_page);
   }
-  const exportParams = new URLSearchParams();
-  for (const key of ['status', 'date_from', 'date_to']) {
-    if (state.leadFilters[key]) exportParams.set(key, state.leadFilters[key]);
-  }
-  panel.querySelectorAll('[data-lead-export]').forEach((link) => {
-    const params = new URLSearchParams(exportParams);
-    params.set('format', link.dataset.leadExport);
-    link.href = `/api/admin/leads/export?${params.toString()}`;
-  });
   const pagination = state.leadPagination;
   $('#lead-page-summary').textContent = pagination?.total ? `Exibindo ${pagination.from}–${pagination.to} de ${pagination.total}` : 'Nenhum contato encontrado';
   panel.querySelector('[data-lead-page="previous"]').disabled = !pagination || pagination.current_page <= 1;
