@@ -2,6 +2,11 @@
 
 Data da auditoria: 2026-10-06 (America/Sao_Paulo)
 
+Atualização de arquitetura (2026-10-29): o backend Node/Express, os testes
+Node, os templates EJS e o preview Cloudflare foram removidos. Referências
+históricas a `server/`, `test/`, `views/` e `wrangler.jsonc` neste relatório
+descrevem a superfície anterior e não representam runtime ativo.
+
 ## Resumo executivo
 
 Não foi confirmada vulnerabilidade crítica ou alta de bypass de autenticação, autorização, SQL injection, XSS armazenado ou path traversal no código revisado. A trilha de auditoria fail-closed e o CSP com allowlist explícita foram corrigidos e validados localmente. O resultado operacional ainda é `NO-GO` para uma declaração de segurança completa porque o gate de entrega HostGator não está ativo, o check externo Workers Builds está falhando e os fluxos OAuth/R2/proxy reais não foram exercitados ponta a ponta.
@@ -9,7 +14,7 @@ Não foi confirmada vulnerabilidade crítica ou alta de bypass de autenticação
 ## Escopo e evidências
 
 - Runtime Laravel/PHP: `app/`, `routes/`, `config/`, `resources/views/`, `database/migrations/`.
-- Runtime Node/Express e preview: `server/`, `public/`, `src/`, `views/`, `wrangler.jsonc`.
+- Build de assets: `public/`, `src/` e `admin/`, executado por Node/Vite sem runtime Node.
 - CI/CD e entrega: `.github/workflows/`, `scripts/deploy-hostgator.sh`.
 - Integrações: Google OAuth, MySQL, Cloudflare R2, HostGator e preview Cloudflare.
 - Dados em escopo: leads, identidades administrativas, sessões, convites, fotos e configuração pública do site.

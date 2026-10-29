@@ -16,27 +16,16 @@ Tratar todo upload como hostil e garantir que um cliente autenticado não consig
 
 ## Fluxo protegido
 
-1. CRM pede presign com imóvel, nome, MIME e tamanho declarado.
-2. Backend valida contrato, extensão e permissão sobre o imóvel.
-3. Backend gera chave aleatória em:
-   `gisley/properties/<propertyId>/<uuid>-<nome>`.
-4. URL PUT é assinada com:
-   - Content-Type;
-   - Host;
-   - `If-None-Match: *`.
-5. Navegador envia diretamente ao R2.
-6. Backend consulta HEAD do objeto real.
-7. Backend valida:
-   - existência;
-   - Content-Length real;
-   - Content-Type real;
-   - limite de 12 MB;
-   - igualdade com tamanho/MIME declarados.
-8. Backend lê bytes iniciais e valida assinatura de JPEG/PNG/WebP/AVIF.
-9. Backend confirma que a chave pertence ao imóvel correto.
-10. Banco registra metadados somente após todas as verificações.
-11. Se persistência falhar, objeto recém-enviado é removido.
-12. Exclusão de foto tenta remover também o objeto do R2.
+1. CRM envia multipart para o endpoint autenticado do imóvel.
+2. Backend valida permissão sobre o imóvel, limite de galeria e limite de corpo.
+3. Backend lê os bytes recebidos dentro do limite de 12 MB e valida:
+   - MIME real e magic bytes;
+   - dimensões e área de pixels.
+4. Backend gera chave aleatória no prefixo `gisley/properties/<propertyId>/`.
+5. Backend faz `PutObject` server-side no R2 com Content-Length real.
+6. Banco registra metadados somente após o upload validado.
+7. Se persistência falhar, objeto recém-enviado é removido.
+8. Exclusão de foto tenta remover também o objeto do R2.
 
 ## Formatos permitidos
 
@@ -57,7 +46,7 @@ Não permitidos:
 
 ### F7-01 — Tamanho e MIME reais do objeto não eram comparados ao declarado
 **Severidade:** Alta  
-**Status:** Corrigido
+**Status:** Corrigido no fluxo ativo; validação mantida no registro legado
 
 Antes, o cliente declarava tamanho/MIME para obter a presigned URL, mas a confirmação posterior verificava apenas existência + assinatura mágica.
 
@@ -67,15 +56,11 @@ Um cliente adulterado poderia tentar enviar um objeto maior e depois declarar no
 
 ### F7-02 — Presigned PUT poderia ser reutilizado até expirar
 **Severidade:** Média-Alta  
-**Status:** Corrigido
+**Status:** Eliminado
 
-Uma presigned URL S3 é reutilizável até expirar. Após a primeira validação, a mesma URL poderia ser reutilizada para tentar sobrescrever a chave.
+Uma URL pré-assinada é um bearer token e poderia ser reutilizada até expirar se fosse entregue ao navegador.
 
-**Correção:** PUT agora exige `If-None-Match: *` dentro da assinatura SigV4. Depois que a chave existe, novo PUT para a mesma chave deve falhar por precondição.
-
-O CORS do bucket precisa permitir:
-- `Content-Type`;
-- `If-None-Match`.
+**Correção:** a superfície Laravel não entrega mais URL de upload ao navegador. O upload passa pelo servidor, que valida os bytes e controla o `PutObject`.
 
 ### F7-03 — Path traversal / upload para outro imóvel
 **Resultado:** Bloqueado
@@ -86,9 +71,9 @@ O CORS do bucket precisa permitir:
 **Resultado:** Bloqueado em múltiplas camadas
 
 - enum de MIME;
-- extensão compatível com MIME;
-- Content-Type assinado;
-- Content-Type real do R2;
+- extensão do objeto derivada do MIME real;
+- Content-Type definido pelo servidor;
+- Content-Type persistido após inspeção;
 - magic bytes.
 
 ### F7-05 — SVG
@@ -105,7 +90,7 @@ Falha após upload e antes da persistência dispara tentativa de remoção do ob
 **Resultado:** Protegido
 
 Limite de 40 fotos existe:
-- antes do presign;
+- antes do upload server-side;
 - antes de registrar a foto;
 - dentro da transação do banco para evitar corrida.
 
@@ -124,7 +109,7 @@ PASS somente se:
 - magic bytes coincidirem;
 - SVG/executável/vazio/grande falharem;
 - path não atravessar imóveis;
-- presigned PUT não puder sobrescrever chave existente;
+- o backend nunca entregue bearer token de upload ao navegador;
 - falha de DB limpar upload recém-criado;
 - limite transacional da galeria permanecer;
 - CI e CodeQL estiverem verdes.

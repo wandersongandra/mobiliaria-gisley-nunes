@@ -7,6 +7,7 @@ use App\Services\AdminIdentityService;
 use App\Support\Clock;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -45,6 +46,92 @@ class OAuthIdentityTest extends TestCase
         ]))
             ->assertForbidden()
             ->assertSee('Código de vinculação temporário');
+    }
+
+    public function test_callback_rejects_array_query_parameters_before_external_exchange(): void
+    {
+        $this->fakeOAuthIdentity(['email_verified' => true]);
+        $state = $this->beginLogin();
+
+        $this->get('/api/auth/callback?'.http_build_query([
+            'code' => ['valid-auth-code'],
+            'state' => $state,
+        ]))
+            ->assertBadRequest()
+            ->assertSee('Sessão de autenticação inválida.');
+
+        $this->assertCount(0, Http::recorded());
+    }
+
+    public function test_callback_rejects_a_state_that_is_not_bound_to_the_session(): void
+    {
+        $this->fakeOAuthIdentity(['email_verified' => true]);
+        $this->beginLogin();
+
+        $this->get('/api/auth/callback?'.http_build_query([
+            'code' => 'valid-auth-code',
+            'state' => str_repeat('A', 43),
+        ]))
+            ->assertBadRequest()
+            ->assertSee('Sessão de autenticação inválida.');
+
+        $this->assertCount(0, Http::recorded());
+    }
+
+    public function test_callback_consumes_the_oauth_challenge_and_rejects_replay(): void
+    {
+        $this->fakeOAuthIdentity(['email_verified' => true]);
+        $state = $this->beginLogin();
+        $callback = '/api/auth/callback?'.http_build_query([
+            'code' => 'valid-auth-code',
+            'state' => $state,
+        ]);
+
+        $this->get($callback)
+            ->assertForbidden()
+            ->assertSee('Código de vinculação temporário');
+
+        $this->get($callback)
+            ->assertBadRequest()
+            ->assertSee('Sessão de autenticação inválida.');
+    }
+
+    public function test_callback_returns_a_controlled_error_when_the_provider_rejects_the_code(): void
+    {
+        config([
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'test-client-secret',
+        ]);
+        Http::preventStrayRequests();
+        Http::fakeSequence()->push(['error' => 'invalid_grant'], 400);
+
+        $state = $this->beginLogin();
+
+        $this->get('/api/auth/callback?'.http_build_query([
+            'code' => 'valid-auth-code',
+            'state' => $state,
+        ]))
+            ->assertBadRequest()
+            ->assertSee('Não foi possível concluir o acesso.');
+    }
+
+    public function test_callback_returns_a_controlled_error_when_the_provider_times_out(): void
+    {
+        config([
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'test-client-secret',
+        ]);
+        Http::preventStrayRequests();
+        Http::fake(fn () => throw new ConnectionException('synthetic timeout'));
+
+        $state = $this->beginLogin();
+
+        $this->get('/api/auth/callback?'.http_build_query([
+            'code' => 'valid-auth-code',
+            'state' => $state,
+        ]))
+            ->assertBadRequest()
+            ->assertSee('Não foi possível concluir o acesso.');
     }
 
     public function test_login_builds_google_authorization_request_with_the_public_callback(): void

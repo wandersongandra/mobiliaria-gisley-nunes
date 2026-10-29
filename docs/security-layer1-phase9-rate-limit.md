@@ -62,7 +62,7 @@ A rota é anônima por desenho e toca a camada de autenticação/banco.
 **Status:** Corrigido
 
 Foram adicionados limites específicos para:
-- presign/upload;
+- upload server-side;
 - deletes/ações destrutivas.
 
 ### F9-05 — Headers de rate limit

@@ -58,6 +58,66 @@ class DataIntegrityConstraintTest extends TestCase
         DB::table('morada_property_photos')->insert($this->photo($property['id'], true));
     }
 
+    public function test_property_numeric_domain_is_restricted_in_the_database(): void
+    {
+        $property = app(PropertyService::class)->saveProperty([
+            'title' => 'Integridade numérica',
+            'location' => 'Lourdes · Belo Horizonte',
+            'city' => 'Belo Horizonte',
+            'status' => 'draft',
+        ]);
+
+        $this->expectException(QueryException::class);
+        DB::table('morada_properties')->where('id', $property['id'])->update(['price' => -1]);
+    }
+
+    public function test_database_rejects_invalid_lead_status(): void
+    {
+        $this->expectException(QueryException::class);
+        DB::table('morada_contact_leads')->insert([
+            'id' => (string) Str::uuid(),
+            'name' => 'Lead de integridade',
+            'email' => 'integrity@example.test',
+            'interest' => 'Tenho outra dúvida',
+            'message' => 'Mensagem de teste',
+            'status' => 'administrator',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    public function test_database_rejects_invalid_r2_photo_metadata(): void
+    {
+        $property = app(PropertyService::class)->saveProperty([
+            'title' => 'Integridade de mídia',
+            'location' => 'Lourdes · Belo Horizonte',
+            'city' => 'Belo Horizonte',
+            'status' => 'draft',
+        ]);
+
+        $photo = $this->photo($property['id'], false);
+        $photo['file_size'] = 0;
+
+        $this->expectException(QueryException::class);
+        DB::table('morada_property_photos')->insert($photo);
+    }
+
+    public function test_database_rejects_r2_photo_without_mime_type(): void
+    {
+        $property = app(PropertyService::class)->saveProperty([
+            'title' => 'Integridade de MIME',
+            'location' => 'Lourdes · Belo Horizonte',
+            'city' => 'Belo Horizonte',
+            'status' => 'draft',
+        ]);
+
+        $photo = $this->photo($property['id'], false);
+        $photo['mime_type'] = null;
+
+        $this->expectException(QueryException::class);
+        DB::table('morada_property_photos')->insert($photo);
+    }
+
     /** @return array<string, mixed> */
     private function photo(string $propertyId, bool $cover): array
     {

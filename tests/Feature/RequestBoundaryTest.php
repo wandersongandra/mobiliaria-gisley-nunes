@@ -3,11 +3,15 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\PublicApiController;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class RequestBoundaryTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -44,5 +48,28 @@ class RequestBoundaryTest extends TestCase
 
         $this->assertNotNull($route);
         $this->assertContains('throttle:public-api', $route->middleware());
+    }
+
+    public function test_auth_login_is_rate_limited_after_thirty_attempts_from_one_ip(): void
+    {
+        $ip = '198.51.100.42';
+        config([
+            'services.google_oauth.client_id' => 'client-id.apps.googleusercontent.com',
+            'services.google_oauth.client_secret' => 'test-client-secret',
+        ]);
+        RateLimiter::clear('auth-login:'.$ip);
+
+        for ($attempt = 0; $attempt < 30; $attempt++) {
+            $this->withServerVariables(['REMOTE_ADDR' => $ip])
+                ->get('/api/auth/login')
+                ->assertRedirect();
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => $ip])
+            ->get('/api/auth/login')
+            ->assertStatus(429)
+            ->assertJson(['error' => 'RATE_LIMITED'])
+            ->assertHeader('Retry-After');
+
     }
 }

@@ -61,6 +61,16 @@ class PublicCatalogPaginationTest extends TestCase
             ->assertJsonFragment(['types' => ['Apartamento', 'Casa']]);
     }
 
+    public function test_v2_catalog_treats_sql_fragments_as_values_not_query_code(): void
+    {
+        $this->insertPublishedProperties(1);
+
+        $this->getJson('/api/v2/properties?location='.rawurlencode("' OR 1=1 --"))
+            ->assertOk()
+            ->assertJsonCount(0, 'properties')
+            ->assertJsonPath('pagination.total', 0);
+    }
+
     public function test_price_bands_do_not_duplicate_properties_on_exact_boundaries(): void
     {
         $this->insertPublishedProperties(3);

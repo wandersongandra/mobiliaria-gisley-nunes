@@ -212,7 +212,7 @@ class AdminCrmController extends Controller
             $rules['format'] = ['sometimes', 'string', Rule::in(['csv', 'json'])];
         }
 
-        $validator = Validator::make($request->query(), $rules);
+        $validator = Validator::make($request->input(), $rules);
         $validator->after(static function ($validator): void {
             $data = $validator->getData();
             if (
