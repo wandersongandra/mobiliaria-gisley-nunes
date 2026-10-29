@@ -92,12 +92,14 @@ LOCK_ACQUIRED=1
 
 [[ -z "$(git status --porcelain)" ]] || fail 'working tree não está limpo'
 
+# A revisão original deve ser preservada antes de qualquer mudança de branch.
+# O deploy aceita o checkout detached usado pela hospedagem; branches locais
+# diferentes da branch autorizada são rejeitadas.
+previous_sha="$(git rev-parse HEAD)"
 current_branch="$(git branch --show-current)"
-if [[ "$current_branch" != "$DEPLOY_BRANCH" ]]; then
-    git show-ref --verify --quiet "refs/heads/$DEPLOY_BRANCH" || fail 'a branch permitida não existe localmente'
-    git switch "$DEPLOY_BRANCH"
+if [[ -n "$current_branch" && "$current_branch" != "$DEPLOY_BRANCH" ]]; then
+    fail 'o checkout atual está em uma branch não autorizada'
 fi
-[[ "$(git branch --show-current)" == "$DEPLOY_BRANCH" ]] || fail 'o checkout atual não está na branch permitida'
 
 git fetch --prune origin "$DEPLOY_BRANCH"
 remote_sha="$(git rev-parse "origin/$DEPLOY_BRANCH")"
@@ -107,7 +109,6 @@ if [[ "$DEPLOY_SHA" != "$remote_sha" && "$ALLOW_HOSTGATOR_ROLLBACK" != "1" ]]; t
     fail 'DEPLOY_SHA não é o tip atual; rollback exige ALLOW_HOSTGATOR_ROLLBACK=1'
 fi
 
-previous_sha="$(git rev-parse HEAD)"
 if [[ "$RUN_MIGRATIONS" == '0' ]] && ! git diff --quiet "$previous_sha" "$DEPLOY_SHA" -- database/migrations/; then
     fail 'migrations alteradas entre o checkout e o release: publicar exige RUN_MIGRATIONS=1 e backup validado'
 fi
@@ -197,7 +198,12 @@ if (!\$patched) {
 \$pmsBounded = (\$pms !== '' && \$pms !== '-1' && \$pms !== '0');
 if (\$pmsBounded) {
     \$u = substr(\$pms, -1); \$v = (int) \$pms;
-    \$b = (\$u === 'g') ? \$v*1024**3 : (\$u === 'm') ? \$v*1024**2 : (\$u === 'k') ? \$v*1024 : \$v;
+    \$b = match (\$u) {
+        'g' => \$v * 1024**3,
+        'm' => \$v * 1024**2,
+        'k' => \$v * 1024,
+        default => \$v,
+    };
     \$pmsBounded = (\$b > 0 && \$b <= 67108864);
 }
 
@@ -212,6 +218,9 @@ echo json_encode([
     'secure' => \$patched && \$upDisabled && \$pmsBounded,
 ], JSON_PRETTY_PRINT);
 ENPHP
+
+# Validar sintaxe no PHP CLI antes de expor a sonda ao servidor web.
+"$PHP_BIN" -l "$FPM_CHECK_FILE" >/dev/null || fail 'sonda PHP contém erro de sintaxe'
 
 FPM_CACHE_BUSTER="$(openssl rand -hex 16)" \
     || fail 'falha ao gerar cache-buster de verificação FPM'
