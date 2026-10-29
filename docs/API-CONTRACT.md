@@ -50,8 +50,12 @@ Estas rotas existem no código e são relevantes para a operação, mas não amp
 | `PUT /api/admin/properties/{id}/photos/order`, `PUT /api/admin/photos/{id}/cover` | `media.manage` | UUIDs e ordenação estrita. |
 | `GET/PUT /api/admin/site` | `site.read` / `site.manage` | Configuração pública. |
 | `POST/DELETE /api/admin/testimonials[/{id}]` | `testimonial.manage` | Cria/remove depoimento. |
+| `GET/PUT /api/admin/profile` | sessão autenticada | Cadastro do próprio corretor: endereço e data de nascimento; não aceita alteração de papel/e-mail. |
 | `GET /api/admin/leads`, `/export` | `lead.read` | Filtros status/data; export streaming CSV/JSON. A exportação usa limite dedicado de 20 requisições/10 min por IP. |
-| `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | Atualiza/apaga lead. |
+| `GET /api/admin/leads/{id}` | `lead.read` | Abre o atendimento e devolve o histórico persistido. |
+| `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | Atualiza/apaga lead; alteração de status pode gerar atividade de histórico. |
+| `POST /api/admin/leads/{id}/activities` | `lead.history` | Acrescenta anotação de contato; histórico não é editável pelo painel. |
+| `GET/POST/PUT/DELETE /api/admin/forms...` | `form.manage` | Biblioteca de modelos de formulários. A definição é JSON limitado e não é executada como HTML/script. |
 | `GET /api/admin/audit` | `audit.read` | `limit` 1–250. |
 | `GET/POST/PATCH/DELETE /api/admin/team...` | `team.manage` | Equipe, convites e revogação. |
 

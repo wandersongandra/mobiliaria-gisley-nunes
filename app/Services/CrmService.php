@@ -15,6 +15,8 @@ class CrmService
 {
     public const LEAD_STATUSES = ['new', 'em_contato', 'fechado', 'perdido'];
 
+    public const LEAD_ACTIVITY_TYPES = ['note', 'call', 'email', 'whatsapp', 'meeting'];
+
     public const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 
     public const PAIRING_TTL_MS = 15 * 60 * 1000;
@@ -215,15 +217,94 @@ class CrmService
         }
     }
 
-    public function updateLeadStatus(string $id, string $status): bool
+    public function updateLeadStatus(string $id, string $status, ?array $admin = null): bool
     {
         if (! in_array($status, self::LEAD_STATUSES, true)) {
             throw new RuntimeException('INVALID_LEAD_STATUS');
         }
 
-        return DB::table('morada_contact_leads')
-            ->where('id', $id)
-            ->update(['status' => $status, 'updated_at' => now()]) > 0;
+        return DB::transaction(function () use ($id, $status, $admin): bool {
+            $lead = DB::table('morada_contact_leads')->where('id', $id)->lockForUpdate()->first();
+            if (! $lead) {
+                return false;
+            }
+
+            $changed = (string) $lead->status !== $status;
+            if ($changed) {
+                DB::table('morada_contact_leads')
+                    ->where('id', $id)
+                    ->update(['status' => $status, 'updated_at' => now()]);
+            }
+
+            if ($changed && $admin !== null) {
+                $this->insertLeadActivity($id, 'status', 'Status alterado para '.$status, $admin);
+            }
+
+            return true;
+        });
+    }
+
+    public function getLead(string $id): ?array
+    {
+        $lead = DB::table('morada_contact_leads')->where('id', $id)->first();
+        if (! $lead) {
+            return null;
+        }
+
+        $view = $this->leadView((array) $lead);
+        $view['activities'] = DB::table('morada_lead_activities')
+            ->where('lead_id', $id)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(250)
+            ->get()
+            ->map(fn ($activity): array => [
+                'id' => (string) $activity->id,
+                'type' => (string) $activity->type,
+                'body' => (string) $activity->body,
+                'actorName' => (string) ($activity->actor_email ?? ''),
+                'createdAt' => $activity->created_at,
+            ])
+            ->all();
+
+        return $view;
+    }
+
+    public function addLeadActivity(string $id, array $input, array $admin): array
+    {
+        $allowed = ['type', 'body'];
+        if (array_diff(array_keys($input), $allowed)) {
+            throw new RuntimeException('INVALID_LEAD_ACTIVITY');
+        }
+
+        $type = (string) ($input['type'] ?? 'note');
+        if (! in_array($type, self::LEAD_ACTIVITY_TYPES, true)) {
+            throw new RuntimeException('INVALID_LEAD_ACTIVITY');
+        }
+
+        $body = $this->text($input['body'] ?? '', 4000, true, 'INVALID_LEAD_ACTIVITY');
+        DB::transaction(function () use ($id, $type, $body, $admin): void {
+            if (! DB::table('morada_contact_leads')->where('id', $id)->lockForUpdate()->exists()) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+            $this->insertLeadActivity($id, $type, $body, $admin);
+            DB::table('morada_contact_leads')->where('id', $id)->update(['updated_at' => now()]);
+        });
+
+        return $this->getLead($id) ?? throw new RuntimeException('NOT_FOUND');
+    }
+
+    private function insertLeadActivity(string $leadId, string $type, string $body, array $admin): void
+    {
+        DB::table('morada_lead_activities')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $leadId,
+            'actor_open_id' => $admin['openId'] ?? null,
+            'actor_email' => substr((string) ($admin['email'] ?? 'system'), 0, 255),
+            'type' => $type,
+            'body' => $body,
+            'created_at' => now(),
+        ]);
     }
 
     public function anonymizeExpiredLeads(): int
@@ -437,6 +518,149 @@ class CrmService
             ->get()
             ->map(fn ($row) => (array) $row)
             ->all();
+    }
+
+    public function getProfile(array $admin): array
+    {
+        $row = DB::table('morada_staff_access')->where('open_id', $admin['openId'])->first();
+
+        return [
+            'email' => (string) ($admin['email'] ?? ''),
+            'name' => (string) ($admin['name'] ?? ''),
+            'role' => ($admin['role'] ?? '') === 'manager' ? 'manager' : 'editor',
+            'address' => (string) ($row->address ?? ''),
+            'birthDate' => $row?->birth_date,
+        ];
+    }
+
+    public function saveProfile(array $admin, array $input): array
+    {
+        $allowed = ['address', 'birthDate'];
+        if (array_diff(array_keys($input), $allowed)) {
+            throw new RuntimeException('INVALID_PROFILE');
+        }
+
+        $openId = trim((string) ($admin['openId'] ?? ''));
+        if ($openId === '') {
+            throw new RuntimeException('AUTH_REQUIRED');
+        }
+
+        $address = $this->text($input['address'] ?? '', 500, false, 'INVALID_PROFILE');
+        $birthDate = trim((string) ($input['birthDate'] ?? ''));
+        if ($birthDate !== '' && (! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $birthDate) || $birthDate > now()->toDateString())) {
+            throw new RuntimeException('INVALID_PROFILE');
+        }
+
+        DB::table('morada_staff_access')->updateOrInsert(
+            ['open_id' => $openId],
+            [
+                'email' => strtolower((string) ($admin['email'] ?? '')),
+                'name' => $this->text($admin['name'] ?? '', 255, true, 'INVALID_PROFILE'),
+                'role' => ($admin['role'] ?? '') === 'manager' ? 'manager' : 'editor',
+                'active' => true,
+                'invited_by' => $admin['bootstrap'] ?? false ? 'environment' : null,
+                'address' => $address !== '' ? $address : null,
+                'birth_date' => $birthDate !== '' ? $birthDate : null,
+                'updated_at' => now(),
+            ]
+        );
+
+        return $this->getProfile($admin);
+    }
+
+    public function listFormTemplates(): array
+    {
+        return DB::table('morada_form_templates')
+            ->orderByDesc('active')
+            ->orderBy('title')
+            ->get()
+            ->map(fn ($row): array => $this->formTemplateView((array) $row))
+            ->all();
+    }
+
+    public function saveFormTemplate(array $input, array $admin, ?string $id = null): array
+    {
+        $allowed = ['slug', 'title', 'description', 'definition', 'active'];
+        if (array_diff(array_keys($input), $allowed)) {
+            throw new RuntimeException('INVALID_FORM_TEMPLATE');
+        }
+
+        $slug = strtolower(trim((string) ($input['slug'] ?? '')));
+        if (! preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $slug) || strlen($slug) > 120) {
+            throw new RuntimeException('INVALID_FORM_TEMPLATE');
+        }
+        $title = $this->text($input['title'] ?? '', 180, true, 'INVALID_FORM_TEMPLATE');
+        $description = $this->text($input['description'] ?? '', 500, false, 'INVALID_FORM_TEMPLATE');
+        $definition = $input['definition'] ?? null;
+        if (is_string($definition)) {
+            try {
+                $definition = json_decode($definition, true, 32, JSON_THROW_ON_ERROR);
+            } catch (\JsonException $error) {
+                throw new RuntimeException('INVALID_FORM_TEMPLATE', previous: $error);
+            }
+        }
+        if (! is_array($definition)) {
+            throw new RuntimeException('INVALID_FORM_TEMPLATE');
+        }
+        $encoded = json_encode($definition, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        if (strlen($encoded) > 64 * 1024) {
+            throw new RuntimeException('INVALID_FORM_TEMPLATE');
+        }
+
+        $templateId = $id ?: (string) Str::uuid();
+        $payload = [
+            'slug' => $slug,
+            'title' => $title,
+            'description' => $description !== '' ? $description : null,
+            'definition' => $encoded,
+            'active' => array_key_exists('active', $input) ? (bool) $input['active'] : true,
+            'created_by_open_id' => $admin['openId'] ?? null,
+            'updated_at' => now(),
+        ];
+
+        try {
+            if ($id === null) {
+                $payload['id'] = $templateId;
+                $payload['created_at'] = now();
+                DB::table('morada_form_templates')->insert($payload);
+            } else {
+                if (! DB::table('morada_form_templates')->where('id', $id)->exists()) {
+                    throw new RuntimeException('NOT_FOUND');
+                }
+                unset($payload['created_by_open_id']);
+                DB::table('morada_form_templates')->where('id', $id)->update($payload);
+            }
+        } catch (QueryException $error) {
+            if ((int) ($error->errorInfo[1] ?? 0) === 1062) {
+                throw new RuntimeException('FORM_TEMPLATE_EXISTS', previous: $error);
+            }
+            throw $error;
+        }
+
+        $row = DB::table('morada_form_templates')->where('id', $templateId)->first();
+
+        return $this->formTemplateView((array) ($row ?: []));
+    }
+
+    public function removeFormTemplate(string $id): bool
+    {
+        return DB::table('morada_form_templates')->where('id', $id)->delete() > 0;
+    }
+
+    private function formTemplateView(array $row): array
+    {
+        $definition = json_decode((string) ($row['definition'] ?? '{}'), true);
+
+        return [
+            'id' => (string) ($row['id'] ?? ''),
+            'slug' => (string) ($row['slug'] ?? ''),
+            'title' => (string) ($row['title'] ?? ''),
+            'description' => (string) ($row['description'] ?? ''),
+            'definition' => is_array($definition) ? $definition : [],
+            'active' => (bool) ($row['active'] ?? false),
+            'created_at' => $row['created_at'] ?? null,
+            'updated_at' => $row['updated_at'] ?? null,
+        ];
     }
 
     public function saveStaff(array $data): array

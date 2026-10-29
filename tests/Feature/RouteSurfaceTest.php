@@ -21,6 +21,7 @@ class RouteSurfaceTest extends TestCase
      * @var list<string>
      */
     private const EXPECTED_ROUTES = [
+        'DELETE api/admin/forms/{id}',
         'DELETE api/admin/leads/{id}',
         'DELETE api/admin/photos/{id}',
         'DELETE api/admin/properties/{id}',
@@ -32,10 +33,13 @@ class RouteSurfaceTest extends TestCase
         'GET admin',
         'GET anuncie-seu-imovel',
         'GET api/admin/audit',
+        'GET api/admin/forms',
         'GET api/admin/leads',
+        'GET api/admin/leads/{id}',
         'GET api/admin/photos/{id}/media',
         'GET api/admin/properties',
         'GET api/admin/properties/{id}',
+        'GET api/admin/profile',
         'GET api/admin/release',
         'GET api/admin/session',
         'GET api/admin/site',
@@ -69,7 +73,9 @@ class RouteSurfaceTest extends TestCase
         'GET {legacyPropertySlug}',
         'PATCH api/admin/leads/{id}',
         'PATCH api/admin/team/{email}',
+        'POST api/admin/forms',
         'POST api/admin/leads/export',
+        'POST api/admin/leads/{id}/activities',
         'POST api/admin/properties',
         'POST api/admin/properties/{id}/photos',
         'POST api/admin/properties/{id}/photos/upload',
@@ -80,9 +86,11 @@ class RouteSurfaceTest extends TestCase
         'POST api/auth/logout',
         'POST api/auth/logout-all',
         'POST api/contact',
+        'PUT api/admin/forms/{id}',
         'PUT api/admin/photos/{id}/cover',
         'PUT api/admin/properties/{id}',
         'PUT api/admin/properties/{id}/photos/order',
+        'PUT api/admin/profile',
         'PUT api/admin/site',
         'PUT api/admin/uploads/{path}',
     ];
