@@ -48,6 +48,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup PHP 8.2.35 (PHP2Shell patch)
+        uses: shivammathur/setup-php@d52fc211a0436f8839a587b3b5b8efddab4744ea # v2
+        with:
+          php-version: '8.2.35'
+          extensions: ctype, curl, fileinfo, json, mbstring, openssl, pdo, pdo_mysql
+          coverage: none
+          ini-values: opcache.enable_cli=1, memory_limit=512M
+
       - name: Install production dependencies only
         run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
 

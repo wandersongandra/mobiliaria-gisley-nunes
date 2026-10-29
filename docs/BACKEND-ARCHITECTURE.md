@@ -16,6 +16,10 @@ routes/web.php
   -> MySQL / Cloudflare R2
 ```
 
+Não existe runtime Node no backend. Node.js permanece apenas como ferramenta de
+build dos assets estáticos do frontend. O runtime oficial é Laravel/PHP; suas
+migrations são a única fonte autorizada para o schema.
+
 O projeto usa Query Builder deliberadamente. Não há Models Eloquent,
 repositories, jobs, listeners ou filas no backend Laravel atual. A validação de
 domínio está nos serviços e as validações de filtros HTTP ficam nos controllers.
@@ -47,3 +51,6 @@ no controller. A rota legada permanece disponível para compatibilidade e é
 marcada como depreciada; sua remoção depende de inventário de consumidores.
 Exports de leads ficam separados do throttle administrativo geral porque
 produzem uma resposta com dados pessoais e podem ser consumidos em CSV ou JSON.
+O export é `POST` com CSRF e origem same-origin; upload de fotos é multipart
+server-side, com validação de bytes, dimensões, MIME e tamanho antes do envio ao
+R2. URL pré-assinada de upload não faz mais parte da superfície HTTP.

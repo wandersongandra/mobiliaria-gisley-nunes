@@ -6,6 +6,7 @@ use App\Services\PropertyService;
 use App\Services\R2Storage;
 use App\Support\Clock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Mockery;
@@ -184,14 +185,60 @@ class UploadLifecycleTest extends TestCase
         ];
     }
 
-    public function test_storage_service_rejects_non_image_presign_even_if_controller_is_bypassed(): void
+    public function test_storage_service_rejects_non_image_server_upload_even_if_controller_is_bypassed(): void
     {
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('INVALID_FILE');
 
-        app(R2Storage::class)->presignPut(
-            'gisley/properties/property-id/file.txt',
-            'text/plain',
+        app(R2Storage::class)->putObject(
+            'gisley/properties/property-id/file.jpg',
+            'not-an-image',
+            'image/jpeg',
+        );
+    }
+
+    public function test_presigned_get_signs_response_cache_and_content_headers(): void
+    {
+        config([
+            'services.r2.account_id' => 'test-account',
+            'services.r2.bucket' => 'test-bucket',
+            'services.r2.access_key_id' => 'test-key',
+            'services.r2.secret_access_key' => 'test-secret',
+        ]);
+
+        $url = app(R2Storage::class)->presignGet(
+            'gisley/properties/property-id/photo.jpg',
+            60,
+            'image/jpeg',
+            'photo.jpg',
+            'private, no-store',
+        );
+
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        $this->assertSame('private, no-store', $query['response-cache-control'] ?? null);
+        $this->assertSame('image/jpeg', $query['response-content-type'] ?? null);
+        $this->assertSame('inline; filename="photo.jpg"', $query['response-content-disposition'] ?? null);
+    }
+
+    public function test_presigned_get_rejects_unapproved_response_cache_policy(): void
+    {
+        config([
+            'services.r2.account_id' => 'test-account',
+            'services.r2.bucket' => 'test-bucket',
+            'services.r2.access_key_id' => 'test-key',
+            'services.r2.secret_access_key' => 'test-secret',
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('INVALID_CACHE_CONTROL');
+
+        app(R2Storage::class)->presignGet(
+            'gisley/properties/property-id/photo.jpg',
+            60,
+            'image/jpeg',
+            'photo.jpg',
+            'public, max-age=3600',
         );
     }
 
@@ -220,7 +267,7 @@ class UploadLifecycleTest extends TestCase
         $this->assertNull(R2Storage::imageInfoFromBytes($oversized, 'image/png'));
     }
 
-    public function test_presign_builds_the_storage_path_from_the_storage_prefix(): void
+    public function test_server_upload_validates_bytes_before_registration(): void
     {
         config([
             'app.url' => 'https://test.local',
@@ -228,28 +275,30 @@ class UploadLifecycleTest extends TestCase
         ]);
         $propertyId = $this->createDraftProperty();
         $session = $this->createManagerSession();
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);
+        $this->assertIsString($png);
 
         $storage = Mockery::mock(R2Storage::class)->makePartial();
         $storage->shouldReceive('safeFileName')->andReturnUsing(static fn (string $name): string => $name);
-        $storage->shouldReceive('presignPut')->once()->andReturn('https://r2.example.test/signed');
+        $storage->shouldReceive('putObject')->once()->withArgs(static fn (string $path, string $bytes, string $mime): bool => str_starts_with($path, R2Storage::PREFIX.$propertyId.'/')
+            && $bytes === $png
+            && $mime === 'image/png'
+        );
         $storage->shouldReceive('assetUrl')->andReturnUsing(static fn (string $key): string => '/media/'.$key);
         $this->app->instance(R2Storage::class, $storage);
 
         $response = $this->withSession($session)
             ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
-            ->postJson('/api/admin/uploads/presign', [
-                'propertyId' => $propertyId,
-                'fileName' => 'fachada.jpg',
-                'contentType' => 'image/jpeg',
-                'size' => 1024,
+            ->post('/api/admin/properties/'.$propertyId.'/photos/upload', [
+                'file' => UploadedFile::fake()->createWithContent('fachada.jpg', $png),
+                'altText' => 'Fachada',
+                'sortOrder' => 0,
+                'isCover' => 'true',
             ]);
 
-        $response->assertOk();
-        $this->assertStringStartsWith(
-            R2Storage::PREFIX.$propertyId.'/',
-            (string) $response->json('storagePath'),
-            'O presign não montou o caminho a partir de R2Storage::PREFIX.'
-        );
+        $response->assertCreated();
+        $this->assertSame(1, DB::table('morada_property_photos')->where('property_id', $propertyId)->count());
+        $this->assertSame('image/png', DB::table('morada_property_photos')->where('property_id', $propertyId)->value('mime_type'));
     }
 
     public function test_scheduled_cleanup_deletes_old_unregistered_objects_only(): void

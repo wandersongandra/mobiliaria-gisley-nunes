@@ -14,6 +14,11 @@ depoimentos, auditoria e leads.
 - `PropertyService` bloqueia a linha do imóvel ao alterar fotos, garantindo no
   máximo uma capa pelo fluxo da aplicação e evitando corrida na ordenação.
 - Índices cobrem catálogo, capa/galeria, sessão, retenção e paginação de leads.
+- A migration `2026_10_28_000010_enforce_domain_data_integrity` adiciona
+  preflight fail-closed e guards no banco para status/tipos de imóveis, status
+  e interesse de leads e metadados de fotos R2. Ela preserva os status legados
+  de leads que o serviço ainda normaliza (`contacted`, `qualified`, `closed`,
+  `lost`) e rejeita valores fora do contrato.
 
 ## Operação
 

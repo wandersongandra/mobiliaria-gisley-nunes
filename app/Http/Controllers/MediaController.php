@@ -17,11 +17,19 @@ class MediaController extends Controller
     public function media(string $path): RedirectResponse|JsonResponse
     {
         $key = rawurldecode($path);
-        if (! $this->properties->findPublishedPhotoByStoragePath($key)) {
+        $photo = $this->properties->findPublishedPhotoByStoragePath($key);
+        if (! $photo) {
             return response()->json(['error' => 'NOT_FOUND'], 404);
         }
 
-        return redirect()->away($this->storage->presignGet($key), 307)
-            ->header('Cache-Control', 'no-store');
+        return redirect()->away(
+            $this->storage->presignGet(
+                $key,
+                60,
+                (string) ($photo['mime_type'] ?? ''),
+                basename($key),
+            ),
+            307,
+        )->header('Cache-Control', 'no-store');
     }
 }

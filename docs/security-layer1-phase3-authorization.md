@@ -52,7 +52,7 @@ Possui todas as capacidades operacionais e administrativas.
 Foram revisados:
 
 - `GET/PUT/DELETE /api/admin/properties/:id`;
-- presign de upload por `propertyId`;
+- upload multipart por imóvel;
 - cadastro de foto em `/properties/:id/photos`;
 - remoção de foto por ID;
 - troca de capa por ID;

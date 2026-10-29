@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\AdminCrmController;
+use App\Http\Controllers\AdminPropertyController;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
@@ -32,7 +33,6 @@ class RouteSurfaceTest extends TestCase
         'GET anuncie-seu-imovel',
         'GET api/admin/audit',
         'GET api/admin/leads',
-        'GET api/admin/leads/export',
         'GET api/admin/photos/{id}/media',
         'GET api/admin/properties',
         'GET api/admin/properties/{id}',
@@ -68,12 +68,13 @@ class RouteSurfaceTest extends TestCase
         'GET {legacyPropertySlug}',
         'PATCH api/admin/leads/{id}',
         'PATCH api/admin/team/{email}',
+        'POST api/admin/leads/export',
         'POST api/admin/properties',
         'POST api/admin/properties/{id}/photos',
+        'POST api/admin/properties/{id}/photos/upload',
         'POST api/admin/team',
         'POST api/admin/team/invitations',
         'POST api/admin/testimonials',
-        'POST api/admin/uploads/presign',
         'POST api/auth/logout',
         'POST api/auth/logout-all',
         'POST api/contact',
@@ -122,6 +123,24 @@ class RouteSurfaceTest extends TestCase
 
         $this->assertNotNull($route);
         $this->assertContains('throttle:export', $route->middleware());
+    }
+
+    public function test_photo_upload_rate_limits_before_reading_the_request_body(): void
+    {
+        $route = Route::getRoutes()->getByAction(AdminPropertyController::class.'@uploadPhoto');
+
+        $this->assertNotNull($route);
+
+        $middleware = $route->middleware();
+        $adminThrottle = array_search('throttle:admin', $middleware, true);
+        $uploadThrottle = array_search('throttle:upload', $middleware, true);
+        $bodyLimit = array_search('body-limit:16384', $middleware, true);
+
+        $this->assertIsInt($adminThrottle);
+        $this->assertIsInt($uploadThrottle);
+        $this->assertIsInt($bodyLimit);
+        $this->assertLessThan($bodyLimit, $adminThrottle);
+        $this->assertLessThan($bodyLimit, $uploadThrottle);
     }
 
     /**

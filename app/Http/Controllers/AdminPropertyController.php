@@ -11,6 +11,7 @@ use App\Services\R2Storage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
@@ -142,23 +143,10 @@ class AdminPropertyController extends Controller
         return response()->noContent();
     }
 
-    public function presign(Request $request): JsonResponse
+    public function uploadPhoto(Request $request, string $id): JsonResponse
     {
+        $propertyId = $this->assertId($id);
         $admin = $this->admin($request);
-        $propertyId = $this->assertId((string) $request->input('propertyId', ''));
-        $fileName = trim((string) $request->input('fileName', ''));
-        $contentType = strtolower(trim((string) $request->input('contentType', '')));
-        $size = $this->fileSize($request->input('size'));
-
-        if ($fileName === '' || strlen($fileName) > 180) {
-            throw new RuntimeException('INVALID_FILE');
-        }
-
-        $extension = strtolower((string) pathinfo($fileName, PATHINFO_EXTENSION));
-        if (! isset(self::MIME_EXTENSIONS[$contentType]) || ! in_array($extension, self::MIME_EXTENSIONS[$contentType], true)) {
-            throw new RuntimeException('INVALID_FILE');
-        }
-
         $property = $this->properties->getProperty($propertyId);
         if (! $property) {
             return response()->json(['error' => 'NOT_FOUND'], 404);
@@ -170,15 +158,61 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'PHOTO_LIMIT_REACHED'], 409);
         }
 
-        $storagePath = R2Storage::PREFIX.$propertyId.'/'.Str::uuid().'-'.$this->storage->safeFileName($fileName);
+        $file = $request->file('file');
+        if (! $file instanceof UploadedFile || ! $file->isValid()) {
+            throw new RuntimeException('INVALID_FILE');
+        }
 
-        return response()->json([
-            'uploadUrl' => $this->storage->presignPut($storagePath, $contentType),
-            'storagePath' => $storagePath,
-            'assetUrl' => $this->storage->assetUrl($storagePath),
-            'provider' => 'r2',
-            'uploadHeaders' => ['Content-Type' => $contentType, 'If-None-Match' => '*'],
-        ]);
+        $size = $file->getSize();
+        $realPath = $file->getRealPath();
+        if (! is_int($size) || $size < 1 || $size > R2Storage::MAX_UPLOAD_BYTES || ! is_string($realPath)) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $bytes = file_get_contents($realPath);
+        if (! is_string($bytes) || strlen($bytes) !== $size) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $image = $this->inspectUploadedImage($bytes);
+        if ($image === null) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+
+        $altText = trim((string) $request->input('altText', ''));
+        $sortOrder = $this->sortOrder($request->input('sortOrder', 0));
+        $isCover = filter_var($request->input('isCover', false), FILTER_VALIDATE_BOOL);
+        if (mb_strlen($altText) > 255) {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
+        $baseName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $storagePath = R2Storage::PREFIX.$propertyId.'/'.Str::uuid().'-'
+            .$this->storage->safeFileName($baseName).'.'.$this->extensionForMime($image['mime']);
+
+        try {
+            $this->storage->putObject($storagePath, $bytes, $image['mime']);
+            $photos = $this->persistPhoto(
+                $admin,
+                $property,
+                $propertyId,
+                $storagePath,
+                $altText !== '' ? $altText : 'Foto de '.$property['title'],
+                $sortOrder,
+                $isCover,
+                $image['mime'],
+                $size,
+                $image,
+            );
+        } catch (\Throwable $error) {
+            try {
+                $this->storage->delete($storagePath);
+            } catch (\Throwable) {
+            }
+            throw $error;
+        }
+
+        return response()->json(['photos' => $this->adminPhotos($photos)], 201);
     }
 
     public function addPhoto(Request $request, string $id): JsonResponse
@@ -227,7 +261,7 @@ class AdminPropertyController extends Controller
         $invalidMetadata = (
             ! is_int($metadata['size'])
             || $metadata['size'] !== $size
-            || $metadata['size'] > 12 * 1024 * 1024
+            || $metadata['size'] > R2Storage::MAX_UPLOAD_BYTES
         ) || (
             ! is_string($metadata['contentType'])
             || strtolower($metadata['contentType']) !== $contentType
@@ -245,29 +279,18 @@ class AdminPropertyController extends Controller
             throw new RuntimeException('INVALID_ASSET');
         }
 
-        $photoId = (string) Str::uuid();
         try {
-            $photos = $this->criticalAudit->run(
+            $photos = $this->persistPhoto(
                 $admin,
-                'photo.add',
-                'photo',
-                $photoId,
-                fn (): array => $this->properties->addPhoto([
-                    'id' => $photoId,
-                    'property_id' => $propertyId,
-                    'storage_path' => $storagePath,
-                    'url' => $this->storage->assetUrl($storagePath),
-                    'alt_text' => $altText !== '' ? $altText : 'Foto de '.$property['title'],
-                    'sort_order' => $sortOrder,
-                    'is_cover' => $isCover ? 1 : 0,
-                    'storage_provider' => 'r2',
-                    'mime_type' => $contentType,
-                    'file_size' => $size,
-                    'width' => $image['width'],
-                    'height' => $image['height'],
-                    'uploaded_by' => $admin['email'],
-                ], ! $this->access->hasCapability($admin, 'property.publish')),
-                ['propertyId' => $propertyId, 'storagePath' => $storagePath],
+                $property,
+                $propertyId,
+                $storagePath,
+                $altText !== '' ? $altText : 'Foto de '.$property['title'],
+                $sortOrder,
+                $isCover,
+                $contentType,
+                $size,
+                $image,
             );
         } catch (\Throwable $error) {
             if ($error->getMessage() !== 'ASSET_ALREADY_REGISTERED') {
@@ -290,8 +313,16 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'NOT_FOUND'], 404);
         }
 
-        return redirect()->away($this->storage->presignGet((string) $photo['storage_path']), 307)
-            ->header('Cache-Control', 'no-store');
+        return redirect()->away(
+            $this->storage->presignGet(
+                (string) $photo['storage_path'],
+                60,
+                (string) ($photo['mime_type'] ?? ''),
+                basename((string) $photo['storage_path']),
+                'private, no-store',
+            ),
+            307,
+        )->header('Cache-Control', 'no-store');
     }
 
     public function removePhoto(Request $request, string $id)
@@ -430,10 +461,89 @@ class AdminPropertyController extends Controller
             throw new RuntimeException('INVALID_FILE');
         }
 
-        if ($size < 1 || $size > 12 * 1024 * 1024) {
+        if ($size < 1 || $size > R2Storage::MAX_UPLOAD_BYTES) {
             throw new RuntimeException('INVALID_FILE');
         }
 
         return $size;
+    }
+
+    /**
+     * @return array{width: int, height: int, mime: string}|null
+     */
+    private function inspectUploadedImage(string $bytes): ?array
+    {
+        foreach (array_keys(self::MIME_EXTENSIONS) as $contentType) {
+            $image = R2Storage::imageInfoFromBytes($bytes, $contentType);
+            if ($image !== null) {
+                return $image;
+            }
+        }
+
+        return null;
+    }
+
+    private function extensionForMime(string $mime): string
+    {
+        return self::MIME_EXTENSIONS[$mime][0] ?? throw new RuntimeException('INVALID_FILE');
+    }
+
+    private function sortOrder(mixed $value): int
+    {
+        if (is_int($value)) {
+            $sortOrder = $value;
+        } elseif (is_string($value) && strlen($value) <= 3 && preg_match('/^[0-9]+$/D', $value)) {
+            $sortOrder = (int) $value;
+        } else {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
+        if ($sortOrder < 0 || $sortOrder >= PropertyService::MAX_PHOTOS) {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
+        return $sortOrder;
+    }
+
+    /**
+     * @param  array{width: int, height: int, mime: string}  $image
+     * @return list<array<string, mixed>>
+     */
+    private function persistPhoto(
+        array $admin,
+        array $property,
+        string $propertyId,
+        string $storagePath,
+        string $altText,
+        int $sortOrder,
+        bool $isCover,
+        string $contentType,
+        int $size,
+        array $image,
+    ): array {
+        $photoId = (string) Str::uuid();
+
+        return $this->criticalAudit->run(
+            $admin,
+            'photo.add',
+            'photo',
+            $photoId,
+            fn (): array => $this->properties->addPhoto([
+                'id' => $photoId,
+                'property_id' => $propertyId,
+                'storage_path' => $storagePath,
+                'url' => $this->storage->assetUrl($storagePath),
+                'alt_text' => $altText,
+                'sort_order' => $sortOrder,
+                'is_cover' => $isCover ? 1 : 0,
+                'storage_provider' => 'r2',
+                'mime_type' => $contentType,
+                'file_size' => $size,
+                'width' => $image['width'],
+                'height' => $image['height'],
+                'uploaded_by' => $admin['email'],
+            ], ! $this->access->hasCapability($admin, 'property.publish')),
+            ['propertyId' => $propertyId, 'storagePath' => $storagePath],
+        );
     }
 }
