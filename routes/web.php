@@ -100,6 +100,8 @@ Route::prefix('api/admin')
     ->group(function (): void {
         Route::get('/release', [AuthController::class, 'release'])
             ->middleware('capability:audit.read');
+        Route::get('/profile', [AdminCrmController::class, 'profile']);
+        Route::put('/profile', [AdminCrmController::class, 'updateProfile']);
         Route::get('/properties', [AdminPropertyController::class, 'index'])
             ->middleware('capability:property.read');
         Route::post('/properties', [AdminPropertyController::class, 'store'])
@@ -139,8 +141,21 @@ Route::prefix('api/admin')
             ->middleware('capability:lead.read');
         Route::patch('/leads/{id}', [AdminCrmController::class, 'updateLead'])
             ->middleware('capability:lead.status');
+        Route::get('/leads/{id}', [AdminCrmController::class, 'lead'])
+            ->middleware('capability:lead.read');
+        Route::post('/leads/{id}/activities', [AdminCrmController::class, 'addLeadActivity'])
+            ->middleware('capability:lead.history');
         Route::delete('/leads/{id}', [AdminCrmController::class, 'deleteLead'])
             ->middleware(['capability:lead.erase', 'throttle:destructive']);
+
+        Route::get('/forms', [AdminCrmController::class, 'forms'])
+            ->middleware('capability:form.manage');
+        Route::post('/forms', [AdminCrmController::class, 'createForm'])
+            ->middleware('capability:form.manage');
+        Route::put('/forms/{id}', [AdminCrmController::class, 'updateForm'])
+            ->middleware('capability:form.manage');
+        Route::delete('/forms/{id}', [AdminCrmController::class, 'deleteForm'])
+            ->middleware(['capability:form.manage', 'throttle:destructive']);
 
         Route::get('/audit', [AdminCrmController::class, 'auditLog'])
             ->middleware('capability:audit.read');

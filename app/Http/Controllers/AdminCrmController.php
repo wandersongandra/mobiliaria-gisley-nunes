@@ -33,6 +33,26 @@ class AdminCrmController extends Controller
         ]);
     }
 
+    public function profile(Request $request): JsonResponse
+    {
+        return response()->json(['profile' => $this->crm->getProfile($this->admin($request))])
+            ->header('Cache-Control', 'no-store');
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $admin = $this->admin($request);
+        $profile = $this->criticalAudit->run(
+            $admin,
+            'profile.update',
+            'staff',
+            (string) $admin['openId'],
+            fn (): array => $this->crm->saveProfile($admin, $request->all()),
+        );
+
+        return response()->json(['profile' => $profile]);
+    }
+
     public function site(): JsonResponse
     {
         return response()->json([
@@ -189,13 +209,97 @@ class AdminCrmController extends Controller
             'status' => ['required', 'string', Rule::in(CrmService::LEAD_STATUSES)],
         ])['status'];
         $admin = $this->admin($request);
-        $this->criticalAudit->run($admin, 'lead.status', 'lead', $id, function () use ($id, $status): void {
-            if (! $this->crm->updateLeadStatus($id, $status)) {
+        $this->criticalAudit->run($admin, 'lead.status', 'lead', $id, function () use ($id, $status, $admin): void {
+            if (! $this->crm->updateLeadStatus($id, $status, $admin)) {
                 throw new RuntimeException('NOT_FOUND');
             }
         }, ['status' => $status]);
 
         return response()->json(['ok' => true]);
+    }
+
+    public function lead(Request $request, string $id): JsonResponse
+    {
+        $this->assertId($id);
+        $admin = $this->admin($request);
+        $lead = $this->criticalAudit->run(
+            $admin,
+            'lead.read',
+            'lead',
+            $id,
+            fn (): array => $this->crm->getLead($id) ?? throw new RuntimeException('NOT_FOUND'),
+            static fn (array $result): array => ['activityCount' => count($result['activities'] ?? [])],
+        );
+
+        return response()->json(['lead' => $lead])->header('Cache-Control', 'no-store');
+    }
+
+    public function addLeadActivity(Request $request, string $id): JsonResponse
+    {
+        $this->assertId($id);
+        $admin = $this->admin($request);
+        $activityType = (string) $request->input('type', 'note');
+        $lead = $this->criticalAudit->run(
+            $admin,
+            'lead.activity.create',
+            'lead',
+            $id,
+            fn (): array => $this->crm->addLeadActivity($id, $request->all(), $admin),
+            static fn (array $result): array => ['type' => $activityType],
+        );
+
+        return response()->json(['lead' => $lead], 201);
+    }
+
+    public function forms(Request $request): JsonResponse
+    {
+        $this->access->requireCurrent($request);
+
+        return response()->json(['forms' => $this->crm->listFormTemplates()])->header('Cache-Control', 'no-store');
+    }
+
+    public function createForm(Request $request): JsonResponse
+    {
+        $admin = $this->admin($request);
+        $form = $this->criticalAudit->run(
+            $admin,
+            'form.create',
+            'form_template',
+            null,
+            fn (): array => $this->crm->saveFormTemplate($request->all(), $admin),
+            static fn (array $result): array => ['slug' => $result['slug']],
+        );
+
+        return response()->json(['form' => $form], 201);
+    }
+
+    public function updateForm(Request $request, string $id): JsonResponse
+    {
+        $this->assertId($id);
+        $admin = $this->admin($request);
+        $form = $this->criticalAudit->run(
+            $admin,
+            'form.update',
+            'form_template',
+            $id,
+            fn (): array => $this->crm->saveFormTemplate($request->all(), $admin, $id),
+            static fn (array $result): array => ['slug' => $result['slug']],
+        );
+
+        return response()->json(['form' => $form]);
+    }
+
+    public function deleteForm(Request $request, string $id)
+    {
+        $this->assertId($id);
+        $admin = $this->admin($request);
+        $this->criticalAudit->run($admin, 'form.delete', 'form_template', $id, function () use ($id): void {
+            if (! $this->crm->removeFormTemplate($id)) {
+                throw new RuntimeException('NOT_FOUND');
+            }
+        });
+
+        return response()->noContent();
     }
 
     private function leadFilters(Request $request, bool $includeFormat = false): array

@@ -131,8 +131,8 @@ class PageController extends Controller
     public function servicos(Request $request)
     {
         $data = $this->pageData(
-            'Serviços imobiliários em Belo Horizonte | Gisley Nunes',
-            'Compre, alugue ou anuncie um imóvel em Belo Horizonte com a Gisley Nunes. Veja como começar seu atendimento.',
+            'Avaliações, laudos e serviços imobiliários | Gisley Nunes',
+            'Avaliações de imóveis, perícia judicial, laudos técnicos e atendimento para imóveis rurais e urbanos, além de compra, aluguel e anúncio.',
             '/servicos'
         );
         $data['pageLd'] = $this->jsonLd([

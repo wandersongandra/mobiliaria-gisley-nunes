@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, leadDetail: null, team: [], invitations: [], forms: [], editingFormId: null, audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
 let propertySearchTimer = 0;
 let propertyLoadSequence = 0;
 let leadLoadSequence = 0;
@@ -141,10 +141,13 @@ function clearSensitiveState() {
   state.propertyFilters = { search: '', status: '', page: 1, per_page: 20 };
   state.leads = [];
   state.leadPagination = null;
+  state.leadDetail = null;
   leadsLoaded = false;
   state.leadFilters = { status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
   state.team = [];
   state.invitations = [];
+  state.forms = [];
+  state.editingFormId = null;
   state.audit = [];
   state.editing = null;
   clearTimeout(propertySearchTimer);
@@ -163,6 +166,8 @@ function clearSensitiveState() {
   if (invitationList) invitationList.innerHTML = '';
   if (invitationResult) invitationResult.hidden = true;
   if (auditList) auditList.innerHTML = '';
+  const leadDetail = $('#lead-detail');
+  if (leadDetail) { leadDetail.hidden = true; leadDetail.innerHTML = ''; }
 }
 
 const invitationParams = new URLSearchParams(window.location.search);
@@ -232,6 +237,7 @@ async function performLogout({ all = false } = {}) {
 function showDashboard() {
   loginScreen.hidden = true;
   dashboard.hidden = false;
+  ensureManagementPanels();
   if (dashboardMain) dashboardMain.id = 'admin-main';
   skipLink?.setAttribute('href', '#admin-main');
   $('#user-name').textContent = state.user?.name?.split(' ')[0] || 'equipe';
@@ -251,6 +257,160 @@ function showDashboard() {
   if (kicker) kicker.textContent = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date());
 }
 
+function ensureManagementPanels() {
+  const nav = document.querySelector('.side-nav');
+  if (!nav || !dashboardMain) return;
+
+  const addNav = (id, label, icon, managerOnly = false) => {
+    if (nav.querySelector(`[data-view="${id}"]`)) return;
+    const link = document.createElement('a');
+    link.href = `#${id}`;
+    link.dataset.view = id;
+    if (managerOnly) {
+      link.dataset.managerOnly = 'true';
+      link.hidden = state.user?.role !== 'manager';
+    }
+    link.innerHTML = `<span>${icon}</span> ${label}`;
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.history.pushState(null, '', link.hash);
+      switchView(link.dataset.view);
+    });
+    nav.insertBefore(link, nav.lastElementChild);
+  };
+
+  addNav('profile-view', 'Meu cadastro', '◎');
+  if (state.user?.role === 'manager') addNav('forms-view', 'Formulários', '▤', true);
+
+  if (!$('#profile-view')) {
+    const section = document.createElement('section');
+    section.id = 'profile-view';
+    section.className = 'admin-view';
+    section.hidden = true;
+    section.innerHTML = '<div class="section-bar"><div><p class="admin-kicker">cadastro profissional</p><h3>Meu cadastro, <em>sempre atualizado.</em></h3></div></div><form id="profile-form" class="site-card" style="max-width:720px"><span class="metric-label">dados do corretor</span><strong class="site-card-title">Informações pessoais</strong><p class="team-help">Esses dados ficam protegidos no painel e podem ser alterados somente pela própria pessoa autenticada.</p><div class="site-fields"><label>Nome<input name="name" readonly maxlength="255" /></label><label>E-mail<input name="email" readonly type="email" maxlength="255" /></label><div class="field-pair"><label>Data de nascimento<input name="birthDate" type="date" /></label><label>Função<input name="role" readonly /></label></div><label>Endereço<input name="address" maxlength="500" autocomplete="street-address" placeholder="Rua, número, complemento, cidade e estado" /></label></div><button class="admin-button admin-button-primary" type="submit">Salvar cadastro <span>↗</span></button><p id="profile-status" role="status"></p></form>';
+    dashboardMain.append(section);
+    $('#profile-form').addEventListener('submit', saveProfile);
+  }
+
+  if (state.user?.role === 'manager' && !$('#forms-view')) {
+    const section = document.createElement('section');
+    section.id = 'forms-view';
+    section.className = 'admin-view';
+    section.hidden = true;
+    section.innerHTML = '<div class="section-bar"><div><p class="admin-kicker">modelos internos</p><h3>Formulários, <em>organizados.</em></h3></div></div><div class="site-layout"><form id="form-template-form" class="site-card"><span class="metric-label">novo modelo</span><strong class="site-card-title">Cadastrar formulário</strong><p class="team-help">A definição é armazenada como JSON e será usada como modelo. O conteúdo ainda não é executado como HTML ou script.</p><div class="site-fields"><label>Slug<input name="slug" required maxlength="120" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="ficha-cadastral-imovel" /></label><label>Título<input name="title" required maxlength="180" placeholder="Ficha cadastral de imóvel" /></label><label>Descrição<input name="description" maxlength="500" /></label><label>Definição JSON<textarea name="definition" required rows="12" spellcheck="false" placeholder="{\"fields\": []}"></textarea></label><label><input name="active" type="checkbox" checked /> Modelo ativo</label></div><button class="admin-button admin-button-primary" type="submit">Salvar modelo <span>↗</span></button><button id="form-template-cancel" class="outline-button" type="button" hidden>Cancelar edição</button><p id="forms-status" role="status"></p></form><div class="site-card"><span class="metric-label">modelos salvos</span><strong class="site-card-title">Biblioteca de formulários</strong><div id="form-template-list" class="testimonial-list"></div></div></div>';
+    dashboardMain.append(section);
+    $('#form-template-form').addEventListener('submit', saveFormTemplate);
+    $('#form-template-cancel').addEventListener('click', () => resetFormTemplateForm());
+  }
+}
+
+async function loadProfile() {
+  const status = $('#profile-status');
+  try {
+    const result = await request('/api/admin/profile');
+    const profile = result.profile || {};
+    const profileForm = $('#profile-form');
+    for (const [key, value] of Object.entries(profile)) {
+      if (profileForm?.elements[key]) profileForm.elements[key].value = value ?? '';
+    }
+    if (status) status.textContent = '';
+  } catch {
+    if (status) { status.textContent = 'Não foi possível carregar seu cadastro.'; status.dataset.tone = 'error'; }
+  }
+}
+
+async function saveProfile(event) {
+  event.preventDefault();
+  const profileForm = event.currentTarget;
+  const status = $('#profile-status');
+  setFormPending(profileForm, true, 'Salvando…');
+  try {
+    await request('/api/admin/profile', { method: 'PUT', body: JSON.stringify({ address: profileForm.elements.address.value, birthDate: profileForm.elements.birthDate.value }) });
+    if (status) { status.textContent = 'Cadastro atualizado.'; status.dataset.tone = 'success'; }
+  } catch (error) {
+    if (status) { status.textContent = error.message === 'INVALID_PROFILE' || error.message === 'VALIDATION_FAILED' ? 'Confira a data e o endereço informado.' : 'Não foi possível salvar seu cadastro.'; status.dataset.tone = 'error'; }
+  } finally {
+    setFormPending(profileForm, false);
+  }
+}
+
+function resetFormTemplateForm() {
+  const formTemplate = $('#form-template-form');
+  if (!formTemplate) return;
+  formTemplate.reset();
+  formTemplate.elements.active.checked = true;
+  state.editingFormId = null;
+  $('#form-template-cancel').hidden = true;
+}
+
+function renderFormTemplates() {
+  const list = $('#form-template-list');
+  if (!list) return;
+  list.replaceChildren();
+  if (!state.forms.length) {
+    list.innerHTML = '<div class="photo-empty"><span>＋</span><p>Nenhum modelo cadastrado.<br />Aguardando os formulários da equipe.</p></div>';
+    return;
+  }
+  state.forms.forEach((item) => {
+    const row = document.createElement('article');
+    row.className = 'testimonial-row';
+    row.innerHTML = `<div><strong>${escapeHTML(item.title)}</strong><p>${escapeHTML(item.description || 'Sem descrição')}</p><small>${escapeHTML(item.slug)} · ${item.active ? 'ativo' : 'inativo'}</small></div><div><button class="outline-button" type="button" data-form-edit="${escapeHTML(item.id)}">Editar</button><button class="danger" type="button" data-form-delete="${escapeHTML(item.id)}">Apagar</button></div>`;
+    list.append(row);
+  });
+  list.querySelectorAll('[data-form-edit]').forEach((button) => button.addEventListener('click', () => {
+    const item = state.forms.find((candidate) => candidate.id === button.dataset.formEdit);
+    if (!item) return;
+    const formTemplate = $('#form-template-form');
+    state.editingFormId = item.id;
+    for (const [key, value] of Object.entries({ slug: item.slug, title: item.title, description: item.description || '', definition: JSON.stringify(item.definition || {}, null, 2) })) formTemplate.elements[key].value = value;
+    formTemplate.elements.active.checked = Boolean(item.active);
+    $('#form-template-cancel').hidden = false;
+    formTemplate.elements.title.focus();
+  }));
+  list.querySelectorAll('[data-form-delete]').forEach((button) => button.addEventListener('click', async () => {
+    if (! await confirmAction({ title: 'Apagar modelo?', message: 'O modelo será removido da biblioteca.' })) return;
+    try {
+      await request(`/api/admin/forms/${button.dataset.formDelete}`, { method: 'DELETE' });
+      await loadFormTemplates();
+    } catch {
+      const status = $('#forms-status');
+      if (status) { status.textContent = 'Não foi possível apagar o modelo.'; status.dataset.tone = 'error'; }
+    }
+  }));
+}
+
+async function loadFormTemplates() {
+  try {
+    const result = await request('/api/admin/forms');
+    state.forms = result.forms || [];
+    renderFormTemplates();
+  } catch {
+    const status = $('#forms-status');
+    if (status) { status.textContent = 'Não foi possível carregar os modelos.'; status.dataset.tone = 'error'; }
+  }
+}
+
+async function saveFormTemplate(event) {
+  event.preventDefault();
+  const formTemplate = event.currentTarget;
+  const status = $('#forms-status');
+  const data = Object.fromEntries(new FormData(formTemplate));
+  data.active = formTemplate.elements.active.checked;
+  try { data.definition = JSON.parse(String(data.definition || '')); } catch { if (status) { status.textContent = 'A definição precisa ser um JSON válido.'; status.dataset.tone = 'error'; } return; }
+  setFormPending(formTemplate, true, 'Salvando…');
+  try {
+    const url = state.editingFormId ? `/api/admin/forms/${state.editingFormId}` : '/api/admin/forms';
+    await request(url, { method: state.editingFormId ? 'PUT' : 'POST', body: JSON.stringify(data) });
+    resetFormTemplateForm();
+    await loadFormTemplates();
+    if (status) { status.textContent = 'Modelo salvo.'; status.dataset.tone = 'success'; }
+  } catch (error) {
+    if (status) { status.textContent = error.message === 'INVALID_FORM_TEMPLATE' || error.message === 'FORM_TEMPLATE_EXISTS' ? 'Revise o slug, os campos e o JSON.' : 'Não foi possível salvar o modelo.'; status.dataset.tone = 'error'; }
+  } finally {
+    setFormPending(formTemplate, false);
+  }
+}
+
 function renderProperties() {
   document.querySelector('.properties-table-wrap')?.removeAttribute('aria-busy');
   document.querySelectorAll('.property-filters input, .property-filters select').forEach((control) => { control.disabled = false; });
@@ -266,7 +426,7 @@ function renderProperties() {
   $('#property-status-filter').value = statusFilter;
   $('#property-per-page').value = String(state.propertyFilters.per_page);
   $('#property-list').innerHTML = items.length ? items.map((item) => {
-    const canEdit = state.user?.role === 'manager' || item.status === 'draft';
+    const canEdit = item.can_edit === true;
     const action = canEdit
       ? `<button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button>`
       : '<span class="row-locked" title="Somente Gestor pode alterar imóvel publicado ou arquivado">Somente Gestor</span>';
@@ -389,8 +549,8 @@ function renderEditorPhotos() {
 }
 function openEditor(property = null) {
   const isManager = state.user?.role === 'manager';
-  if (property && !isManager && property.status !== 'draft') {
-    toast('Somente Gestor pode alterar imóvel publicado ou arquivado.', 'error');
+  if (property && !isManager && property.can_edit !== true) {
+    toast('Você só pode alterar imóveis em rascunho cadastrados por você.', 'error');
     return;
   }
 
@@ -677,6 +837,8 @@ function switchView(name) {
   }
   if (activeView?.id === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
   if (activeView?.id === 'team-view' && state.user?.role === 'manager' && !teamLoaded) { void loadTeam(); }
+  if (activeView?.id === 'profile-view') { void loadProfile(); }
+  if (activeView?.id === 'forms-view' && state.user?.role === 'manager') { void loadFormTemplates(); }
   if (activeView?.id === 'audit-view' && state.user?.role === 'manager' && !auditLoaded) { auditLoaded = true; loadAudit(); }
 }
 
@@ -1014,6 +1176,11 @@ function ensureLeadsPanel() {
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
   panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><button class="outline-button lead-export" data-lead-export="csv" type="button">Exportar CSV</button><button class="outline-button lead-export" data-lead-export="json" type="button">Exportar JSON</button></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
+  const detail = document.createElement('section');
+  detail.id = 'lead-detail';
+  detail.className = 'site-card';
+  detail.hidden = true;
+  panel.append(detail);
   metrics.insertAdjacentElement('afterend', panel);
   $('#lead-filters').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1094,6 +1261,18 @@ function renderLeads() {
     return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><label class="lead-status-control"><span class="sr-only">Status de ${escapeHTML(lead.name)}</span><select data-lead-status="${escapeHTML(lead.id)}">${statusOptions.map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button type="button" data-lead-save="${escapeHTML(lead.id)}">Salvar status</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
   }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato encontrado.</h4><p>Ajuste os filtros ou aguarde novos contatos pelo site.</p></div>';
 
+  list.querySelectorAll('.lead-actions').forEach((actions) => {
+    const leadRow = actions.closest('[data-status]');
+    const leadId = leadRow?.querySelector('[data-lead-save]')?.dataset.leadSave;
+    if (!leadId) return;
+    const openButton = document.createElement('button');
+    openButton.type = 'button';
+    openButton.className = 'outline-button';
+    openButton.textContent = 'Abrir atendimento';
+    openButton.addEventListener('click', () => { void loadLeadDetail(leadId); });
+    actions.append(openButton);
+  });
+
   list.querySelectorAll('[data-lead-delete]').forEach((button) => button.addEventListener('click', async () => {
     const lead = state.leads.find((item) => item.id === button.dataset.leadDelete);
     const confirmed = await confirmAction({
@@ -1142,6 +1321,34 @@ function renderLeads() {
       }
     }
   }));
+}
+
+async function loadLeadDetail(id) {
+  const detail = $('#lead-detail');
+  if (!detail) return;
+  detail.hidden = false;
+  detail.innerHTML = '<p role="status">Carregando atendimento…</p>';
+  try {
+    const result = await request(`/api/admin/leads/${id}`);
+    const lead = result.lead;
+    state.leadDetail = lead;
+    const activities = Array.isArray(lead.activities) ? lead.activities : [];
+    detail.innerHTML = `<div class="leads-panel-head"><div><p class="admin-kicker">atendimento</p><h3>${escapeHTML(lead.name)}</h3><p>${escapeHTML(lead.email)} · ${escapeHTML(lead.interest)}</p></div><button type="button" class="outline-button" data-close-lead>Fechar</button></div><p>${escapeHTML(lead.message)}</p><div class="site-fields"><label>Status<select id="lead-detail-status"><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><button id="lead-detail-status-save" class="outline-button" type="button">Salvar status</button><label>Registrar contato<textarea id="lead-detail-body" maxlength="4000" rows="4" placeholder="Descreva a ligação, mensagem, visita ou próximo passo."></textarea></label><label>Tipo<select id="lead-detail-type"><option value="note">Anotação</option><option value="call">Ligação</option><option value="email">E-mail</option><option value="whatsapp">WhatsApp</option><option value="meeting">Reunião</option></select></label><button id="lead-detail-activity-save" class="admin-button admin-button-primary" type="button">Salvar no histórico <span>↗</span></button></div><div class="testimonial-list"><span class="metric-label">histórico de contatos</span>${activities.length ? activities.map((item) => `<article class="testimonial-row"><div><strong>${escapeHTML(item.type)}</strong><p>${escapeHTML(item.body)}</p><small>${escapeHTML(item.actorName)} · ${formatDate(item.createdAt)}</small></div></article>`).join('') : '<p>Nenhum contato registrado ainda.</p>'}</div>`;
+    $('#lead-detail-status').value = lead.status;
+    $('[data-close-lead]').addEventListener('click', () => { detail.hidden = true; state.leadDetail = null; });
+    $('#lead-detail-status-save').addEventListener('click', async (event) => {
+      setButtonPending(event.currentTarget, true, 'Salvando…');
+      try { await request(`/api/admin/leads/${id}`, { method: 'PATCH', body: JSON.stringify({ status: $('#lead-detail-status').value }) }); await loadLeadDetail(id); await loadLeads(); } catch { event.currentTarget.disabled = false; }
+    });
+    $('#lead-detail-activity-save').addEventListener('click', async (event) => {
+      const body = $('#lead-detail-body').value.trim();
+      if (!body) return;
+      setButtonPending(event.currentTarget, true, 'Salvando…');
+      try { await request(`/api/admin/leads/${id}/activities`, { method: 'POST', body: JSON.stringify({ type: $('#lead-detail-type').value, body }) }); await loadLeadDetail(id); } catch { event.currentTarget.disabled = false; }
+    });
+  } catch {
+    detail.innerHTML = '<p role="alert">Não foi possível abrir este atendimento.</p>';
+  }
 }
 
 async function loadLeads() {

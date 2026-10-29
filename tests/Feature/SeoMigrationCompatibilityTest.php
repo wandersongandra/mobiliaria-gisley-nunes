@@ -67,7 +67,7 @@ class SeoMigrationCompatibilityTest extends TestCase
 
         $this->get('/servicos')
             ->assertOk()
-            ->assertSee('<title>Serviços imobiliários em Belo Horizonte | Gisley Nunes</title>', false)
+            ->assertSee('<title>Avaliações, laudos e serviços imobiliários | Gisley Nunes</title>', false)
             ->assertSee('Comprar, alugar<br /><em>ou anunciar em Belo Horizonte.</em>', false);
     }
 

@@ -340,7 +340,7 @@ class PropertyService
         ];
     }
 
-    public function saveProperty(array $input, ?string $id = null, bool $requireDraft = false): array
+    public function saveProperty(array $input, ?string $id = null, bool $requireDraft = false, ?string $createdByOpenId = null): array
     {
         $data = $this->normalizeInput($input);
 
@@ -350,7 +350,7 @@ class PropertyService
 
         $propertyId = $id ?: (string) Str::uuid();
 
-        DB::transaction(function () use ($data, $propertyId, $id, $requireDraft): void {
+        DB::transaction(function () use ($data, $propertyId, $id, $requireDraft, $createdByOpenId): void {
             $existing = $id
                 ? DB::table('morada_properties')->where('id', $propertyId)->lockForUpdate()->first()
                 : null;
@@ -385,6 +385,7 @@ class PropertyService
                 } else {
                     DB::table('morada_properties')->insert($payload + [
                         'id' => $propertyId,
+                        'created_by_open_id' => $createdByOpenId,
                         'created_at' => now(),
                     ]);
                 }

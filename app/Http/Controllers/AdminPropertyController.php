@@ -37,6 +37,7 @@ class AdminPropertyController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $admin = $this->access->requireCurrent($request);
         $filters = $request->validate([
             'search' => ['sometimes', 'nullable', 'string', 'max:100'],
             'status' => ['sometimes', 'nullable', 'string', Rule::in(['draft', 'published', 'archived'])],
@@ -52,7 +53,9 @@ class AdminPropertyController extends Controller
 
         return response()->json([
             'properties' => array_map(
-                fn (array $row): array => $this->properties->adminProperty($row),
+                fn (array $row): array => $this->properties->adminProperty($row) + [
+                    'can_edit' => $this->canEditProperty($admin, $row),
+                ],
                 $paginator->items()
             ),
             'pagination' => [
@@ -80,14 +83,14 @@ class AdminPropertyController extends Controller
             'property.create',
             'property',
             null,
-            fn (): array => $this->properties->saveProperty($request->all(), null, ! $manager),
+            fn (): array => $this->properties->saveProperty($request->all(), null, ! $manager, (string) $admin['openId']),
             fn (array $created): array => [
                 'title' => $created['title'],
                 'status' => $created['status'],
             ],
         );
 
-        return response()->json(['property' => $this->properties->adminProperty($property)], 201);
+        return response()->json(['property' => $this->properties->adminProperty($property) + ['can_edit' => true]], 201);
     }
 
     public function show(string $id): JsonResponse
@@ -111,7 +114,8 @@ class AdminPropertyController extends Controller
         }
 
         $manager = $this->access->hasCapability($admin, 'property.publish');
-        if (! $manager && ((string) $current['status'] !== 'draft' || ! $this->draftOnlyRequest($request))) {
+        if (! $this->canEditProperty($admin, $current)
+            || (! $manager && ((string) $current['status'] !== 'draft' || ! $this->draftOnlyRequest($request)))) {
             return response()->json(['error' => 'CAPABILITY_REQUIRED'], 403);
         }
 
@@ -547,7 +551,22 @@ class AdminPropertyController extends Controller
     private function canManageMedia(array $admin, array $property): bool
     {
         return $this->access->hasCapability($admin, 'media.manage')
-            && ($this->access->hasCapability($admin, 'property.publish') || (string) $property['status'] === 'draft');
+            && $this->canEditProperty($admin, $property);
+    }
+
+    private function canEditProperty(array $admin, array $property): bool
+    {
+        if ($this->access->hasCapability($admin, 'property.publish')) {
+            return true;
+        }
+
+        $owner = (string) ($property['created_by_open_id'] ?? '');
+        $actor = (string) ($admin['openId'] ?? '');
+
+        return (string) ($property['status'] ?? '') === 'draft'
+            && $owner !== ''
+            && $actor !== ''
+            && hash_equals($owner, $actor);
     }
 
     private function adminPhotos(array $photos): array
