@@ -16,10 +16,9 @@ routes/web.php
   -> MySQL / Cloudflare R2
 ```
 
-O fluxo `preview` do Node.js é compatibilidade local e de CI apenas: ele não possui
-autoridade de schema, não executa migrations no boot e força `NODE_ENV=development`.
-Qualquer inicialização do Node com `NODE_ENV=production` é bloqueada. O runtime
-oficial é Laravel/PHP; suas migrations são a única fonte autorizada para o schema.
+Não existe runtime Node no backend. Node.js permanece apenas como ferramenta de
+build dos assets estáticos do frontend. O runtime oficial é Laravel/PHP; suas
+migrations são a única fonte autorizada para o schema.
 
 O projeto usa Query Builder deliberadamente. Não há Models Eloquent,
 repositories, jobs, listeners ou filas no backend Laravel atual. A validação de

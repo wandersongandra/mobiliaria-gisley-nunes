@@ -4,11 +4,11 @@ Data: 2026-10-29 (America/Sao_Paulo)
 
 ## Executive summary
 
-O sistema é uma aplicação imobiliária Laravel em HostGator com painel administrativo separado por origem, Google OAuth, MySQL, Cloudflare R2 e preview Node/Cloudflare. Os controles de autenticação, sessão, CSRF, capability, auditoria transacional e upload são materialmente bons no código revisado; os maiores riscos residuais são abuso de uma identidade administrativa autorizada, exfiltração de leads, integridade do processo de release e falta de prova ponta a ponta nas integrações externas. Não há vulnerabilidade crítica ou alta confirmada, mas a release não deve ser declarada pronta enquanto as evidências externas permanecerem incompletas.
+O sistema é uma aplicação imobiliária Laravel em HostGator com painel administrativo separado por origem, Google OAuth, MySQL e Cloudflare R2. O backend Node/Express legado e o preview correspondente foram removidos; Node permanece somente no build dos assets. Os controles de autenticação, sessão, CSRF, capability, auditoria transacional e upload são materialmente bons no código revisado; os maiores riscos residuais são abuso de uma identidade administrativa autorizada, exfiltração de leads, integridade do processo de release e falta de prova ponta a ponta nas integrações externas. Não há vulnerabilidade crítica ou alta confirmada, mas a release não deve ser declarada pronta enquanto as evidências externas permanecerem incompletas.
 
 ## Scope and assumptions
 
-- **In scope:** `app/`, `routes/`, `config/`, `resources/views/`, `database/migrations/`, `server/`, `public/`, `src/`, `views/`, `.github/workflows/`, `scripts/deploy-hostgator.sh` e `wrangler.jsonc`.
+- **In scope:** `app/`, `routes/`, `config/`, `resources/views/`, `database/migrations/`, `public/`, `src/`, `.github/workflows/` e `scripts/deploy-hostgator.sh`.
 - **Runtime:** Laravel/PHP-FPM em HostGator, MySQL e R2; painel administrativo em `painel.gisleynunesimoveis.com.br`; site público em `www.gisleynunesimoveis.com.br`.
 - **External services:** Google OAuth, DNS/TLS/proxy Cloudflare, Cloudflare R2 e GitHub Actions.
 - **Data sensitivity:** leads contêm nome, e-mail, interesse e mensagem; identidades, sessões, convites, fotos e configuração administrativa são ativos sensíveis.
@@ -27,8 +27,7 @@ Open questions that would materially change ranking: volume de leads e retençã
 - MySQL: usuários, identidades OAuth, sessões, staff, convites, leads, propriedades, fotos e auditoria (`app/Services/CrmService.php:146-328`).
 - R2: bucket privado para fotos, com upload server-side e URLs temporárias de leitura (`app/Services/R2Storage.php:33-163`).
 - Google OAuth: autorização, token exchange e userinfo (`app/Http/Controllers/AuthController.php:234-291`).
-- Node/Express: runtime/preview alternativo com headers, origin checks, rate limit e APIs paralelas (`server/index.js:27-84`, `server/routes.js:155-291`).
-- GitHub Actions/Cloudflare preview/HostGator SSH: build, CodeQL, pacote de produção, preview e entrega.
+- GitHub Actions/HostGator SSH: build, CodeQL, pacote de produção e entrega.
 
 ### Data flows and trust boundaries
 
@@ -57,7 +56,6 @@ flowchart TD
     Admin --> R2
     Developer["Developer e GitHub Actions"] --> Build["Build e release"]
     Build --> HostGator["HostGator"]
-    Build --> Preview["Cloudflare preview"]
 ```
 
 ## Assets and security objectives
@@ -102,7 +100,7 @@ flowchart TD
 | Admin mutation APIs | POST/PUT/PATCH/DELETE | Browser → Laravel/DB/R2 | CSRF, origin, admin e capability | `routes/web.php:54-115` |
 | Media redirect | GET `/media/{path}` | Internet → Laravel → R2 | Apenas foto publicada e URL assinada | `MediaController.php:17-25` |
 | Media upload | POST `/api/admin/properties/{id}/photos/upload` | Admin → Laravel → R2 | Multipart server-side, MIME/tamanho/dimensões/ownership | `routes/web.php:62-71`, `AdminPropertyController.php`, `R2Storage.php` |
-| CI/release | Git push/workflow/SSH | Developer → CI → HostGator/preview | SHA/branch/known hosts | `.github/workflows/hostgator-deploy-gated.yml:20-83`, `scripts/deploy-hostgator.sh:26-81` |
+| CI/release | Git push/workflow/SSH | Developer → CI → HostGator | SHA/branch/known hosts | `.github/workflows/hostgator-deploy-gated.yml:20-83`, `scripts/deploy-hostgator.sh:26-81` |
 
 ## Top abuse paths
 
@@ -153,12 +151,11 @@ flowchart TD
 | `scripts/deploy-hostgator.sh` | Integridade do checkout e promoção | TM-007, TM-009 |
 | `.github/workflows/hostgator-deploy-gated.yml` | Aprovação, secrets e entrega SSH | TM-007 |
 | `.github/workflows/ci.yml` | CodeQL, dependency/secret checks e builds | TM-007 |
-| `wrangler.jsonc` | Separação declarada entre preview e produção | TM-007 |
 | `docs/CURRENT-PRODUCTION-STATE.md` | Estado operacional consumido por deploy/incident response | TM-009 |
 
 ## Notes on use
 
-- O modelo separa runtime HostGator de preview Node/Cloudflare e de CI/build.
+- O modelo separa o runtime HostGator do toolchain Node usado no build e dos checks de CI.
 - O check local de secrets e o `pnpm audit` passaram; Composer audit local ficou bloqueado pela ausência do binário, enquanto o security check remoto passou.
 - Health público, headers e redirect OAuth são evidência de disponibilidade/configuração observada, não prova de autenticação E2E, R2 real, proxy real ou DR.
 - Nenhuma ação destrutiva, publicação, alteração de DNS ou deploy foi feita. As correções locais foram aplicadas e validadas após a auditoria.

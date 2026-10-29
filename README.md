@@ -2,9 +2,9 @@
 
 Site institucional, catálogo imobiliário e CRM da Gisley Nunes Imóveis.
 
-## Backend da branch de migração
+## Backend
 
-O runtime principal está sendo migrado de **Node.js/Express para Laravel/PHP + MySQL**, mantendo os contratos usados pelo frontend e pelo painel administrativo.
+O runtime oficial é **Laravel/PHP + MySQL**. O backend Node.js/Express legado e o preview correspondente foram removidos.
 
 - Laravel / PHP 8.2+
 - MySQL
@@ -16,7 +16,7 @@ O runtime principal está sendo migrado de **Node.js/Express para Laravel/PHP + 
 - CSRF, validação de origem, rate limiting e headers de segurança
 - auditoria de ações críticas
 
-O código Express anterior permanece temporariamente como referência durante a validação da migração, mas não será usado no runtime Laravel.
+Node.js permanece somente como ferramenta de build dos assets estáticos do frontend; não existe runtime Node na aplicação.
 
 ## Desenvolvimento
 
@@ -28,7 +28,7 @@ php artisan migrate
 php artisan serve
 ```
 
-O frontend público e o painel usam assets estáticos em `public/assets` e `public/admin`; Node.js não será necessário em produção. O script `pnpm preview` força `NODE_ENV=development` para compatibilidade local/CI; qualquer inicialização do Node em `NODE_ENV=production` falha fechado, e o preview não executa migrations.
+O frontend público e o painel usam assets estáticos em `public/assets` e `public/admin`. Node.js é usado apenas durante o build; produção executa somente Laravel em PHP-FPM.
 
 ## Produção — HostGator / PHP-FPM
 
@@ -45,8 +45,7 @@ manualmente.
 pnpm install --frozen-lockfile
 pnpm build
 pnpm test:source
-pnpm build:preview
-pnpm test
+pnpm security:secrets
 ```
 
 Consulte [`docs/FRONTEND-SOURCE-OF-TRUTH.md`](docs/FRONTEND-SOURCE-OF-TRUTH.md)
