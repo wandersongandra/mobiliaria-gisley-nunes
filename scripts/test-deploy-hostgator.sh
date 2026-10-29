@@ -20,8 +20,21 @@ cleanup() {
 
 trap cleanup EXIT HUP INT TERM
 
-mkdir -p "$PROJECT_ROOT/public" "$PROJECT_ROOT/storage" "$PROJECT_ROOT/bootstrap/cache" "$MOCK_BIN" "$TMP_DIR"
+mkdir -p "$PROJECT_ROOT/public/assets" "$PROJECT_ROOT/public/admin" "$PROJECT_ROOT/public/images" \
+    "$PROJECT_ROOT/storage" "$PROJECT_ROOT/bootstrap/cache" "$MOCK_BIN" "$TMP_DIR"
 touch "$PROJECT_ROOT/public/.user.ini"
+PUBLIC_FILES=(
+    "$PROJECT_ROOT/public/index.php" "$PROJECT_ROOT/public/.htaccess"
+    "$PROJECT_ROOT/public/assets/main.css" "$PROJECT_ROOT/public/assets/main.js"
+    "$PROJECT_ROOT/public/admin/index.html" "$PROJECT_ROOT/public/admin/main.js"
+    "$PROJECT_ROOT/public/admin/refinements.css" "$PROJECT_ROOT/public/admin/styles.css"
+    "$PROJECT_ROOT/public/images/logo.jpeg"
+)
+touch "${PUBLIC_FILES[@]}"
+touch "$PROJECT_ROOT/public/assets/.env"
+# Reproduz permissões geradas por um checkout sob umask 077.
+chmod 0700 "$PROJECT_ROOT/public" "$PROJECT_ROOT/public/assets" "$PROJECT_ROOT/public/admin" "$PROJECT_ROOT/public/images"
+chmod 0600 "${PUBLIC_FILES[@]}" "$PROJECT_ROOT/public/.user.ini" "$PROJECT_ROOT/public/assets/.env"
 
 cat > "$MOCK_BIN/git" <<'MOCK'
 #!/usr/bin/env bash
@@ -114,6 +127,11 @@ if [[ "$url" == *'fpm_probe='* ]]; then
     else
         printf '%s' '{"php_version":"8.2.35","sapi":"fpm-fcgi","patched":true,"upload_progress_disabled":true,"post_max_bounded":true,"secure":true}' > "$body"
     fi
+elif [[ "$url" == *'deploy_asset_probe='* ]]; then
+    printf 'public_asset_probe=present\n' >> "$CURL_AUDIT_FILE"
+    if [[ "${CURL_MODE:-success}" == 'asset-blocked' ]]; then
+        exit 22
+    fi
 else
     printf '%s' '{"status":"ok"}'
 fi
@@ -179,12 +197,30 @@ run_deploy_signal() {
 
 run_deploy
 grep -Fxq 'artisan app:assert-migrations-current --no-ansi' "$PHP_AUDIT_FILE"
+for public_file in "${PUBLIC_FILES[@]}"; do
+    test "$(stat -c '%a' "$public_file")" = '644'
+done
+for public_dir in "$PROJECT_ROOT/public" "$PROJECT_ROOT/public/assets" "$PROJECT_ROOT/public/admin" "$PROJECT_ROOT/public/images"; do
+    test "$(stat -c '%a' "$public_dir")" = '755'
+done
+test "$(stat -c '%a' "$PROJECT_ROOT/public/.user.ini")" = '600'
+test "$(stat -c '%a' "$PROJECT_ROOT/public/assets/.env")" = '600'
+test "$(grep -c '^public_asset_probe=present$' "$CURL_AUDIT_FILE")" -eq 6
 assert_absent "$PROJECT_ROOT/public/.fpm_sec_check.*.php"
 assert_absent "$TMP_DIR/gisley-fpm-*"
 test ! -e "$PROJECT_ROOT/.deploy-lock"
 grep -q '^request_cache_control=present$' "$CURL_AUDIT_FILE"
 grep -q '^request_pragma=present$' "$CURL_AUDIT_FILE"
 grep -q '^cache_buster=present$' "$CURL_AUDIT_FILE"
+
+# Falha HTTP em qualquer asset bloqueia o deploy, mesmo com health saudável.
+set +e
+CURL_MODE=asset-blocked run_deploy > /dev/null 2>"$TEST_ROOT/asset-denied.err"
+asset_denied_status=$?
+set -e
+test "$asset_denied_status" -ne 0
+grep -q 'asset público indisponível' "$TEST_ROOT/asset-denied.err"
+test ! -e "$PROJECT_ROOT/.deploy-lock"
 
 # Mudanças de migration devem bloquear antes do checkout se a execução
 # de migrations não foi autorizada para essa janela.

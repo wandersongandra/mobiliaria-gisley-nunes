@@ -50,6 +50,30 @@ trap 'handle_signal 143' TERM
 
 umask 077
 
+# O umask restritivo protege segredos, caches e a sonda PHP efêmera. Porém,
+# arquivos públicos extraídos pelo checkout sob 077 podem ficar em 0600 e
+# diretórios em 0700, causando HTTP 403 no LiteSpeed/Apache. Ajuste somente
+# os caminhos estáticos conhecidos; não abra permissões de .env, storage,
+# bootstrap/cache, .user.ini ou arquivos não públicos.
+restore_public_permissions() {
+    local public_path public_dir
+
+    public_path="$PROJECT_ROOT/public"
+    [[ -d "$public_path" && ! -L "$public_path" ]] || fail 'diretório public inválido'
+    chmod 0755 -- "$public_path" || fail 'falha ao ajustar permissões de public'
+
+    for public_path in "$PROJECT_ROOT/public/index.php" "$PROJECT_ROOT/public/.htaccess"; do
+        [[ -f "$public_path" && ! -L "$public_path" ]] || fail "arquivo público inválido: $public_path"
+        chmod 0644 -- "$public_path" || fail "falha ao ajustar permissões: $public_path"
+    done
+
+    for public_dir in "$PROJECT_ROOT/public/assets" "$PROJECT_ROOT/public/admin" "$PROJECT_ROOT/public/images"; do
+        [[ -d "$public_dir" && ! -L "$public_dir" ]] || fail "diretório estático inválido: $public_dir"
+        find "$public_dir" -type d -exec chmod 0755 -- {} + || fail "falha nas permissões dos diretórios: $public_dir"
+        find "$public_dir" -type f ! -name '.*' -exec chmod 0644 -- {} + || fail "falha nas permissões dos arquivos: $public_dir"
+    done
+}
+
 if [[ "${ALLOW_HOSTGATOR_DEPLOY:-0}" != "1" ]]; then
     fail 'execução desabilitada; defina ALLOW_HOSTGATOR_DEPLOY=1 somente durante uma janela autorizada'
 fi
@@ -91,6 +115,7 @@ printf 'previous_sha=%s\nrequested_sha=%s\nbranch=%s\n' "$previous_sha" "$DEPLOY
 
 git checkout --detach "$DEPLOY_SHA"
 [[ "$(git rev-parse HEAD)" == "$DEPLOY_SHA" ]] || fail 'checkout não chegou ao SHA solicitado'
+restore_public_permissions
 
 "$COMPOSER_BIN" validate --strict --no-interaction
 "$COMPOSER_BIN" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
@@ -113,6 +138,19 @@ touch "$PROJECT_ROOT/public/.user.ini" || fail 'não foi possível atualizar o m
 BASE_URL="$(printf '%s' "$HEALTH_URL" | sed -E 's|^(https?://[^/]+).*|\1|')"
 [[ "$BASE_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] \
     || fail 'HEALTH_URL deve usar HTTPS e um host simples do mesmo vhost'
+
+# Checagem real sem cache: uma falha de permissões nunca pode passar pelo
+# gate e deixar a página sem CSS/JS mesmo com /health/live saudável.
+ASSET_CACHE_BUSTER="$(openssl rand -hex 16)" || fail 'falha ao gerar cache-buster de assets'
+for public_asset in \
+    /assets/main.css /assets/main.js \
+    /admin/index.html /admin/main.js /admin/refinements.css /admin/styles.css; do
+    curl --fail --silent --show-error --max-time 15 \
+        --output /dev/null \
+        -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+        "$BASE_URL$public_asset?deploy_asset_probe=$ASSET_CACHE_BUSTER" \
+        || fail "asset público indisponível após checkout: $public_asset"
+done
 
 # O arquivo e o token são imprevisíveis. O arquivo temporário recebe modo 600;
 # o worker PHP web deve executar sob o usuário da conta que faz o deploy.
