@@ -1,5 +1,7 @@
-# Revisão obrigatória para mudanças sensíveis.
-# O proprietario e responsavel pela revisao. O autor nao pode aprovar sua propria PR.\n# Exigir uma aprovacao formal sem segundo revisor bloquearia as PRs do proprio proprietario.
+# Responsabilidade técnica pelos arquivos sensíveis.
+# O proprietário responde pela revisão manual, mas o GitHub não permite
+# que o autor aprove sua própria PR. Exigir um segundo aprovador bloquearia
+# as PRs do único proprietário até existir outro revisor independente.
 * @wandersongandra
 
 .github/ @wandersongandra
