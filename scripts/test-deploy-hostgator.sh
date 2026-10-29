@@ -11,6 +11,7 @@ MOCK_BIN="$TEST_ROOT/bin"
 TMP_DIR="$TEST_ROOT/tmp"
 GIT_STATE="$TEST_ROOT/git-checked-out"
 CURL_AUDIT_FILE="$TEST_ROOT/curl-audit"
+PHP_AUDIT_FILE="$TEST_ROOT/php-audit"
 REAL_PHP_BIN="$(command -v php || true)"
 
 cleanup() {
@@ -39,6 +40,7 @@ case "${1:-} ${2:-}" in
         ;;
     'checkout --detach') touch "$GIT_STATE" ;;
     'cat-file -e'|'merge-base --is-ancestor'|'fetch --prune'|'show-ref --verify') exit 0 ;;
+    'diff --quiet') [[ "${GIT_DIFF_MIGRATIONS_CHANGED:-0}" != '1' ]] ;;
     *) exit 0 ;;
 esac
 MOCK
@@ -61,6 +63,13 @@ if [[ "${1:-}" == '-r' ]]; then
         printf '0'
     else
         printf '1'
+    fi
+fi
+
+if [[ "${1:-}" == 'artisan' ]]; then
+    printf '%s\n' "$*" >> "$PHP_AUDIT_FILE"
+    if [[ "${2:-}" == 'app:assert-migrations-current' && "${PENDING_MIGRATIONS:-0}" == '1' ]]; then
+        exit 1
     fi
 fi
 MOCK
@@ -140,9 +149,12 @@ run_deploy() {
         COMPOSER_BIN="$MOCK_BIN/composer" \
         PHP_BIN="$MOCK_BIN/php" \
         HEALTH_URL='https://staging.example.test/health/live' \
-        RUN_MIGRATIONS=0 \
+        RUN_MIGRATIONS="${RUN_MIGRATIONS:-0}" \
         GIT_STATE="$GIT_STATE" \
         CURL_AUDIT_FILE="$CURL_AUDIT_FILE" \
+        PHP_AUDIT_FILE="$PHP_AUDIT_FILE" \
+        GIT_DIFF_MIGRATIONS_CHANGED="${GIT_DIFF_MIGRATIONS_CHANGED:-0}" \
+        PENDING_MIGRATIONS="${PENDING_MIGRATIONS:-0}" \
         CURL_MODE="${CURL_MODE:-success}" \
         REAL_PHP_BIN="$REAL_PHP_BIN" \
         setsid bash "$DEPLOY_SCRIPT"
@@ -154,7 +166,7 @@ run_deploy_signal() {
     export DEPLOY_BRANCH='migration/laravel-backend-2026-10-02'
     export DEPLOY_SHA='2222222222222222222222222222222222222222'
     export PROJECT_ROOT LOCK_DIR DEPLOY_STATE_FILE TMPDIR COMPOSER_BIN PHP_BIN HEALTH_URL RUN_MIGRATIONS
-    export GIT_STATE CURL_AUDIT_FILE CURL_MODE REAL_PHP_BIN
+    export GIT_STATE CURL_AUDIT_FILE CURL_MODE REAL_PHP_BIN PHP_AUDIT_FILE
     LOCK_DIR="$PROJECT_ROOT/.deploy-lock"
     DEPLOY_STATE_FILE="$PROJECT_ROOT/.deploy-state"
     TMPDIR="$TMP_DIR"
@@ -166,12 +178,36 @@ run_deploy_signal() {
 }
 
 run_deploy
+grep -Fxq 'artisan app:assert-migrations-current --no-ansi' "$PHP_AUDIT_FILE"
 assert_absent "$PROJECT_ROOT/public/.fpm_sec_check.*.php"
 assert_absent "$TMP_DIR/gisley-fpm-*"
 test ! -e "$PROJECT_ROOT/.deploy-lock"
 grep -q '^request_cache_control=present$' "$CURL_AUDIT_FILE"
 grep -q '^request_pragma=present$' "$CURL_AUDIT_FILE"
 grep -q '^cache_buster=present$' "$CURL_AUDIT_FILE"
+
+# Mudanças de migration devem bloquear antes do checkout se a execução
+# de migrations não foi autorizada para essa janela.
+set +e
+GIT_DIFF_MIGRATIONS_CHANGED=1 run_deploy > /dev/null 2>"$TEST_ROOT/migration-diff.err"
+migration_diff_status=$?
+set -e
+test "$migration_diff_status" -ne 0
+grep -q 'migrations alteradas' "$TEST_ROOT/migration-diff.err"
+test ! -e "$PROJECT_ROOT/.deploy-lock"
+
+# Mesmo sem diff de arquivos, schema atrasado nunca pode passar como deploy verde.
+set +e
+PENDING_MIGRATIONS=1 run_deploy > /dev/null 2>"$TEST_ROOT/migration-pending.err"
+migration_pending_status=$?
+set -e
+test "$migration_pending_status" -ne 0
+test ! -e "$PROJECT_ROOT/.deploy-lock"
+
+# Com migrations habilitadas, o diff de schema deixa de bloquear o script.
+RUN_MIGRATIONS=1 GIT_DIFF_MIGRATIONS_CHANGED=1 run_deploy
+grep -Fxq 'artisan migrate --force --no-ansi' "$PHP_AUDIT_FILE"
+test ! -e "$PROJECT_ROOT/.deploy-lock"
 
 # LSAPI é permitido somente com todos os controles de PHP2Shell satisfeitos.
 CURL_MODE=litespeed run_deploy
