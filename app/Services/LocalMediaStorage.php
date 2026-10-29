@@ -408,6 +408,7 @@ class LocalMediaStorage
         }
 
         $limitBytes = self::parseMemoryLimit($limit);
+
         return $limitBytes <= 0 || memory_get_usage(true) + $bytesNeeded < $limitBytes;
     }
 
@@ -418,6 +419,7 @@ class LocalMediaStorage
         }
 
         $value = (int) $limit;
+
         return match (strtolower(substr($limit, -1))) {
             'g' => $value * 1024 * 1024 * 1024,
             'm' => $value * 1024 * 1024,
