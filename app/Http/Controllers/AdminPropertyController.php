@@ -238,7 +238,9 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'PHOTO_LIMIT_REACHED'], 409);
         }
 
-        $file = $request->file('photo');
+        // Aceita o contrato atual (file) e preserva compatibilidade com o
+        // payload legado (photo) durante a transição do painel.
+        $file = $request->file('file') ?? $request->file('photo');
         if (! $file || ! $file->isValid()) {
             throw new RuntimeException('INVALID_FILE');
         }

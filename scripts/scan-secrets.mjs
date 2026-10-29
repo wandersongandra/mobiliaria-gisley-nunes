@@ -19,7 +19,8 @@ const allowedSecretFingerprints = new Set([
   '6c9548eabf9ae126801c074196b81284ced5623ed1e1d8d6dc3330db1f50a67d',
   'e3fe5a2828ef845aef6fe762bcb6fa7abb664d2d0604499c817bf511b98bd4a8',
   'acffdb356f84071a45619fd1228aa092b3c3b07a2b1995457c851e0eaabad5dc',
-  '4c8a4911db7c3812e5fe5dfd193a262c14df7eca64ed20547a0d2f685eab47a0'
+  '4c8a4911db7c3812e5fe5dfd193a262c14df7eca64ed20547a0d2f685eab47a0',
+  'e645fed262cf9abb750b3fdb17e33e87cc14219b0b15f9755084b6825da6d019'
 ]);
 
 function fingerprint(value) {
@@ -71,7 +72,9 @@ function scanText(text, { scope, location }) {
     re.lastIndex = 0;
     for (const match of String(text || '').matchAll(re)) {
       const value = match[0];
-      const captured = String(match[1] || match[2] || match[3] || '').replace(/^['"]|['"]$/g, '');
+      const captured = name === 'database-url'
+        ? String((match[1] || '') + ':' + (match[2] || ''))
+        : String(match[1] || match[2] || match[3] || '').replace(/^['"]|['"]$/g, '');
       if (allowed(value, captured, location, name)) continue;
       if (name === 'sensitive-env' && captured.length < 20) continue;
       findings.push({

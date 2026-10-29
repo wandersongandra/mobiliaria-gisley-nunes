@@ -16,6 +16,7 @@ let propertySearchTimer = 0;
 let propertyLoadSequence = 0;
 let leadLoadSequence = 0;
 let teamLoading = false;
+let teamRefreshQueued = false;
 let leadsLoaded = false;
 let propertyRequestController = null;
 let leadRequestController = null;
@@ -29,26 +30,6 @@ const confirmDialog = $('#confirm-dialog');
 const form = $('#property-form');
 const skipLink = document.querySelector('.skip-link');
 const dashboardMain = dashboard?.querySelector('main');
-
-function publicSiteOrigin() {
-  const configured = document.documentElement.dataset.publicOrigin?.trim();
-  if (configured) return configured.replace(/\/+$/, '');
-
-  const host = window.location.hostname.toLowerCase();
-  if (host === 'painel.gisleynunesimoveis.com.br') return 'https://www.gisleynunesimoveis.com.br';
-  if (host.startsWith('painel.')) return `${window.location.protocol}//${host.slice('painel.'.length)}`;
-  if (['localhost', '127.0.0.1', '::1'].includes(host)) return 'https://www.gisleynunesimoveis.com.br';
-  return window.location.origin;
-}
-
-function syncPublicSiteLinks() {
-  const origin = publicSiteOrigin();
-  document.querySelectorAll('[data-public-site-link]').forEach((link) => {
-    link.href = `${origin}/`;
-  });
-}
-
-syncPublicSiteLinks();
 
 loginScreen?.setAttribute('role', 'main');
 
@@ -64,25 +45,6 @@ if (dashboardHeading && dashboardHeading.tagName !== 'H1') {
 function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]); }
 function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(value)) : 'agora'; }
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }
-
-function buildPropertyPayload(rawData, { isManager, wantsPublished, isFeatured }) {
-  const data = { ...rawData };
-  data.featured = Boolean(isManager && isFeatured);
-  data.status = isManager && wantsPublished ? 'published' : 'draft';
-  delete data.published;
-  if (!String(data.priceLabel ?? '').trim()) delete data.priceLabel;
-  return data;
-}
-
-function buildInitialPropertyPayload(data, preserveDraft) {
-  const payload = { ...data };
-  if (preserveDraft) {
-    payload.status = 'draft';
-    payload.featured = false;
-  }
-  delete payload.published;
-  return payload;
-}
 
 function confirmAction({ title = 'Confirmar ação', message = 'Deseja continuar?' } = {}) {
   if (!confirmDialog) return Promise.resolve(false);
@@ -132,6 +94,35 @@ async function request(url, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+async function download(url, options = {}) {
+  const headers = { Accept: '*/*', ...(options.headers || {}) };
+  const method = String(options.method || 'GET').toUpperCase();
+  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrfToken) {
+    headers['X-CSRF-Token'] = state.csrfToken;
+  }
+
+  const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
+  if (response.status === 401) { showLogin(); throw new Error('AUTH_REQUIRED'); }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || (response.status === 422 ? 'VALIDATION_FAILED' : 'REQUEST_FAILED'));
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || 'leads-export';
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
 function clearSensitiveState() {
   propertyRequestController?.abort();
   leadRequestController?.abort();
@@ -141,6 +132,7 @@ function clearSensitiveState() {
   leadLoadSequence += 1;
   teamLoadSequence += 1;
   teamLoading = false;
+  teamRefreshQueued = false;
   state.user = null;
   state.csrfToken = '';
   state.properties = [];
@@ -296,7 +288,7 @@ function renderProperties() {
 
 function fillForm(property = {}) {
   for (const [key, value] of Object.entries({ title: property.title || '', location: property.location || '', city: property.city || 'Belo Horizonte', purpose: property.purpose || 'Comprar', type: property.type || 'Apartamento', price: property.price || '', priceLabel: property.price_label || '', bedrooms: property.bedrooms ?? 2, bathrooms: property.bathrooms ?? 2, areaM2: property.area_m2 ?? 80, suites: property.suites ?? 0, parkingSpots: property.parking_spots ?? 0, condoFee: property.condo_fee ?? 0, iptu: property.iptu ?? 0, description: property.description || '' })) { if (form.elements[key]) form.elements[key].value = value; }
-  form.elements.published.checked = property.status === 'published';
+  form.elements.published.checked = property.status !== 'draft' && property.status !== 'archived';
   form.elements.featured.checked = Boolean(property.is_featured);
 }
 function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
@@ -433,19 +425,21 @@ async function saveProperty(event) {
   setButtonPending(button, true, 'Salvando…');
   toast('Salvando alterações…');
 
+  const data = Object.fromEntries(new FormData(form));
   const isManager = state.user?.role === 'manager';
-  const data = buildPropertyPayload(Object.fromEntries(new FormData(form)), {
-    isManager,
-    wantsPublished: Boolean(form.elements.published?.checked),
-    isFeatured: Boolean(form.elements.featured?.checked),
-  });
+  data.featured = isManager && form.elements.featured.checked;
+  data.status = isManager && form.elements.published.checked ? 'published' : 'draft';
+  // `published` is a UI-only field; the backend contract accepts `status`.
+  delete data.published;
 
   let propertySaved = false;
   const publishAfterUpload = data.status === 'published'
     && state.pendingFiles.length > 0
     && !state.editing?.photos?.some((photo) => photo.is_cover);
   try {
-    const initialData = buildInitialPropertyPayload(data, publishAfterUpload);
+    const initialData = publishAfterUpload
+      ? { ...data, status: 'draft', featured: false }
+      : data;
     const result = await request(
       state.editing ? `/api/admin/properties/${state.editing.id}` : '/api/admin/properties',
       { method: state.editing ? 'PUT' : 'POST', body: JSON.stringify(initialData) }
@@ -470,7 +464,7 @@ async function saveProperty(event) {
     } else if (propertySaved) {
       await loadProperties();
       renderEditorPhotos();
-      toast(['INVALID_IMAGE', 'INVALID_IMAGE_TYPE', 'INVALID_IMAGE_DIMENSIONS'].includes(error.message)
+      toast(['INVALID_IMAGE', 'INVALID_IMAGE_DIMENSIONS'].includes(error.message)
         ? 'A imagem excede as dimensões permitidas. Escolha outra foto.'
         : state.pendingFiles.length
           ? 'Imóvel salvo. Algumas fotos ficaram pendentes; tente enviá-las novamente.'
@@ -540,72 +534,13 @@ async function imageDimensions(file) {
   });
 }
 
-function imageSignatureContentType(bytes) {
-  const value = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
-  if (value.length >= 3 && value[0] === 0xff && value[1] === 0xd8 && value[2] === 0xff) return 'image/jpeg';
-  if (value.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, index) => value[index] === byte)) return 'image/png';
-  if (value.length >= 12
-    && String.fromCharCode(...value.slice(0, 4)) === 'RIFF'
-    && String.fromCharCode(...value.slice(8, 12)) === 'WEBP') return 'image/webp';
-  if (value.length >= 16 && String.fromCharCode(...value.slice(4, 8)) === 'ftyp') {
-    const brands = String.fromCharCode(...value.slice(8, Math.min(value.length, 32)));
-    if (brands.includes('avif') || brands.includes('avis')) return 'image/avif';
-  }
-  return '';
-}
-
-async function imageContentType(file) {
-  const declaredType = String(file?.type || '').toLowerCase();
-  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
-  if (allowedTypes.has(declaredType)) return declaredType;
-
-  const extension = String(file?.name || '').split('.').pop()?.toLowerCase();
-  const byExtension = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    webp: 'image/webp',
-    avif: 'image/avif'
-  }[extension];
-  if (byExtension) return byExtension;
-
-  if (file?.slice && typeof file.slice(0, 32).arrayBuffer === 'function') {
-    try {
-      return imageSignatureContentType(await file.slice(0, 32).arrayBuffer());
-    } catch {
-      return '';
-    }
-  }
-  return '';
-}
-
-function imageUploadName(file, contentType) {
-  const extensions = {
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'image/avif': 'avif'
-  };
-  const extension = extensions[contentType] || 'jpg';
-  const original = String(file?.name || '').trim();
-  const originalExtension = original.split('.').pop()?.toLowerCase();
-  const validExtensions = new Set(['jpg', 'jpeg', 'png', 'webp', 'avif']);
-  if (original && validExtensions.has(originalExtension)) return original;
-  const base = (original.replace(/\.[^.]*$/, '') || 'imagem').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'imagem';
-  return `${base}.${extension}`;
-}
-
 async function uploadPendingFiles(propertyId) {
   let uploadedCount = 0;
 
   while (state.pendingFiles.length) {
     const file = state.pendingFiles[0];
-    const contentType = await imageContentType(file);
-    const fileName = imageUploadName(file, contentType);
     const existingPhotoCount = state.editing?.photos?.length || 0;
     toast(`Enviando foto ${uploadedCount + 1}…`);
-
-    if (!contentType) throw new Error('INVALID_IMAGE_TYPE');
 
     let dimensions;
     try {
@@ -618,15 +553,15 @@ async function uploadPendingFiles(propertyId) {
       || dimensions.width > 20000 || dimensions.height > 20000) {
       throw new Error('INVALID_IMAGE_DIMENSIONS');
     }
-    const body = new FormData();
-    body.append('photo', file, fileName);
-    body.append('altText', fileName.replace(/\.[^.]+$/, ''));
-    body.append('sortOrder', String(existingPhotoCount));
-    body.append('isCover', String(!state.editing?.photos?.some((photo) => photo.is_cover)));
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    formData.append('altText', file.name.replace(/\.[^.]+$/, ''));
+    formData.append('sortOrder', String(existingPhotoCount));
+    formData.append('isCover', String(!state.editing?.photos?.some((photo) => photo.is_cover)));
 
     const result = await request(`/api/admin/properties/${propertyId}/photos/upload`, {
       method: 'POST',
-      body
+      body: formData
     });
 
     state.editing = { ...state.editing, photos: result.photos };
@@ -732,7 +667,9 @@ function switchView(name) {
     else link.removeAttribute('aria-current');
   });
   if (activeView) {
-    const heading = activeView.querySelector('h1, h2, h3');
+    const heading = activeView.id === 'dashboard-view'
+      ? dashboardHeading
+      : activeView.querySelector('h1, h2, h3');
     if (heading) {
       heading.tabIndex = -1;
       heading.focus();
@@ -745,6 +682,9 @@ function switchView(name) {
 
 function viewFromHash() {
   const view = window.location.hash.slice(1);
+  if (view === 'admin-main') {
+    return document.querySelector('.admin-view:not([hidden])')?.id || 'dashboard-view';
+  }
   const link = [...document.querySelectorAll('.side-nav a[data-view]')]
     .find((item) => item.dataset.view === view && !item.hidden);
   return link?.dataset.view || 'dashboard-view';
@@ -993,7 +933,10 @@ function renderTeamInvitations() {
 }
 
 async function loadTeam() {
-  if (teamLoading) return;
+  if (teamLoading) {
+    teamRefreshQueued = true;
+    return;
+  }
   teamLoading = true;
   const controller = new AbortController();
   teamRequestController?.abort();
@@ -1020,6 +963,10 @@ async function loadTeam() {
     if (generation === teamLoadSequence) {
       teamRequestController = null;
       teamLoading = false;
+      if (teamRefreshQueued) {
+        teamRefreshQueued = false;
+        void loadTeam();
+      }
     }
   }
 }
@@ -1066,7 +1013,7 @@ function ensureLeadsPanel() {
   const panel = document.createElement('section');
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><a class="outline-button lead-export" data-lead-export="csv" href="/api/admin/leads/export?format=csv">Exportar CSV</a><a class="outline-button lead-export" data-lead-export="json" href="/api/admin/leads/export?format=json">Exportar JSON</a></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
+  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><button class="outline-button lead-export" data-lead-export="csv" type="button">Exportar CSV</button><button class="outline-button lead-export" data-lead-export="json" type="button">Exportar JSON</button></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
   metrics.insertAdjacentElement('afterend', panel);
   $('#lead-filters').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -1098,6 +1045,21 @@ function ensureLeadsPanel() {
     state.leadFilters.page = button.dataset.leadPage === 'next' ? Math.min(last, current + 1) : Math.max(1, current - 1);
     void loadLeads();
   }));
+  panel.querySelectorAll('[data-lead-export]').forEach((button) => button.addEventListener('click', async () => {
+    const payload = { format: button.dataset.leadExport };
+    for (const key of ['status', 'date_from', 'date_to']) {
+      if (state.leadFilters[key]) payload[key] = state.leadFilters[key];
+    }
+
+    button.disabled = true;
+    try {
+      await download('/api/admin/leads/export', { method: 'POST', body: JSON.stringify(payload) });
+    } catch (error) {
+      toast(error.message === 'AUTH_REQUIRED' ? 'Sua sessão expirou.' : 'Não foi possível exportar os contatos.', 'error');
+    } finally {
+      button.disabled = false;
+    }
+  }));
   return panel;
 }
 
@@ -1121,15 +1083,6 @@ function renderLeads() {
     filters.elements.date_to.value = state.leadFilters.date_to;
     filters.elements.per_page.value = String(state.leadFilters.per_page);
   }
-  const exportParams = new URLSearchParams();
-  for (const key of ['status', 'date_from', 'date_to']) {
-    if (state.leadFilters[key]) exportParams.set(key, state.leadFilters[key]);
-  }
-  panel.querySelectorAll('[data-lead-export]').forEach((link) => {
-    const params = new URLSearchParams(exportParams);
-    params.set('format', link.dataset.leadExport);
-    link.href = `/api/admin/leads/export?${params.toString()}`;
-  });
   const pagination = state.leadPagination;
   $('#lead-page-summary').textContent = pagination?.total ? `Exibindo ${pagination.from}–${pagination.to} de ${pagination.total}` : 'Nenhum contato encontrado';
   panel.querySelector('[data-lead-page="previous"]').disabled = !pagination || pagination.current_page <= 1;
@@ -1314,12 +1267,10 @@ $('#logout-button')?.addEventListener('click', () => { void performLogout(); });
 $('#logout-all-button')?.addEventListener('click', () => { void performLogout({ all: true }); });
 form.addEventListener('submit', saveProperty);
 $('#photo-upload-trigger')?.addEventListener('click', () => $('#photo-input')?.click());
-$('#photo-input').addEventListener('change', async (event) => {
+$('#photo-input').addEventListener('change', (event) => {
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
   const incoming = Array.from(event.target.files || []);
-  const classified = await Promise.all(incoming.map(async (file) => ({ file, contentType: await imageContentType(file) })));
-  const valid = classified
-    .filter(({ file, contentType }) => contentType && file.size > 0 && file.size <= 12 * 1024 * 1024)
-    .map(({ file }) => file);
+  const valid = incoming.filter((file) => allowed.has(file.type) && file.size > 0 && file.size <= 12 * 1024 * 1024);
   const available = Math.max(0, 40 - ((state.editing?.photos?.length || 0) + state.pendingFiles.length));
   state.pendingFiles.push(...valid.slice(0, available));
 

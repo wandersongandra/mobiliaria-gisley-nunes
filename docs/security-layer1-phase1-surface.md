@@ -78,7 +78,7 @@ Todas as rotas abaixo passam, antes da lógica de negócio, por:
 | GET | `/api/admin/properties/:id` | Autenticado |
 | PUT | `/api/admin/properties/:id` | Autenticado |
 | DELETE | `/api/admin/properties/:id` | Autenticado |
-| POST | `/api/admin/uploads/presign` | Autenticado |
+| POST | `/api/admin/properties/:id/photos/upload` | Autenticado |
 | POST | `/api/admin/properties/:id/photos` | Autenticado |
 | DELETE | `/api/admin/photos/:id` | Autenticado |
 | PUT | `/api/admin/properties/:id/photos/order` | Autenticado |

@@ -312,13 +312,28 @@ class LocalMediaStorage
             return null;
         }
 
-        $details = @getimagesizefromstring($bytes);
+        $expectedMime = strtolower(trim($contentType));
+        if (! in_array($expectedMime, self::IMAGE_MIME_TYPES, true)
+            || ! self::validateMagicBytes($bytes, $expectedMime)
+            || ! self::hasMemoryFor(strlen($bytes) * 2)) {
+            return null;
+        }
+
+        $details = false;
+        set_error_handler(static function (): bool {
+            return true;
+        }, E_WARNING | E_NOTICE);
+        try {
+            $result = getimagesizefromstring($bytes);
+            $details = $result === false ? false : $result;
+        } finally {
+            restore_error_handler();
+        }
         if ($details === false) {
             return null;
         }
 
         $actualMime = strtolower($details['mime']);
-        $expectedMime = strtolower(trim($contentType));
         $width = (int) $details[0];
         $height = (int) $details[1];
 
@@ -330,6 +345,87 @@ class LocalMediaStorage
         }
 
         return ['width' => $width, 'height' => $height, 'mime' => $actualMime];
+    }
+
+    private const MAGIC_BYTES = [
+        'image/jpeg' => ["\xFF\xD8\xFF"],
+        'image/png' => ["\x89\x50\x4E\x47\x0D\x0A\x1A\x0A"],
+        'image/webp' => ['RIFF'],
+        'image/avif' => [],
+    ];
+
+    private const MAGIC_BYTES_OFFSET = [
+        'image/webp' => [['offset' => 8, 'value' => 'WEBP']],
+    ];
+
+    private const AVIF_BRANDS = ['avif', 'avis', 'mif1'];
+
+    private static function validateMagicBytes(string $bytes, string $expectedMime): bool
+    {
+        if (strlen($bytes) >= 3 && str_starts_with($bytes, "\xEF\xBB\xBF")) {
+            return false;
+        }
+
+        if ($expectedMime === 'image/avif') {
+            return strlen($bytes) >= 12
+                && substr($bytes, 4, 4) === 'ftyp'
+                && in_array(strtolower(substr($bytes, 8, 4)), self::AVIF_BRANDS, true);
+        }
+
+        $prefixes = self::MAGIC_BYTES[$expectedMime] ?? null;
+        if ($prefixes === null) {
+            return false;
+        }
+
+        $matched = false;
+        foreach ($prefixes as $prefix) {
+            if (str_starts_with($bytes, $prefix)) {
+                $matched = true;
+                break;
+            }
+        }
+        if (! $matched) {
+            return false;
+        }
+
+        foreach (self::MAGIC_BYTES_OFFSET[$expectedMime] ?? [] as $check) {
+            $offset = $check['offset'];
+            $value = $check['value'];
+            if (strlen($bytes) < $offset + strlen($value)
+                || substr($bytes, $offset, strlen($value)) !== $value) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function hasMemoryFor(int $bytesNeeded): bool
+    {
+        $limit = trim((string) ini_get('memory_limit'));
+        if ($limit === '' || $limit === '-1') {
+            return true;
+        }
+
+        $limitBytes = self::parseMemoryLimit($limit);
+
+        return $limitBytes <= 0 || memory_get_usage(true) + $bytesNeeded < $limitBytes;
+    }
+
+    private static function parseMemoryLimit(string $limit): int
+    {
+        if ($limit === '' || ctype_digit($limit)) {
+            return (int) $limit;
+        }
+
+        $value = (int) $limit;
+
+        return match (strtolower(substr($limit, -1))) {
+            'g' => $value * 1024 * 1024 * 1024,
+            'm' => $value * 1024 * 1024,
+            'k' => $value * 1024,
+            default => $value,
+        };
     }
 
     private function assertImageContentType(string $contentType): string

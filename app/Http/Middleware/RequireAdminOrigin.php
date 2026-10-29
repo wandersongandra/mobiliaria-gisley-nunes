@@ -14,14 +14,13 @@ class RequireAdminOrigin
             return $next($request);
         }
 
-        $adminOrigin = rtrim((string) config('app.admin_url'), '/');
-        $expectedAuthority = $this->configuredAuthority($adminOrigin);
-        if ($expectedAuthority === null || ! str_starts_with(strtolower($adminOrigin), 'https://')) {
+        $adminOrigin = $this->canonicalOrigin((string) config('app.admin_url'));
+        if ($adminOrigin === null || ! str_starts_with($adminOrigin, 'https://')) {
             return response()->json(['error' => 'ADMIN_ORIGIN_NOT_CONFIGURED'], 503);
         }
 
-        $currentAuthority = $this->requestAuthority($request);
-        if ($currentAuthority !== null && hash_equals($expectedAuthority, $currentAuthority)) {
+        $currentOrigin = $this->canonicalOrigin($request->getSchemeAndHttpHost());
+        if ($currentOrigin !== null && hash_equals($adminOrigin, $currentOrigin)) {
             return $next($request);
         }
 
@@ -41,42 +40,38 @@ class RequireAdminOrigin
             : response('Not Found', 404);
     }
 
-    private function requestAuthority(Request $request): ?string
+    private function canonicalOrigin(string $value): ?string
     {
-        $raw = strtolower(trim((string) $request->headers->get('host', '')));
-        if ($raw === '' || str_contains($raw, ',') || preg_match('/[\x00-\x20\x7F]/', $raw) === 1) {
+        $parts = parse_url($value);
+        if ($parts === false) {
             return null;
         }
 
-        $parts = parse_url('http://'.$raw);
-        if (! is_array($parts)) {
-            return null;
-        }
-
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
         $host = strtolower((string) ($parts['host'] ?? ''));
-        if ($host === '' || preg_match('/^[a-z0-9.-]+$/D', $host) !== 1) {
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
             return null;
         }
 
-        $port = isset($parts['port']) ? (int) $parts['port'] : null;
-
-        return $port !== null && $port !== 443 ? $host.':'.$port : $host;
-    }
-
-    private function configuredAuthority(string $origin): ?string
-    {
-        $parts = parse_url($origin);
-        if (! is_array($parts)) {
+        $path = array_key_exists('path', $parts) ? (string) $parts['path'] : '';
+        if ($path !== '' && $path !== '/') {
+            return null;
+        }
+        if (array_key_exists('query', $parts)
+            || array_key_exists('fragment', $parts)
+            || array_key_exists('user', $parts)
+            || array_key_exists('pass', $parts)) {
             return null;
         }
 
-        $host = strtolower((string) ($parts['host'] ?? ''));
-        if ($host === '' || preg_match('/^[a-z0-9.-]+$/D', $host) !== 1) {
+        $port = $parts['port'] ?? null;
+        if ($port !== null && $port < 1) {
             return null;
         }
+        if ($port !== null && ! (($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80))) {
+            return $scheme.'://'.$host.':'.$port;
+        }
 
-        $port = isset($parts['port']) ? (int) $parts['port'] : null;
-
-        return $port !== null && $port !== 443 ? $host.':'.$port : $host;
+        return $scheme.'://'.$host;
     }
 }
