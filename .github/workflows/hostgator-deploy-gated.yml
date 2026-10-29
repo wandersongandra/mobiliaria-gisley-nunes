@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: gisley-production
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ inputs.ref == 'migration/laravel-backend-2026-10-02' && inputs.confirm == 'ENABLE_HOSTGATOR_DEPLOY' && vars.HOSTGATOR_DEPLOY_ENABLED == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.ref == 'migration/laravel-backend-2026-10-02' && inputs.confirm == 'ENABLE_HOSTGATOR_DEPLOY' && vars.HOSTGATOR_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -39,13 +40,16 @@ jobs:
       HOSTGATOR_KNOWN_HOSTS: ${{ secrets.HOSTGATOR_KNOWN_HOSTS }}
       REQUESTED_REF: ${{ inputs.ref }}
       DEPLOY_SHA: ${{ inputs.sha }}
+      HEALTH_URL: ${{ vars.HEALTH_URL }}
 
     steps:
       - name: Validate immutable target
         run: |
+          set -euo pipefail
           test "$REQUESTED_REF" = "migration/laravel-backend-2026-10-02"
           test "$DEPLOY_SHA" = "$(git ls-remote https://github.com/${{ github.repository }}.git "refs/heads/$REQUESTED_REF" | awk '{print $1}')"
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HEALTH_URL" == https://* ]]
           test -n "$HOSTGATOR_HOST"
           test -n "$HOSTGATOR_PORT"
           test -n "$HOSTGATOR_USER"
@@ -57,6 +61,39 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ inputs.ref }}
+
+      - name: Require green release CI for exact SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The four independent push workflows must have completed successfully
+          # for the exact release commit; PR checks or older SHAs never count.
+          for workflow in \
+            .github/workflows/ci.yml \
+            .github/workflows/laravel-ci.yml \
+            .github/workflows/codeql.yml \
+            .github/workflows/production-build.yml; do
+            runs="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow "$workflow" \
+              --branch "$REQUESTED_REF" \
+              --commit "$DEPLOY_SHA" \
+              --event push \
+              --limit 1 \
+              --json headSha,headBranch,event,status,conclusion)"
+            if ! jq -e --arg sha "$DEPLOY_SHA" --arg branch "$REQUESTED_REF" '
+              length == 1
+              and .[0].headSha == $sha
+              and .[0].headBranch == $branch
+              and .[0].event == "push"
+              and .[0].status == "completed"
+              and .[0].conclusion == "success"
+            ' <<< "$runs" >/dev/null; then
+              printf '::error::Required release check is not green: %s\n' "$workflow" >&2
+              exit 1
+            fi
+          done
 
       - name: Install strict SSH material
         env:
@@ -81,4 +118,4 @@ jobs:
             -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
             -p "$HOSTGATOR_PORT" \
             "$HOSTGATOR_USER@$HOSTGATOR_HOST" \
-            "cd -- '$DEPLOY_PATH' && ALLOW_HOSTGATOR_DEPLOY=1 DEPLOY_BRANCH='$REQUESTED_REF' DEPLOY_SHA='$DEPLOY_SHA' PROJECT_ROOT='$DEPLOY_PATH' RUN_MIGRATIONS=0 HEALTH_URL='${{ vars.HEALTH_URL }}' scripts/deploy-hostgator.sh"
+            "cd -- '$DEPLOY_PATH' && ALLOW_HOSTGATOR_DEPLOY=1 DEPLOY_BRANCH='$REQUESTED_REF' DEPLOY_SHA='$DEPLOY_SHA' PROJECT_ROOT='$DEPLOY_PATH' RUN_MIGRATIONS=0 HEALTH_URL='$HEALTH_URL' scripts/deploy-hostgator.sh"
