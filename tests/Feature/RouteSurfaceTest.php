@@ -88,9 +88,9 @@ class RouteSurfaceTest extends TestCase
         'POST api/contact',
         'PUT api/admin/forms/{id}',
         'PUT api/admin/photos/{id}/cover',
+        'PUT api/admin/profile',
         'PUT api/admin/properties/{id}',
         'PUT api/admin/properties/{id}/photos/order',
-        'PUT api/admin/profile',
         'PUT api/admin/site',
         'PUT api/admin/uploads/{path}',
     ];

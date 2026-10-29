@@ -20,7 +20,7 @@ class PublicPageRenderTest extends TestCase
         return [
             'home' => ['/', 'Imóveis em Belo Horizonte | Gisley Nunes Imóveis'],
             'imoveis' => ['/imoveis', 'Imóveis à venda e para alugar em Belo Horizonte | Gisley Nunes'],
-            'servicos' => ['/servicos', 'Serviços imobiliários em Belo Horizonte | Gisley Nunes'],
+            'servicos' => ['/servicos', 'Avaliações, laudos e serviços imobiliários | Gisley Nunes'],
             'bairros' => ['/bairros', 'Imóveis por bairro em Belo Horizonte | Gisley Nunes'],
             'sobre' => ['/sobre', 'Gisley Nunes: imobiliária em Belo Horizonte'],
             'contato' => ['/contato', 'Contato | Gisley Nunes Imóveis em Belo Horizonte'],
