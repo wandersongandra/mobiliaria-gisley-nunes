@@ -151,9 +151,15 @@ class AdminPropertyController extends Controller
     public function presign(Request $request): JsonResponse
     {
         $admin = $this->admin($request);
-        $propertyId = $this->assertId((string) $request->input('propertyId', ''));
-        $fileName = trim((string) $request->input('fileName', ''));
-        $contentType = strtolower(trim((string) $request->input('contentType', '')));
+        $rawPropertyId = $request->input('propertyId', '');
+        $rawFileName = $request->input('fileName', '');
+        $rawContentType = $request->input('contentType', '');
+        if (! is_string($rawPropertyId) || ! is_string($rawFileName) || ! is_string($rawContentType)) {
+            throw new RuntimeException('INVALID_FILE');
+        }
+        $propertyId = $this->assertId($rawPropertyId);
+        $fileName = trim($rawFileName);
+        $contentType = strtolower(trim($rawContentType));
         $size = $this->fileSize($request->input('size'));
 
         if ($fileName === '' || strlen($fileName) > 180) {
@@ -561,7 +567,10 @@ class AdminPropertyController extends Controller
 
     private function draftOnlyRequest(Request $request): bool
     {
-        $status = (string) $request->input('status', 'draft');
+        $status = $request->input('status', 'draft');
+        if (! is_string($status)) {
+            throw new RuntimeException('INVALID_PROPERTY');
+        }
         $featured = filter_var($request->input('featured', false), FILTER_VALIDATE_BOOL);
 
         return $status === 'draft' && ! $featured;

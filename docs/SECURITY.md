@@ -47,6 +47,9 @@
 | SEC-14 | MEDIUM | Arquivos de mídia legados podiam ser entregues inline com MIME ativo apesar da extensão de imagem. Controllers agora exigem MIME efetivo da allowlist. |
 | SEC-15 | MEDIUM | Multipart sem comprimento numérico declarado não tinha gate local; TE/CL conflitantes não eram rejeitados explicitamente. O middleware retorna 411 ou 400. |
 | SEC-16 | LOW | Quatro erros conhecidos de entrada/conflito eram tratados como falha interna 500. Mapeamento controlado para HTTP 400/409. |
+| SEC-17 | LOW | Campos JSON esperados como texto podiam chegar como arrays e disparar conversão implícita ou erro interno. CRM, catálogo e ações administrativas agora rejeitam o tipo inválido com erro 400; o honeypot público mantém resposta neutra. |
+| SEC-18 | LOW | O perfil admitia datas do calendário inexistentes, como 31/02, até falhar no banco. Validação com `checkdate` rejeita o dado antes da persistência. |
+| SEC-19 | MEDIUM | A auditoria ocultava nomes fixos de segredos, mas variações como `sessionJti` e `awsSecretAccessKey` não estavam na lista. A sanitização agora reconhece componentes sensíveis de nomes compostos, preservando apenas a flag `tokenStoredAsHash`. |
 
 ## Riscos residuais
 

@@ -295,6 +295,12 @@ class PropertyService
             throw new RuntimeException('INVALID_PROPERTY');
         }
 
+        foreach (['purpose', 'type', 'status', 'slug'] as $field) {
+            if (array_key_exists($field, $input) && ! is_string($input[$field])) {
+                throw new RuntimeException('INVALID_PROPERTY');
+            }
+        }
+
         $title = $this->text($input['title'] ?? '', 160, true);
         $location = $this->text($input['location'] ?? '', 180, true);
         $city = $this->text($input['city'] ?? 'Belo Horizonte', 120, true);
@@ -816,6 +822,9 @@ class PropertyService
 
     private function text(mixed $value, int $max, bool $required): string
     {
+        if ($value !== null && ! is_scalar($value)) {
+            throw new RuntimeException('INVALID_PROPERTY');
+        }
         $value = trim((string) $value);
         if (($required && $value === '') || mb_strlen($value) > $max || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', $value)) {
             throw new RuntimeException('INVALID_PROPERTY');

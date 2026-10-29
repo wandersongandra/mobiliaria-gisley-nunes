@@ -86,7 +86,8 @@ class PublicApiController extends Controller
      */
     public function contact(Request $request): JsonResponse
     {
-        if (trim((string) $request->input('website', '')) !== '') {
+        $website = $request->input('website', '');
+        if (! is_string($website) || trim($website) !== '') {
             return response()->json(['ok' => true], 201);
         }
 

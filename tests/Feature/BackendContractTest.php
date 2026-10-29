@@ -94,6 +94,38 @@ class BackendContractTest extends TestCase
         ]);
     }
 
+    public function test_contact_rejects_non_scalar_fields_without_http_500_or_persistence(): void
+    {
+        config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
+        $payload = [
+            'name' => 'Cliente Teste',
+            'email' => 'cliente@example.com',
+            'interest' => 'Quero comprar um imóvel',
+            'message' => 'Procuro apartamento.',
+            'website' => '',
+        ];
+
+        foreach (['name', 'email', 'interest', 'message'] as $field) {
+            $this->withHeader('Origin', 'http://localhost')
+                ->postJson('/api/contact', array_replace($payload, [$field => ['unexpected' => 'array']]))
+                ->assertStatus(400)
+                ->assertJson(['error' => 'INVALID_CONTACT']);
+        }
+
+        $this->assertDatabaseCount('morada_contact_leads', 0);
+    }
+
+    public function test_contact_honeypot_array_is_silently_discarded_without_persistence(): void
+    {
+        config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
+        $this->withHeader('Origin', 'http://localhost')
+            ->postJson('/api/contact', ['website' => ['bot' => 'value']])
+            ->assertCreated()
+            ->assertExactJson(['ok' => true]);
+
+        $this->assertDatabaseCount('morada_contact_leads', 0);
+    }
+
     public function test_admin_session_and_protected_api_contract(): void
     {
         $this->getJson('/api/admin/session')

@@ -401,8 +401,13 @@ class AdminCrmController extends Controller
     {
         $admin = $this->access->requireCurrent($request);
         $email = $this->crm->email($request->input('email'), 'INVALID_INVITATION');
-        $name = trim((string) $request->input('name', ''));
-        $role = (string) $request->input('role', 'editor');
+        $rawName = $request->input('name', '');
+        $rawRole = $request->input('role', 'editor');
+        if (! is_string($rawName) || ! is_string($rawRole)) {
+            throw new RuntimeException('INVALID_INVITATION');
+        }
+        $name = trim($rawName);
+        $role = $rawRole;
 
         if ($name === '' || mb_strlen($name) > 255 || ! in_array($role, ['editor', 'manager'], true)) {
             throw new RuntimeException('INVALID_INVITATION');
@@ -458,9 +463,15 @@ class AdminCrmController extends Controller
     {
         $admin = $this->access->requireCurrent($request);
         $email = $this->crm->email($request->input('email'), 'INVALID_TEAM_MEMBER');
-        $code = (string) $request->input('pairingCode', '');
-        $name = trim((string) $request->input('name', ''));
-        $role = (string) $request->input('role', 'editor');
+        $rawCode = $request->input('pairingCode', '');
+        $rawName = $request->input('name', '');
+        $rawRole = $request->input('role', 'editor');
+        if (! is_string($rawCode) || ! is_string($rawName) || ! is_string($rawRole)) {
+            throw new RuntimeException('INVALID_TEAM_MEMBER');
+        }
+        $code = $rawCode;
+        $name = trim($rawName);
+        $role = $rawRole;
 
         if (
             ! preg_match('/^[A-Za-z0-9_-]{12,64}$/', $code)
@@ -497,7 +508,10 @@ class AdminCrmController extends Controller
 
         $patch = [];
         if (array_key_exists('name', $body)) {
-            $name = trim((string) $body['name']);
+            if (! is_string($body['name'])) {
+                throw new RuntimeException('INVALID_TEAM_MEMBER');
+            }
+            $name = trim($body['name']);
             if ($name === '' || mb_strlen($name) > 255) {
                 throw new RuntimeException('INVALID_TEAM_MEMBER');
             }

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\PropertyService;
+use RuntimeException;
 use Tests\TestCase;
 
 class PropertyPricePresentationTest extends TestCase
@@ -48,5 +49,20 @@ class PropertyPricePresentationTest extends TestCase
         ]);
 
         $this->assertSame('R$ 2.500,50 / mês', $normalized['price_label']);
+    }
+
+    public function test_property_normalization_rejects_array_in_scalar_fields(): void
+    {
+        $service = app(PropertyService::class);
+        $payload = ['title' => 'Casa', 'location' => 'Belo Horizonte'];
+
+        foreach (['title', 'location', 'purpose', 'type', 'status', 'slug'] as $field) {
+            try {
+                $service->normalizeInput(array_replace($payload, [$field => ['unexpected']]));
+                $this->fail('Non-scalar '.$field.' should not be accepted.');
+            } catch (RuntimeException $error) {
+                $this->assertSame('INVALID_PROPERTY', $error->getMessage());
+            }
+        }
     }
 }
