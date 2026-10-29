@@ -157,6 +157,9 @@ jobs:
       - name: Validate admin payload contract
         run: pnpm test:admin-contract
 
+      - name: Verify HostGator workflow security contract
+        run: node scripts/verify-hostgator-workflow-gate.mjs
+
       - name: Verify Laravel public artifacts
         run: pnpm test:source
 
