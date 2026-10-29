@@ -78,11 +78,11 @@ return new class extends Migration
             })
             ->exists();
 
-        $invalidR2Photos = DB::table('morada_property_photos')
+        $invalidManagedPhotos = DB::table('morada_property_photos')
             ->where(function ($query): void {
-                $query->whereNotIn('storage_provider', ['r2', 'legacy'])
+                $query->whereNotIn('storage_provider', ['r2', 'local', 'legacy'])
                     ->orWhere(function ($query): void {
-                        $query->where('storage_provider', 'r2')
+                        $query->whereIn('storage_provider', ['r2', 'local'])
                             ->where(function ($query): void {
                                 $query->whereNull('mime_type')
                                     ->orWhereNotIn('mime_type', ['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
@@ -98,7 +98,7 @@ return new class extends Migration
             })
             ->exists();
 
-        if ($invalidProperties || $invalidLeads || $invalidR2Photos) {
+        if ($invalidProperties || $invalidLeads || $invalidManagedPhotos) {
             throw new RuntimeException('EXISTING_DATA_VIOLATES_DOMAIN_INTEGRITY');
         }
     }
@@ -127,8 +127,8 @@ return new class extends Migration
         END");
         DB::unprepared("CREATE TRIGGER morada_property_photos_domain_insert_guard BEFORE INSERT ON morada_property_photos FOR EACH ROW
         BEGIN
-            IF NEW.storage_provider NOT IN ('r2', 'legacy')
-                OR (NEW.storage_provider = 'r2' AND (
+            IF NEW.storage_provider NOT IN ('r2', 'local', 'legacy')
+                OR (NEW.storage_provider IN ('r2', 'local') AND (
                     NEW.mime_type IS NULL OR NEW.mime_type NOT IN ('image/jpeg', 'image/png', 'image/webp', 'image/avif')
                     OR NEW.storage_path NOT LIKE 'gisley/properties/%'
                     OR NEW.file_size < 1 OR NEW.file_size > 12582912
@@ -139,8 +139,8 @@ return new class extends Migration
         END");
         DB::unprepared("CREATE TRIGGER morada_property_photos_domain_update_guard BEFORE UPDATE ON morada_property_photos FOR EACH ROW
         BEGIN
-            IF NEW.storage_provider NOT IN ('r2', 'legacy')
-                OR (NEW.storage_provider = 'r2' AND (
+            IF NEW.storage_provider NOT IN ('r2', 'local', 'legacy')
+                OR (NEW.storage_provider IN ('r2', 'local') AND (
                     NEW.mime_type IS NULL OR NEW.mime_type NOT IN ('image/jpeg', 'image/png', 'image/webp', 'image/avif')
                     OR NEW.storage_path NOT LIKE 'gisley/properties/%'
                     OR NEW.file_size < 1 OR NEW.file_size > 12582912
@@ -175,7 +175,7 @@ return new class extends Migration
             AND suites >= 0 AND parking_spots >= 0 AND condo_fee >= 0 AND iptu >= 0
         )");
         DB::statement("ALTER TABLE morada_property_photos ADD CONSTRAINT morada_property_photos_domain_integrity_check CHECK (
-            storage_provider IN ('r2', 'legacy')
+            storage_provider IN ('r2', 'local', 'legacy')
             AND (storage_provider = 'legacy' OR (
                 mime_type IS NOT NULL
                 AND
@@ -208,8 +208,8 @@ return new class extends Migration
                 OR NEW.suites < 0 OR NEW.parking_spots < 0 OR NEW.condo_fee < 0 OR NEW.iptu < 0
             BEGIN SELECT RAISE(ABORT, 'PROPERTY_DOMAIN_INTEGRITY'); END");
         DB::unprepared("CREATE TRIGGER morada_property_photos_domain_insert_guard BEFORE INSERT ON morada_property_photos
-            FOR EACH ROW WHEN NEW.storage_provider NOT IN ('r2', 'legacy')
-                OR (NEW.storage_provider = 'r2' AND (
+            FOR EACH ROW WHEN NEW.storage_provider NOT IN ('r2', 'local', 'legacy')
+                OR (NEW.storage_provider IN ('r2', 'local') AND (
                     NEW.mime_type IS NULL OR NEW.mime_type NOT IN ('image/jpeg', 'image/png', 'image/webp', 'image/avif')
                     OR NEW.storage_path NOT LIKE 'gisley/properties/%'
                     OR NEW.file_size < 1 OR NEW.file_size > 12582912
@@ -217,8 +217,8 @@ return new class extends Migration
                 ))
             BEGIN SELECT RAISE(ABORT, 'PHOTO_DOMAIN_INTEGRITY'); END");
         DB::unprepared("CREATE TRIGGER morada_property_photos_domain_update_guard BEFORE UPDATE ON morada_property_photos
-            FOR EACH ROW WHEN NEW.storage_provider NOT IN ('r2', 'legacy')
-                OR (NEW.storage_provider = 'r2' AND (
+            FOR EACH ROW WHEN NEW.storage_provider NOT IN ('r2', 'local', 'legacy')
+                OR (NEW.storage_provider IN ('r2', 'local') AND (
                     NEW.mime_type IS NULL OR NEW.mime_type NOT IN ('image/jpeg', 'image/png', 'image/webp', 'image/avif')
                     OR NEW.storage_path NOT LIKE 'gisley/properties/%'
                     OR NEW.file_size < 1 OR NEW.file_size > 12582912

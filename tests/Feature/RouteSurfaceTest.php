@@ -76,6 +76,7 @@ class RouteSurfaceTest extends TestCase
         'POST api/admin/team',
         'POST api/admin/team/invitations',
         'POST api/admin/testimonials',
+        'POST api/admin/uploads/presign',
         'POST api/auth/logout',
         'POST api/auth/logout-all',
         'POST api/contact',

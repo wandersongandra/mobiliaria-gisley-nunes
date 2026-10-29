@@ -72,19 +72,34 @@ Route::prefix('api/auth')->middleware(['admin-origin', 'body-limit:32'])->group(
 Route::get('/api/admin/session', [AuthController::class, 'session'])
     ->middleware(['admin-origin', 'throttle:auth-session']);
 
-Route::prefix('api/admin')
-    ->middleware(['admin-origin', 'same-origin', 'throttle:admin', 'body-limit:16384', 'admin'])
-    ->group(function (): void {
-        Route::post('/properties/{id}/photos/upload', [AdminPropertyController::class, 'uploadPhoto'])
-            ->middleware(['capability:media.manage', 'throttle:upload']);
-        Route::put('/uploads/{path}', [AdminPropertyController::class, 'uploadPresigned'])
-            ->where('path', '.*')
-            ->middleware(['capability:media.manage', 'throttle:upload']);
-    });
+Route::post('/api/admin/properties/{id}/photos/upload', [AdminPropertyController::class, 'uploadPhoto'])
+    ->middleware([
+        'admin-origin',
+        'same-origin',
+        'throttle:admin',
+        'throttle:upload',
+        'body-limit:16384',
+        'admin',
+        'capability:media.manage',
+    ]);
+
+Route::put('/api/admin/uploads/{path}', [AdminPropertyController::class, 'uploadPresigned'])
+    ->where('path', '.*')
+    ->middleware([
+        'admin-origin',
+        'same-origin',
+        'throttle:admin',
+        'throttle:upload',
+        'body-limit:16384',
+        'admin',
+        'capability:media.manage',
+    ]);
 
 Route::prefix('api/admin')
     ->middleware(['admin-origin', 'body-limit:256', 'same-origin', 'admin', 'throttle:admin'])
     ->group(function (): void {
+        Route::get('/release', [AuthController::class, 'release'])
+            ->middleware('capability:audit.read');
         Route::get('/properties', [AdminPropertyController::class, 'index'])
             ->middleware('capability:property.read');
         Route::post('/properties', [AdminPropertyController::class, 'store'])
