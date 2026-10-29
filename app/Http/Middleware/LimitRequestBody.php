@@ -26,14 +26,22 @@ class LimitRequestBody
         // not consume an unbounded body in the application layer; the reverse
         // proxy/PHP limits remain the primary defense.
         $transferEncoding = strtolower(trim((string) $request->headers->get('Transfer-Encoding', '')));
-        if ($transferEncoding !== '' && str_contains($transferEncoding, 'chunked') && $declared === null) {
-            return $this->lengthRequired($limitKb);
+        if ($transferEncoding !== '' && str_contains($transferEncoding, 'chunked')) {
+            // TE + CL ambíguos nunca chegam à aplicação como uma requisição
+            // confiável; a borda deve normalizar a transferência antes do PHP.
+            return $declared === null
+                ? $this->lengthRequired($limitKb)
+                : $this->ambiguousLength();
         }
 
         // PHP parses multipart uploads into UploadedFile objects. Avoid reading
         // the whole binary body a second time while still enforcing the
         // Content-Length limit above.
         if (str_starts_with(strtolower((string) $request->headers->get('Content-Type')), 'multipart/form-data')) {
+            if (! is_string($declared) || preg_match('/^[0-9]+$/D', $declared) !== 1) {
+                return $this->lengthRequired($limitKb);
+            }
+
             return $next($request);
         }
 
@@ -55,6 +63,13 @@ class LimitRequestBody
     {
         return response()
             ->json(['error' => 'CONTENT_LENGTH_REQUIRED', 'max_kb' => $limitKb], 411)
+            ->header('Cache-Control', 'no-store');
+    }
+
+    private function ambiguousLength(): Response
+    {
+        return response()
+            ->json(['error' => 'AMBIGUOUS_REQUEST_LENGTH'], 400)
             ->header('Cache-Control', 'no-store');
     }
 }

@@ -314,8 +314,9 @@ class PropertyService
             throw new RuntimeException('INVALID_PROPERTY');
         }
 
+        $priceDecimals = abs($price - round($price)) > 0.00001 ? 2 : 0;
         $automaticPrice = $price > 0
-            ? 'R$ '.number_format($price, 0, ',', '.').($purpose === 'Alugar' ? ' / mês' : '')
+            ? 'R$ '.number_format($price, $priceDecimals, ',', '.').($purpose === 'Alugar' ? ' / mês' : '')
             : 'Sob consulta';
 
         return [
@@ -326,7 +327,11 @@ class PropertyService
             'purpose' => $purpose,
             'type' => $type,
             'price' => $price,
-            'price_label' => $this->text($input['priceLabel'] ?? $automaticPrice, 100, true),
+            'price_label' => $this->displayPriceLabel([
+                'price_label' => $this->text($input['priceLabel'] ?? $automaticPrice, 100, true),
+                'price' => $price,
+                'purpose' => $purpose,
+            ]),
             'bedrooms' => $this->integer($input['bedrooms'] ?? 0, 50),
             'bathrooms' => $this->integer($input['bathrooms'] ?? 0, 50),
             'area_m2' => $this->number($input['areaM2'] ?? 0, 9999999.99),
@@ -625,6 +630,30 @@ class PropertyService
         return $row ? (array) $row : null;
     }
 
+    /**
+     * Corrige preços legados salvos como número puro sem alterar valores ou
+     * descrições comerciais livres, como "Sob consulta" e "A combinar".
+     */
+    private function displayPriceLabel(array $row): string
+    {
+        $label = trim((string) ($row['price_label'] ?? ''));
+        if ($label !== '' && preg_match('/^[0-9]+(?:[.,][0-9]{1,2})?$/D', $label) !== 1) {
+            return $label;
+        }
+
+        $price = $label !== ''
+            ? (float) str_replace(',', '.', $label)
+            : (float) ($row['price'] ?? 0);
+        if (! is_finite($price) || $price <= 0) {
+            return 'Sob consulta';
+        }
+
+        $decimals = abs($price - round($price)) > 0.00001 ? 2 : 0;
+
+        return 'R$ '.number_format($price, $decimals, ',', '.')
+            .(($row['purpose'] ?? '') === 'Alugar' ? ' / mês' : '');
+    }
+
     public function publicProperty(array $row): array
     {
         return [
@@ -635,7 +664,7 @@ class PropertyService
             'purpose' => (string) ($row['purpose'] ?? ''),
             'type' => (string) ($row['type'] ?? ''),
             'price' => (float) ($row['price'] ?? 0),
-            'price_label' => (string) ($row['price_label'] ?? ''),
+            'price_label' => $this->displayPriceLabel($row),
             'bedrooms' => (int) ($row['bedrooms'] ?? 0),
             'bathrooms' => (int) ($row['bathrooms'] ?? 0),
             'area_m2' => (float) ($row['area_m2'] ?? 0),

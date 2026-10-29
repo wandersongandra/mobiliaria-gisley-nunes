@@ -8,6 +8,7 @@ use App\Services\CriticalAuditService;
 use App\Services\CrmService;
 use App\Services\PropertyService;
 use App\Services\R2Storage;
+use App\Support\UploadAuthorization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -176,13 +177,18 @@ class AdminPropertyController extends Controller
         }
 
         $storagePath = R2Storage::PREFIX.$propertyId.'/'.Str::uuid().'-'.$this->storage->safeFileName($fileName);
+        $authorization = UploadAuthorization::issue($storagePath, $contentType, $size, $admin);
 
         return response()->json([
             'uploadUrl' => $this->storage->presignPut($storagePath, $contentType),
             'storagePath' => $storagePath,
             'assetUrl' => $this->storage->assetUrl($storagePath),
             'provider' => 'local',
-            'uploadHeaders' => ['Content-Type' => $contentType, 'If-None-Match' => '*'],
+            'uploadHeaders' => [
+                'Content-Type' => $contentType,
+                'If-None-Match' => '*',
+                'X-Upload-Authorization' => $authorization,
+            ],
         ]);
     }
 
@@ -208,6 +214,14 @@ class AdminPropertyController extends Controller
         if ($size < 1 || $size > 12 * 1024 * 1024) {
             throw new RuntimeException('INVALID_FILE');
         }
+
+        UploadAuthorization::assertValid(
+            $request->header('X-Upload-Authorization'),
+            $storagePath,
+            $contentType,
+            $size,
+            $admin,
+        );
 
         $stream = $request->getContent(true);
         if (! is_resource($stream)) {
@@ -420,8 +434,13 @@ class AdminPropertyController extends Controller
             return response()->json(['error' => 'NOT_FOUND'], 404);
         }
 
+        $mime = $this->storage->contentType($storagePath);
+        if (! R2Storage::isSupportedImageContentType($mime)) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
+
         return response()->file($this->storage->path($storagePath), [
-            'Content-Type' => $this->storage->contentType($storagePath),
+            'Content-Type' => $mime,
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);

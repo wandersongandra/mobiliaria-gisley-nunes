@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\PropertyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -109,6 +110,30 @@ class PublicPageRenderTest extends TestCase
             ->assertSee($property['title'])
             ->assertSee('/imoveis/'.rawurlencode($property['slug']), false)
             ->assertSee('listing-card-server', false);
+    }
+
+    public function test_legacy_numeric_price_labels_are_formatted_in_ssr_and_api_without_mutating_the_database(): void
+    {
+        $property = $this->publishPropertyWithCover();
+        DB::table('morada_properties')
+            ->where('slug', $property['slug'])
+            ->update(['price_label' => '220000', 'price' => 220000]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('R$ 220.000');
+        $this->get('/imoveis/'.$property['slug'])
+            ->assertOk()
+            ->assertSee('R$ 220.000');
+        $this->getJson('/api/properties/'.$property['slug'])
+            ->assertOk()
+            ->assertJsonPath('property.price_label', 'R$ 220.000');
+
+        $this->assertDatabaseHas('morada_properties', [
+            'slug' => $property['slug'],
+            'price_label' => '220000',
+            'price' => 220000,
+        ]);
     }
 
     public function test_empty_catalog_has_a_contact_fallback_without_javascript(): void

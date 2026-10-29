@@ -31,6 +31,11 @@ class LocalMediaStorage
         'image/avif',
     ];
 
+    public static function isSupportedImageContentType(string $mime): bool
+    {
+        return in_array(strtolower(trim($mime)), self::IMAGE_MIME_TYPES, true);
+    }
+
     public function safeFileName(string $value): string
     {
         if (function_exists('iconv')) {
@@ -179,7 +184,9 @@ class LocalMediaStorage
                 throw new RuntimeException('MEDIA_STORAGE_NOT_WRITABLE');
             }
 
-            $copied = stream_copy_to_stream($stream, $output);
+            // Nunca copie indefinidamente se a transferência chegar com um
+            // Content-Length incorreto: limite a gravação a size + 1 byte.
+            $copied = stream_copy_to_stream($stream, $output, $size + 1);
             if ($copied !== $size) {
                 throw new RuntimeException('INVALID_FILE');
             }
