@@ -350,7 +350,7 @@ class PropertyService
 
         $propertyId = $id ?: (string) Str::uuid();
 
-        DB::transaction(function () use ($data, $propertyId, $id, $requireDraft): void {
+        DB::transaction(function () use ($data, $propertyId, $id, $requireDraft, $createdByOpenId): void {
             $existing = $id
                 ? DB::table('morada_properties')->where('id', $propertyId)->lockForUpdate()->first()
                 : null;
