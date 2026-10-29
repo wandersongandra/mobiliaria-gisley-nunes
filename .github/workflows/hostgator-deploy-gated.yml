@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ vars.HOSTGATOR_DEPLOY_ENABLED == 'true' && inputs.ref == 'migration/laravel-backend-2026-10-02' && inputs.confirm == 'ENABLE_HOSTGATOR_DEPLOY' }}
+    if: ${{ inputs.ref == 'migration/laravel-backend-2026-10-02' && inputs.confirm == 'ENABLE_HOSTGATOR_DEPLOY' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -40,11 +40,13 @@ jobs:
       HEALTH_URL: ${{ vars.HEALTH_URL }}
       REQUESTED_REF: ${{ inputs.ref }}
       DEPLOY_SHA: ${{ inputs.sha }}
+      DEPLOY_ENABLED: ${{ vars.HOSTGATOR_DEPLOY_ENABLED }}
 
     steps:
       - name: Validate immutable target
         run: |
           set -euo pipefail
+          test "$DEPLOY_ENABLED" = "true"
           test "$REQUESTED_REF" = "migration/laravel-backend-2026-10-02"
           test "$DEPLOY_SHA" = "$(git ls-remote https://github.com/${{ github.repository }}.git "refs/heads/$REQUESTED_REF" | awk '{print $1}')"
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
