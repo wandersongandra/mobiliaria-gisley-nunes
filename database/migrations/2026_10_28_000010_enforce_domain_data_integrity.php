@@ -177,6 +177,8 @@ return new class extends Migration
         DB::statement("ALTER TABLE morada_property_photos ADD CONSTRAINT morada_property_photos_domain_integrity_check CHECK (
             storage_provider IN ('r2', 'legacy')
             AND (storage_provider = 'legacy' OR (
+                mime_type IS NOT NULL
+                AND
                 mime_type IN ('image/jpeg', 'image/png', 'image/webp', 'image/avif')
                 AND storage_path LIKE 'gisley/properties/%'
                 AND file_size BETWEEN 1 AND 12582912

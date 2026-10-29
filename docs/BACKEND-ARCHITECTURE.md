@@ -17,9 +17,9 @@ routes/web.php
 ```
 
 O fluxo `preview` do Node.js é compatibilidade local e de CI apenas: ele não possui
-autoridade de schema, não executa migrations no boot e é bloqueado quando
-`NODE_ENV=production` sem `GISELY_NODE_RUNTIME=preview`. O runtime oficial é
-Laravel/PHP; suas migrations são a única fonte autorizada para o schema.
+autoridade de schema, não executa migrations no boot e força `NODE_ENV=development`.
+Qualquer inicialização do Node com `NODE_ENV=production` é bloqueada. O runtime
+oficial é Laravel/PHP; suas migrations são a única fonte autorizada para o schema.
 
 O projeto usa Query Builder deliberadamente. Não há Models Eloquent,
 repositories, jobs, listeners ou filas no backend Laravel atual. A validação de

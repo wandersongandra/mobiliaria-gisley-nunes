@@ -62,12 +62,12 @@ Route::get('/api/admin/session', [AuthController::class, 'session'])
 Route::post('/api/admin/properties/{id}/photos/upload', [AdminPropertyController::class, 'uploadPhoto'])
     ->middleware([
         'admin-origin',
-        'body-limit:16384',
         'same-origin',
-        'admin',
         'throttle:admin',
-        'capability:media.manage',
         'throttle:upload',
+        'body-limit:16384',
+        'admin',
+        'capability:media.manage',
     ]);
 
 Route::prefix('api/admin')

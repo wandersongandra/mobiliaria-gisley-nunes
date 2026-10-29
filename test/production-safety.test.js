@@ -22,7 +22,7 @@ test('produção sem banco nunca expõe imóveis demonstrativos', () => {
   assert.equal(result.property, null);
 });
 
-test('backend Node falha fechado fora do runtime explícito de preview', () => {
+test('backend Node falha fechado sempre que NODE_ENV é production', () => {
   const script = `
     const { assertNodeRuntimeBoundary } = await import('./server/config.js');
     try {
@@ -43,5 +43,5 @@ test('backend Node falha fechado fora do runtime explícito de preview', () => {
   }).trim();
 
   assert.equal(run(''), 'NODE_RUNTIME_DISABLED_FOR_PRODUCTION');
-  assert.equal(run('preview'), 'OK');
+  assert.equal(run('preview'), 'NODE_RUNTIME_DISABLED_FOR_PRODUCTION');
 });

@@ -102,6 +102,22 @@ class DataIntegrityConstraintTest extends TestCase
         DB::table('morada_property_photos')->insert($photo);
     }
 
+    public function test_database_rejects_r2_photo_without_mime_type(): void
+    {
+        $property = app(PropertyService::class)->saveProperty([
+            'title' => 'Integridade de MIME',
+            'location' => 'Lourdes · Belo Horizonte',
+            'city' => 'Belo Horizonte',
+            'status' => 'draft',
+        ]);
+
+        $photo = $this->photo($property['id'], false);
+        $photo['mime_type'] = null;
+
+        $this->expectException(QueryException::class);
+        DB::table('morada_property_photos')->insert($photo);
+    }
+
     /** @return array<string, mixed> */
     private function photo(string $propertyId, bool $cover): array
     {

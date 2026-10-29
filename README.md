@@ -28,7 +28,7 @@ php artisan migrate
 php artisan serve
 ```
 
-O frontend público e o painel usam assets estáticos em `public/assets` e `public/admin`; Node.js não será necessário em produção. O script `pnpm preview` só habilita explicitamente o runtime de preview; `pnpm start` falha fechado em `NODE_ENV=production`, e o preview não executa migrations.
+O frontend público e o painel usam assets estáticos em `public/assets` e `public/admin`; Node.js não será necessário em produção. O script `pnpm preview` força `NODE_ENV=development` para compatibilidade local/CI; qualquer inicialização do Node em `NODE_ENV=production` falha fechado, e o preview não executa migrations.
 
 ## Produção — HostGator / PHP-FPM
 
@@ -77,7 +77,7 @@ Defina as variáveis no `.env` fora do Document Root. Não use os valores de exe
 | `TRUSTED_PROXIES` | CIDRs ou IPs dos proxies Cloudflare que chegam à origem, separados por vírgula. Nunca use `*` nem IPs de clientes. |
 | `GISELY_ADMIN_OPEN_IDS` | Lista separada por vírgulas de IDs autorizados como gestores iniciais. |
 | `GISELY_ADMIN_IDLE_TIMEOUT_MINUTES`, `GISELY_MAX_ADMIN_SESSIONS` | Limite de inatividade e sessões administrativas simultâneas. |
-| `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_UPLOAD_EXPIRES_SECONDS` | Upload pré-assinado e limpeza dos arquivos no Cloudflare R2. |
+| `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_UPLOAD_EXPIRES_SECONDS` | Upload server-side no Laravel; expiração de URLs temporárias de leitura e limpeza dos arquivos no Cloudflare R2. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GISELY_ADMIN_BOOTSTRAP_EMAILS` | Cliente OAuth Web do Google e e-mails Google verificados autorizados no primeiro bootstrap. |
 
 Consulte `.env.example` para a lista completa. Após alterar variáveis, limpe e gere novamente o cache da configuração com `php artisan config:clear && php artisan config:cache`.

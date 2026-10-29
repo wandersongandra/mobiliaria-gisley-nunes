@@ -2,10 +2,9 @@ const env = process.env;
 
 export const port = Number(env.PORT || 3000);
 export const isProduction = env.NODE_ENV === 'production';
-export const isPreviewRuntime = env.GISELY_NODE_RUNTIME === 'preview';
 
 export function assertNodeRuntimeBoundary() {
-  if (isProduction && !isPreviewRuntime) {
+  if (isProduction) {
     throw new Error('NODE_RUNTIME_DISABLED_FOR_PRODUCTION');
   }
 

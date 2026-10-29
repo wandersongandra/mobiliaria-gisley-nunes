@@ -1,6 +1,6 @@
 # Threat model — Gisley Nunes Imóveis
 
-Data: 2026-10-06 (America/Sao_Paulo)
+Data: 2026-10-29 (America/Sao_Paulo)
 
 ## Executive summary
 
@@ -25,7 +25,7 @@ Open questions that would materially change ranking: volume de leads e retençã
 - Browser administrativo: carrega `public/admin/index.html`, mantém sessão Laravel e chama `/api/admin/*`.
 - Laravel: rotas públicas, OAuth, sessão, CSRF, same-origin, capabilities, CRM, upload e media redirect (`routes/web.php:13-118`).
 - MySQL: usuários, identidades OAuth, sessões, staff, convites, leads, propriedades, fotos e auditoria (`app/Services/CrmService.php:146-328`).
-- R2: bucket privado para fotos, com presign e URLs temporárias (`app/Services/R2Storage.php:33-163`).
+- R2: bucket privado para fotos, com upload server-side e URLs temporárias de leitura (`app/Services/R2Storage.php:33-163`).
 - Google OAuth: autorização, token exchange e userinfo (`app/Http/Controllers/AuthController.php:234-291`).
 - Node/Express: runtime/preview alternativo com headers, origin checks, rate limit e APIs paralelas (`server/index.js:27-84`, `server/routes.js:155-291`).
 - GitHub Actions/Cloudflare preview/HostGator SSH: build, CodeQL, pacote de produção, preview e entrega.
@@ -37,8 +37,8 @@ Open questions that would materially change ranking: volume de leads e retençã
 - Browser administrativo → Laravel: cookie de sessão, CSRF e Origin/Referer; endpoints administrativos exigem `admin` e capability (`routes/web.php:45-115`).
 - Laravel → Google OAuth: state armazenado em sessão e challenge de uso único; token exchange por HTTPS e validação de e-mail verificado (`AuthController.php:52-73,82-101,234-291`).
 - Laravel → MySQL: queries parametrizadas via query builder; transações e constraints sustentam identidade, sessões, convites e auditoria.
-- Laravel → R2: credenciais somente no servidor, prefixo de objeto, presigned PUT/GET, verificação de metadata e conteúdo real (`R2Storage.php:63-112,150-247`).
-- Browser → R2: PUT direto para URL pré-assinada; o backend registra a foto somente após validar propriedade, tamanho, MIME, dimensões e objeto.
+- Laravel → R2: credenciais somente no servidor, prefixo de objeto, `PutObject` server-side e presigned GET, com verificação de metadata e conteúdo real (`R2Storage.php:63-112,150-247`).
+- Browser administrativo → Laravel → R2: multipart server-side; o backend valida propriedade, tamanho, MIME e dimensões antes de persistir o objeto e o registro.
 - Proxy → Laravel: `X-Forwarded-*` só deve ser aceito de CIDRs configurados (`ConfigureTrustedProxies.php:11-25`); tráfego proxied real ainda não foi exercitado.
 - Developer/CI → build/release: actions pinadas por SHA, permissões de leitura e produção separada; o workflow gated HostGator existe no branch auditado, mas não aparece na lista ativa do GitHub remoto.
 - HostGator → browser público: health `200` e headers de segurança foram observados; isso não prova SHA público nem todos os fluxos de autorização.
@@ -101,7 +101,7 @@ flowchart TD
 | Admin session | GET `/api/admin/session` | Browser → sessão/DB | Retorna estado e CSRF, sem PII ampla | `routes/web.php:51-52`, `AuthController.php:182-199` |
 | Admin mutation APIs | POST/PUT/PATCH/DELETE | Browser → Laravel/DB/R2 | CSRF, origin, admin e capability | `routes/web.php:54-115` |
 | Media redirect | GET `/media/{path}` | Internet → Laravel → R2 | Apenas foto publicada e URL assinada | `MediaController.php:17-25` |
-| Direct R2 upload | Presign + PUT | Admin → Laravel → R2 | Presigned upload, MIME/tamanho/ownership | `AdminPropertyController.php:133-265`, `R2Storage.php:95-112` |
+| Media upload | POST `/api/admin/properties/{id}/photos/upload` | Admin → Laravel → R2 | Multipart server-side, MIME/tamanho/dimensões/ownership | `routes/web.php:62-71`, `AdminPropertyController.php`, `R2Storage.php` |
 | CI/release | Git push/workflow/SSH | Developer → CI → HostGator/preview | SHA/branch/known hosts | `.github/workflows/hostgator-deploy-gated.yml:20-83`, `scripts/deploy-hostgator.sh:26-81` |
 
 ## Top abuse paths
@@ -110,7 +110,7 @@ flowchart TD
 2. **Obter sessão administrativa por vazamento externo** → chamar API com cookie válido → explorar capability disponível → persistir mudança pública.
 3. **Explorar falha de auditoria** → causar indisponibilidade de escrita do log → executar exportação/mutação → deixar evidência incompleta para resposta a incidente.
 4. **Abusar formulário público** → enviar muitas mensagens ou payloads válidos → poluir CRM e consumir banco/limites; impacto depende da eficácia do IP real atrás do proxy.
-5. **Abusar upload pré-assinado** → solicitar presign repetidamente → enviar objetos grandes/válidos → criar custo, orphan objects ou pressão de storage; registro posterior deve continuar falhando fechado.
+5. **Abusar upload autenticado** → enviar multipart repetidamente → criar custo, objetos órfãos ou pressão de storage; throttles, limites e registro devem continuar falhando fechado.
 6. **Forjar headers de proxy/origem** → alcançar origem sem estar atrás de proxy confiável → tentar manipular IP, scheme ou host → bypass de rate/origin se a lista real de CIDRs estiver errada.
 7. **Comprometer GitHub/SSH** → publicar artifact ou checkout indevido → alterar site, endpoints ou dependências → comprometer integridade da release.
 8. **Operar com documentação stale** → selecionar SHA/configuração errada → executar deploy ou rollback inadequado → deixar produção divergente da revisão validada.
@@ -123,7 +123,7 @@ flowchart TD
 | TM-002 | Conta Google comprometida | Conta está na allowlist por subject/e-mail verificado | Completar login legítimo e operar como manager/editor | Acesso total ou parcial ao CRM conforme role | Leads, catálogo, equipe, R2 | `email_verified`, subject imutável, bootstrap restrito (`AuthController.php:274-291`, `AdminAccessService.php:121-145`) | MFA/conditional access não é imposto pelo app | Exigir MFA/Google Workspace, preferir allowlist por domínio/grupo e revisar bootstrap | Alertar novo device, login anômalo, exportação e convite de equipe | medium | high | high |
 | TM-003 | Admin comprometido ou insider | Role manager ou capability de lead | Exportar, apagar ou alterar leads e dados públicos | Exfiltração ou perda de PII e integridade comercial | Leads, auditoria, catálogo | Capabilities, throttles e auditoria transacional (`routes/web.php:90-115`, `CriticalAuditService.php`) | Conta manager comprometida continua sendo uma pré-condição de negócio; prova externa de alerta não foi executada | Least privilege, MFA no provider e alertas por volume/exportação/delete | Alertas por volume, exportação, delete e alteração fora do horário | medium | high | high |
 | TM-004 | Bot/atacante remoto | Acesso público ao contato | Enviar spam ou payloads válidos em alta frequência | Poluição do CRM, custo e disponibilidade | Leads, MySQL, atendimento | Honeypot, allowlist de campos, limites de tamanho, same-origin e 8/10 min/IP (`CrmService.php:146-183`, `AppServiceProvider.php:24-26`) | IP efetivo atrás de proxy ainda precisa prova live | Rate limit no edge, reputação/IP e fila/quotas; validar proxy real | Métricas por IP, e-mail, ASN, taxa de erro e crescimento de leads | medium | medium | medium |
-| TM-005 | Atacante com capability de mídia | Precisa sessão admin e `media.manage` | Enviar arquivo malformado, oversized ou orphan e tentar expô-lo | Custo/storage, conteúdo malicioso ou mídia indevida | R2, fotos públicas, disponibilidade | Prefixo, path validation, presign limitado, metadata, MIME real, pixels e ownership (`R2Storage.php:63-85,95-112,204-247`) | R2 real e cleanup operacional não foram exercitados | Smoke R2 controlado, quotas por usuário, lifecycle e malware scanning se necessário | Orphan age, bytes por admin, falhas de validação e URLs não registradas | low | medium | medium |
+| TM-005 | Atacante com capability de mídia | Precisa sessão admin e `media.manage` | Enviar arquivo malformado, oversized ou orphan e tentar expô-lo | Custo/storage, conteúdo malicioso ou mídia indevida | R2, fotos públicas, disponibilidade | Prefixo, upload server-side, limits, metadata, MIME real, pixels e ownership (`routes/web.php:62-71`, `R2Storage.php:63-85,204-247`) | R2 real e cleanup operacional não foram exercitados | Smoke R2 controlado, quotas por usuário, lifecycle e malware scanning se necessário | Orphan age, bytes por admin, falhas de validação e URLs não registradas | low | medium | medium |
 | TM-006 | Atacante via proxy/configuração | CIDRs reais incorretos ou proxy aceita headers do cliente | Forjar host, scheme ou IP para contornar origin/rate limit | CSRF ampliado, bypass de throttling ou canonical URL errada | Sessões, rate limits, integridade de requests | Trusted proxies explícitos e `CF-Connecting-IP` não confiado diretamente (`ConfigureTrustedProxies.php:11-25`) | Teste proxied real bloqueado | Manter CIDRs oficiais mínimos; executar spoof tests após proxy; alertar host desconhecido | Logs com peer, host, forwarded chain e rejeições 421/403 | low | high | medium |
 | TM-007 | Developer/CI/SSH comprometido | Write access em GitHub ou chave operacional | Alterar código/artifact ou publicar SHA incorreto | Compromisso da aplicação e supply chain | Source, release, secrets, produção | Actions pinadas, permissions read, script branch/SHA/clean worktree/known health (`scripts/deploy-hostgator.sh:26-81`) | Workflow gated não aparece ativo no GitHub remoto; Workers Builds falha | Tornar workflow required no branch padrão, environment approval, secret rotation e provenance | Alertar deploy fora do workflow, SHA divergente, mudança de workflow e falha de build | low | high | medium |
 | TM-008 | Operador ou atacante que degrada observabilidade | Falha de DB/log ou indisponibilidade do audit log | Tentar executar ação durante falha de auditoria | Operação negada e necessidade de resposta operacional; sem prova de alertas live | Audit log, resposta a incidentes | Mutação + auditoria transacional; login revoga sessão em falha; trigger append-only (`CriticalAuditService.php`, `AuditIntegrityTest.php`) | Alertas e reconciliação live não foram exercitados | Outbox/alerta operacional e reconciliação de contagens | Monitorar falhas de auditoria e indisponibilidade do banco | low | medium | low |

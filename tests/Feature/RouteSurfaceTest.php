@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\AdminCrmController;
+use App\Http\Controllers\AdminPropertyController;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
@@ -122,6 +123,24 @@ class RouteSurfaceTest extends TestCase
 
         $this->assertNotNull($route);
         $this->assertContains('throttle:export', $route->middleware());
+    }
+
+    public function test_photo_upload_rate_limits_before_reading_the_request_body(): void
+    {
+        $route = Route::getRoutes()->getByAction(AdminPropertyController::class.'@uploadPhoto');
+
+        $this->assertNotNull($route);
+
+        $middleware = $route->middleware();
+        $adminThrottle = array_search('throttle:admin', $middleware, true);
+        $uploadThrottle = array_search('throttle:upload', $middleware, true);
+        $bodyLimit = array_search('body-limit:16384', $middleware, true);
+
+        $this->assertIsInt($adminThrottle);
+        $this->assertIsInt($uploadThrottle);
+        $this->assertIsInt($bodyLimit);
+        $this->assertLessThan($bodyLimit, $adminThrottle);
+        $this->assertLessThan($bodyLimit, $uploadThrottle);
     }
 
     /**
