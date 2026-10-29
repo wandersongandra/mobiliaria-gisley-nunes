@@ -1,5 +1,7 @@
-# Revisão obrigatória para mudanças sensíveis.
-# Adicione um segundo revisor independente antes de proteger a branch.
+# Responsabilidade técnica pelos arquivos sensíveis.
+# O proprietário responde pela revisão manual, mas o GitHub não permite
+# que o autor aprove sua própria PR. Exigir um segundo aprovador bloquearia
+# as PRs do único proprietário até existir outro revisor independente.
 * @wandersongandra
 
 .github/ @wandersongandra
