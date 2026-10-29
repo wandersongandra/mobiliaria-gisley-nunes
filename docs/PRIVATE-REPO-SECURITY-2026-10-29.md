@@ -1,12 +1,12 @@
-# Segurança do repositório privado — Gisley Nunes
+# Compatibilidade de segurança por visibilidade — Gisley Nunes
 
-Este registro acompanha a migração do repositório para visibilidade privada em 29/10/2026.
+Este registro acompanha a alternância de visibilidade do repositório em 29/10/2026. A configuração efetiva deve sempre ser verificada no GitHub antes de definir gates.
 
 ## Estado verificado
-- Repositório privado, acessível somente a colaboradores autorizados.
-- A branch `main` segue sem proteção; a API de rulesets retornou HTTP 403 com a exigência de GitHub Pro ou repositório público.
+- Durante a auditoria, o repositório foi observado como privado e depois como público. A última consulta confirmou **público**; essa condição pode mudar.
+- A `main` e a branch de release continuam sem proteção. Quando o repositório esteve privado, a API de rulesets retornou HTTP 403 com a exigência de GitHub Pro ou repositório público.
 - Proteção da branch de release e regras do ambiente `production` precisam de verificação no painel.
-- CodeQL/code scanning e Dependency Review, antes disponíveis no repositório público, podem exigir licenciamento GitHub Code Security em um repositório privado.
+- CodeQL concluiu com sucesso durante a mudança. Dependency Review chegou a falhar com aviso de falta de suporte no estado privado; ao voltar a público, passou novamente. O workflow agora resolve a visibilidade pela API e prevê auditoria Composer/pnpm no estado privado.
 - A mudança de visibilidade não comprova que os workflows anteriores continuam operacionais. É obrigatório validar novas execuções.
 
 ## Regras de release
