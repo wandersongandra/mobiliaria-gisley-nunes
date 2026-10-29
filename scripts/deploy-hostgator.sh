@@ -219,6 +219,9 @@ echo json_encode([
 ], JSON_PRETTY_PRINT);
 ENPHP
 
+# Validar sintaxe no PHP CLI antes de expor a sonda ao servidor web.
+"$PHP_BIN" -l "$FPM_CHECK_FILE" >/dev/null || fail 'sonda PHP contém erro de sintaxe'
+
 FPM_CACHE_BUSTER="$(openssl rand -hex 16)" \
     || fail 'falha ao gerar cache-buster de verificação FPM'
 [[ "$FPM_CACHE_BUSTER" =~ ^[0-9a-f]{32}$ ]] || fail 'cache-buster FPM inválido'
