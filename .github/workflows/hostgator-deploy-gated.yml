@@ -1,4 +1,4 @@
-name: HostGator deploy (gated)
+name: HostGator deploy (gated; run from main)
 
 on:
   workflow_dispatch:
@@ -14,6 +14,15 @@ on:
         type: string
       confirm:
         description: 'Confirma a janela de deploy aprovada'
+        required: true
+        type: string
+      run_migrations:
+        description: 'Executar migrations no MySQL da HostGator? (padrão: NÃO)'
+        required: true
+        default: false
+        type: boolean
+      db_readiness:
+        description: 'Sem migrations: SCHEMA_ALREADY_CURRENT; com migrations: BACKUP_RESTORED_AND_VERIFIED'
         required: true
         type: string
 
@@ -41,12 +50,21 @@ jobs:
       REQUESTED_REF: ${{ inputs.ref }}
       DEPLOY_SHA: ${{ inputs.sha }}
       HEALTH_URL: ${{ vars.HEALTH_URL }}
+      RUN_MIGRATIONS: ${{ inputs.run_migrations && '1' || '0' }}
+      DB_READINESS: ${{ inputs.db_readiness }}
 
     steps:
       - name: Validate immutable target
         run: |
           set -euo pipefail
           test "$REQUESTED_REF" = "migration/laravel-backend-2026-10-02"
+          # A flag booleana é canonizada em 0/1 e a condição do banco exige
+          # uma declaração explícita para AMBOS os caminhos de publicação.
+          # O texto não substitui a prova operacional de backup/restauração.
+          case "$RUN_MIGRATIONS:$DB_READINESS" in
+            0:SCHEMA_ALREADY_CURRENT|1:BACKUP_RESTORED_AND_VERIFIED) ;;
+            *) echo '::error::Schema atual não confirmado ou backup/restauração não verificados' >&2; exit 1 ;;
+          esac
           test "$DEPLOY_SHA" = "$(git ls-remote https://github.com/${{ github.repository }}.git "refs/heads/$REQUESTED_REF" | awk '{print $1}')"
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$HEALTH_URL" == https://* ]]
@@ -118,4 +136,4 @@ jobs:
             -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
             -p "$HOSTGATOR_PORT" \
             "$HOSTGATOR_USER@$HOSTGATOR_HOST" \
-            "cd -- '$DEPLOY_PATH' && ALLOW_HOSTGATOR_DEPLOY=1 DEPLOY_BRANCH='$REQUESTED_REF' DEPLOY_SHA='$DEPLOY_SHA' PROJECT_ROOT='$DEPLOY_PATH' RUN_MIGRATIONS=0 HEALTH_URL='$HEALTH_URL' scripts/deploy-hostgator.sh"
+            "cd -- '$DEPLOY_PATH' && ALLOW_HOSTGATOR_DEPLOY=1 DEPLOY_BRANCH='$REQUESTED_REF' DEPLOY_SHA='$DEPLOY_SHA' PROJECT_ROOT='$DEPLOY_PATH' RUN_MIGRATIONS='$RUN_MIGRATIONS' HEALTH_URL='$HEALTH_URL' scripts/deploy-hostgator.sh"
