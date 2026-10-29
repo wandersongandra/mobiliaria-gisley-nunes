@@ -49,7 +49,7 @@ final class UploadAuthorization
         if (! is_array($claims)
             || ($claims['v'] ?? null) !== 1
             || ! is_int($claims['size'] ?? null)
-            || ($claims['size'] ?? null) !== $size
+            || $claims['size'] !== $size
             || ! is_int($claims['expires_at_ms'] ?? null)
             || $claims['expires_at_ms'] < $now
             || $claims['expires_at_ms'] > $now + self::TTL_MS
