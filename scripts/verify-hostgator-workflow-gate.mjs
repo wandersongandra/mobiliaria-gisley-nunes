@@ -9,6 +9,12 @@ const workflow = readFileSync(
 
 assert.match(workflow, /permissions:\n  contents: read\n  actions: read\n/);
 assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
+assert.match(workflow, /run_migrations:\n\s+description:.*\n\s+required: true\n\s+default: false\n\s+type: boolean/);
+assert.match(workflow, /db_readiness:\n\s+description:.*\n\s+required: true\n\s+type: string/);
+assert.match(workflow, /RUN_MIGRATIONS: \$\{\{ inputs\.run_migrations && '1' \|\| '0' \}\}/);
+assert.match(workflow, /DB_READINESS: \$\{\{ inputs\.db_readiness \}\}/);
+assert.match(workflow, /RUN_MIGRATIONS='\$RUN_MIGRATIONS'/);
+assert.doesNotMatch(workflow, /RUN_MIGRATIONS=0 HEALTH_URL/);
 assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/);
 assert.match(workflow, /--branch "\$REQUESTED_REF"/);
 assert.match(workflow, /--commit "\$DEPLOY_SHA"/);
@@ -24,6 +30,31 @@ const gateStart = workflow.indexOf('- name: Require green release CI for exact S
 const checkout = workflow.indexOf('- uses: actions/checkout@');
 const ssh = workflow.indexOf('- name: Install strict SSH material');
 assert.ok(gateStart > checkout && ssh > gateStart, 'CI gate must run after checkout and before SSH setup');
+
+const dbGateStart = workflow.indexOf('          case "$RUN_MIGRATIONS:$DB_READINESS" in');
+const dbGateEnd = workflow.indexOf('\n          esac', dbGateStart);
+assert.ok(dbGateStart > 0 && dbGateEnd > dbGateStart, 'database readiness gate must exist');
+assert.ok(dbGateEnd < checkout, 'database readiness must be checked before checkout and SSH');
+const dbGate = workflow.slice(dbGateStart, dbGateEnd + '\n          esac'.length)
+  .split('\n').map((line) => line.replace(/^          /, '')).join('\n');
+
+function databaseGateAllows(runMigrations, readiness) {
+  const result = spawnSync('bash', ['-e', '-u', '-o', 'pipefail', '-c', dbGate], {
+    env: { ...process.env, RUN_MIGRATIONS: runMigrations, DB_READINESS: readiness },
+    encoding: 'utf8',
+  });
+  assert.equal(result.error, undefined, result.error?.message);
+  return result.status === 0;
+}
+
+assert.equal(databaseGateAllows('0', 'SCHEMA_ALREADY_CURRENT'), true, 'schema-confirmed deploy may skip migration');
+assert.equal(databaseGateAllows('1', 'BACKUP_RESTORED_AND_VERIFIED'), true, 'backed-up deploy may migrate');
+assert.equal(databaseGateAllows('0', ''), false, 'missing schema attestation must block');
+assert.equal(databaseGateAllows('1', ''), false, 'missing backup attestation must block');
+assert.equal(databaseGateAllows('0', 'BACKUP_RESTORED_AND_VERIFIED'), false, 'wrong attestation for no-migration must block');
+assert.equal(databaseGateAllows('1', 'SCHEMA_ALREADY_CURRENT'), false, 'schema-only attestation must not enable migrations');
+assert.equal(databaseGateAllows('2', 'BACKUP_RESTORED_AND_VERIFIED'), false, 'non-boolean migration mode must block');
+assert.equal(databaseGateAllows('1', 'BACKUP_RESTORED_AND_VERIFIED_EXTRA'), false, 'inexact backup attestation must block');
 
 const gate = workflow.slice(gateStart, ssh);
 for (const path of [
