@@ -1,5 +1,8 @@
 <?php
 
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
+
 return new class extends Migration
 {
     private const MAX_UPLOAD_BYTES = 12582912;
