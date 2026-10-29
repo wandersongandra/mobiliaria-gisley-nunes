@@ -12,8 +12,8 @@ Pré-requisitos: bucket privado de homologação, credenciais temporárias autor
 Passos:
 
 1. Abra o painel de homologação e inicie um upload JPG, PNG, WebP e AVIF válidos.
-2. Confirme no DevTools que a URL PUT é temporária e que os headers enviados incluem exatamente `Content-Type` e `If-None-Match: *`.
-3. Confirme que o PUT retorna sucesso e que o backend confirma o objeto antes de registrar a mídia.
+2. Confirme no DevTools que o painel envia `multipart/form-data` para `/api/admin/properties/{id}/photos/upload`; não deve existir URL de upload pré-assinada no navegador.
+3. Confirme que o Laravel valida o arquivo, grava o objeto no R2 server-side e somente então registra a mídia no banco.
 4. Repita com extensão alterada, MIME declarado incorreto, arquivo poliglota, arquivo acima de 12 MiB, dimensões acima do limite e pixels acima do limite.
 5. Remova uma mídia e confirme a exclusão do registro, a tentativa de remoção do objeto e o registro de erro sem exposição de dados.
 6. Execute a rotina de limpeza somente no bucket de homologação e confirme que ela não remove objetos registrados.
@@ -22,14 +22,13 @@ Comandos de apoio, sem credenciais:
 
 ```powershell
 curl.exe -i "https://<STAGING_ADMIN_ORIGIN>/api/admin/photos/<PHOTO_ID>/media" -H "Cookie: __Host-gisley_session=<TEST_SESSION_COOKIE>" -H "Host: <STAGING_ADMIN_HOST>"
-curl.exe -i -X OPTIONS "https://<R2_TEST_ENDPOINT>/<OBJECT_KEY>" -H "Origin: https://<STAGING_ADMIN_ORIGIN>" -H "Access-Control-Request-Method: PUT" -H "Access-Control-Request-Headers: content-type,if-none-match"
 ```
 
-Resultado esperado: somente objetos privados, chaves imutáveis do backend, headers assinados coerentes, MIME e conteúdo reais coincidentes, rejeição dos cenários negativos e nenhum registro órfão novo após a limpeza.
+Resultado esperado: somente objetos privados, upload aceito exclusivamente pelo endpoint Laravel, chaves imutáveis do backend, MIME e conteúdo reais coincidentes, rejeição dos cenários negativos e nenhum registro órfão novo após a limpeza.
 
 Critério de aprovação: todos os formatos permitidos passam; cada cenário negativo retorna erro 4xx controlado; nenhum objeto privado fica acessível sem autorização; R2 e banco permanecem consistentes.
 
-Critério de reprovação: wildcard de origem, PUT sem `If-None-Match`, leitura pública, MIME aceito apenas pelo valor do navegador, sobrescrita de chave, ou registro no banco sem confirmação do objeto.
+Critério de reprovação: upload direto do navegador para R2, leitura pública, MIME aceito apenas pelo valor do navegador, sobrescrita de chave, ou registro no banco sem confirmação do objeto.
 
 Rollback: interromper o teste, revogar as credenciais temporárias, remover somente os objetos de teste identificados e restaurar o estado do banco de homologação conforme o procedimento do ambiente. Não executar limpeza ampla.
 
@@ -43,16 +42,14 @@ Passos:
 
 1. Em homologação, liste a configuração atual sem aplicar alterações.
 2. Compare a configuração efetiva com `docs/cors.proposed.json`.
-3. Faça preflight a partir do domínio de painel de homologação e de uma origem não permitida.
-4. Após autorização explícita do responsável pelo bucket, aplique a proposta somente no bucket de homologação.
-5. Repita o preflight e teste um PUT real com os dois headers assinados.
+3. Confirme que não há regra wildcard nem exposição pública desnecessária.
+4. Não aplique CORS para upload direto: o upload oficial ocorre server-side no Laravel.
+5. Se uma integração futura exigir acesso direto ao bucket, crie uma proposta nova e valide-a antes de qualquer aplicação.
 
 Comandos de apoio:
 
 ```powershell
 wrangler r2 bucket cors list <R2_TEST_BUCKET>
-curl.exe -i -X OPTIONS "https://<R2_TEST_ENDPOINT>/<OBJECT_KEY>" -H "Origin: https://<STAGING_ADMIN_ORIGIN>" -H "Access-Control-Request-Method: PUT" -H "Access-Control-Request-Headers: content-type,if-none-match"
-curl.exe -i -X OPTIONS "https://<R2_TEST_ENDPOINT>/<OBJECT_KEY>" -H "Origin: https://example.invalid" -H "Access-Control-Request-Method: PUT" -H "Access-Control-Request-Headers: content-type,if-none-match"
 ```
 
 Formatos e ferramenta:
@@ -68,11 +65,11 @@ mudou e não repetir com `--force`. Listar novamente o bucket, comparar o JSON
 efetivo e só então registrar o resultado. O `cors.json` local preexistente é
 preservado e não faz parte desta PR.
 
-Resultado esperado: somente a origem do painel autorizado recebe `Access-Control-Allow-Origin`; somente PUT e os headers explícitos são permitidos; `ETag` é exposto; preflight externo falha.
+Resultado esperado: nenhuma origem wildcard ou regra de upload direto é necessária; o bucket permanece privado e o fluxo de mídia passa pelo Laravel.
 
-Critério de aprovação: configuração efetiva equivalente à proposta, sem wildcard e sem métodos/headers extras.
+Critério de aprovação: configuração efetiva sem wildcard, sem exposição pública e sem depender de CORS para upload.
 
-Critério de reprovação: configuração em formato inválido, origem extra, wildcard, métodos além de PUT ou preflight não autorizado aprovado.
+Critério de reprovação: configuração em formato inválido, wildcard, exposição pública ou qualquer dependência não documentada de PUT direto pelo navegador.
 
 Rollback: restaurar a configuração anterior documentada do bucket de homologação ou remover a regra aplicada, usando o procedimento oficial do provedor e confirmação do bucket alvo.
 
