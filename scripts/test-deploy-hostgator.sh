@@ -115,7 +115,7 @@ chmod +x "$MOCK_BIN"/*
 # PHP ini_get() representa boolean Off como string vazia ou "0". O gate deve
 # aceitar ambas as formas, mas continuar rejeitando uma diretiva inexistente
 # (ini_get() === false).
-php_dollar='$'
+php_dollar='\$'
 grep -Fq "${php_dollar}upRaw = ini_get('session.upload_progress.enabled');" "$DEPLOY_SCRIPT"
 grep -Fq "${php_dollar}up = ${php_dollar}upRaw === false ? null : strtolower(trim(${php_dollar}upRaw));" "$DEPLOY_SCRIPT"
 grep -Fq "${php_dollar}upDisabled = ${php_dollar}upRaw !== false && in_array(${php_dollar}up, ['', '0', 'off', 'false'], true);" "$DEPLOY_SCRIPT"
