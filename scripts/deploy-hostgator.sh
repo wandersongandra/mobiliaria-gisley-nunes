@@ -282,7 +282,8 @@ FPM_CHECK_FILE=''
 # are embedded in Laravel's config cache and never depend on the web worker's
 # ability to execute Git or read the repository at request time.
 export APP_RELEASE_SHA="$DEPLOY_SHA"
-export APP_RELEASE_BUILT_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+APP_RELEASE_BUILT_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" || fail 'falha ao registrar horário do release'
+export APP_RELEASE_BUILT_AT
 export APP_ASSET_VERSION="${DEPLOY_SHA:0:12}"
 
 "$PHP_BIN" artisan config:clear --no-ansi
