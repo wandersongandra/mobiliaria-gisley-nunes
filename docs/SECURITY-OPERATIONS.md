@@ -36,6 +36,14 @@ Cada publicação deve registrar:
 O workflow de HostGator é manual e exige o SHA correspondente ao tip remoto da branch
 autorizada. Rollback para um SHA anterior exige uma autorização explícita no servidor.
 
+O `scripts/deploy-hostgator.sh` bloqueia `RUN_MIGRATIONS=0` se os arquivos de
+migration mudaram entre o checkout atual e o SHA de destino. Após o deploy,
+o comando `php artisan app:assert-migrations-current` também bloqueia a
+publicação caso exista alguma migration ainda não aplicada. Com
+`RUN_MIGRATIONS=1`, a aplicação das migrations deve acontecer somente após
+backup verificado e teste de restauração; voltar o código não reverte
+automaticamente alterações de esquema no MySQL.
+
 ## HostGator
 
 Validar antes do tráfego:
