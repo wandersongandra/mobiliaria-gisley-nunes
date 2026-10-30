@@ -43,7 +43,7 @@ class PageController extends Controller
         );
         $data['initialCatalogTotal'] = $catalog->total();
         $data['heroProperty'] = collect($data['initialProperties'])->first(
-            static fn (array $property): bool => !empty($property['slug']) && !empty($property['cover_url'])
+            static fn (array $property): bool => ! empty($property['slug']) && ! empty($property['cover_url'])
         );
 
         return view('home', $data);
