@@ -16,5 +16,6 @@ return [
         'sha' => env('APP_RELEASE_SHA', 'unknown'),
         'built_at' => env('APP_RELEASE_BUILT_AT', 'unknown'),
         'asset_version' => env('APP_ASSET_VERSION', 'unknown'),
+        'manifest_path' => storage_path('app/release.json'),
     ],
 ];

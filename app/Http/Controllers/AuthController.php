@@ -6,6 +6,7 @@ use App\Services\AdminAccessService;
 use App\Services\CriticalAuditService;
 use App\Services\CrmService;
 use App\Support\Clock;
+use App\Support\ReleaseMetadata;
 use App\Support\Tokens;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -215,12 +216,22 @@ class AuthController extends Controller
     {
         $this->access->requireCurrent($request);
 
+        $fallback = [
+            'sha' => (string) config('app.release.sha', 'unknown'),
+            'built_at' => (string) config('app.release.built_at', 'unknown'),
+            'asset_version' => (string) config('app.release.asset_version', 'unknown'),
+        ];
+        $release = ReleaseMetadata::fromManifest(
+            (string) config('app.release.manifest_path', storage_path('app/release.json')),
+            $fallback,
+        );
+
         return response()->json([
             'release' => [
                 'environment' => (string) config('app.env'),
-                'backend_sha' => (string) config('app.release.sha', 'unknown'),
-                'built_at' => (string) config('app.release.built_at', 'unknown'),
-                'asset_version' => (string) config('app.release.asset_version', 'unknown'),
+                'backend_sha' => $release['sha'],
+                'built_at' => $release['built_at'],
+                'asset_version' => $release['asset_version'],
             ],
         ])->header('Cache-Control', 'no-store')
             ->header('Pragma', 'no-cache');

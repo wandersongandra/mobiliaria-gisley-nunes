@@ -33,6 +33,7 @@ class AdminAccessConfigurationTest extends TestCase
                 'sha' => '0123456789abcdef0123456789abcdef01234567',
                 'built_at' => '2026-10-23T00:00:00Z',
                 'asset_version' => 'assets-test',
+                'manifest_path' => sys_get_temp_dir().'/missing-release-metadata-test.json',
             ],
         ]);
 
@@ -51,6 +52,47 @@ class AdminAccessConfigurationTest extends TestCase
             ->assertJsonPath('release.backend_sha', '0123456789abcdef0123456789abcdef01234567')
             ->assertJsonPath('release.built_at', '2026-10-23T00:00:00Z')
             ->assertJsonPath('release.asset_version', 'assets-test');
+    }
+
+    public function test_authenticated_manager_reads_fresh_manifest_when_cached_config_is_unknown(): void
+    {
+        $openId = 'fresh-release-metadata-test';
+        $path = tempnam(sys_get_temp_dir(), 'gisley-release-');
+        $this->assertIsString($path);
+
+        try {
+            file_put_contents($path, json_encode([
+                'sha' => 'abcdef0123456789abcdef0123456789abcdef01',
+                'built_at' => '2026-10-30T01:00:00Z',
+                'asset_version' => 'abcdef012345',
+            ], JSON_THROW_ON_ERROR));
+            config([
+                'gisley.admin.bootstrap_open_ids' => [$openId],
+                'app.release' => [
+                    'sha' => 'unknown',
+                    'built_at' => 'unknown',
+                    'asset_version' => 'unknown',
+                    'manifest_path' => $path,
+                ],
+            ]);
+
+            $request = Request::create('/');
+            $request->setLaravelSession($this->app['session']->driver());
+            app(AdminAccessService::class)->establish($request, [
+                'openId' => $openId,
+                'email' => 'fresh-release-manager@example.test',
+                'name' => 'Release Manager',
+            ], 'manager');
+
+            $this->withSession($request->session()->all())
+                ->getJson('/api/admin/release')
+                ->assertOk()
+                ->assertJsonPath('release.backend_sha', 'abcdef0123456789abcdef0123456789abcdef01')
+                ->assertJsonPath('release.built_at', '2026-10-30T01:00:00Z')
+                ->assertJsonPath('release.asset_version', 'abcdef012345');
+        } finally {
+            unlink($path);
+        }
     }
 
     public function test_verified_google_bootstrap_emails_are_matched_exactly(): void
