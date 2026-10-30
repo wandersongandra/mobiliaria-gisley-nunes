@@ -1,4 +1,6 @@
 packages: []
+overrides:
+  body-parser: ^2.4.0
 allowBuilds:
   esbuild: set this to true or false
 onlyBuiltDependencies:
