@@ -29,6 +29,7 @@ storage/logs/*
 .phpstan-cache/
 .deploy-state
 .deploy-lock/
+/storage/app/release.json
 .playwright-cli/
 output/playwright/
 test-results/
