@@ -6,7 +6,7 @@ function e(e){return String(e??``).replace(/[&<>'"]/g,e=>({"&":`&amp;`,"<":`&lt;
       <span class="listing-image-shade" aria-hidden="true"></span>
     </a>
     <div class="listing-info">
-      <div><p class="listing-location">${e(t.location)}</p><h3>${e(t.title)}</h3></div>
+      <div><p class="listing-location">${e(t.location)}</p><h3><a class="listing-title-link" href="${r}">${e(t.title)}</a></h3></div>
       <strong class="listing-price">${e(t.price)}</strong>
     </div>
     <div class="listing-meta">${t.meta.map(t=>`<span>${e(t)}</span>`).join(``)}</div>

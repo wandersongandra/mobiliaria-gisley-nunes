@@ -109,7 +109,28 @@ class PublicPageRenderTest extends TestCase
             ->assertOk()
             ->assertSee($property['title'])
             ->assertSee('/imoveis/'.rawurlencode($property['slug']), false)
+            ->assertSee('listing-title-link', false)
             ->assertSee('listing-card-server', false);
+    }
+
+    public function test_home_hero_uses_a_real_catalog_photo_when_a_published_property_has_a_cover(): void
+    {
+        $property = $this->publishPropertyWithCover();
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('hero-image-link', false)
+            ->assertSee('Imóvel do catálogo · ver anúncio', false)
+            ->assertSee('/imoveis/'.rawurlencode($property['slug']), false)
+            ->assertDontSee('Imagem de referência · arquitetura residencial', false);
+    }
+
+    public function test_home_hero_keeps_an_explicitly_labeled_reference_image_without_published_properties(): void
+    {
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('Imagem de referência · arquitetura residencial', false)
+            ->assertDontSee('hero-image-link', false);
     }
 
     public function test_legacy_numeric_price_labels_are_formatted_in_ssr_and_api_without_mutating_the_database(): void

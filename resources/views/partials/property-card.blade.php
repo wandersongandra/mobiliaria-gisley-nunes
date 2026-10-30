@@ -10,7 +10,7 @@
     <span class="listing-image-shade" aria-hidden="true"></span>
   </a>
   <div class="listing-info">
-    <div><p class="listing-location">{{ $property['location'] }}</p><h3>{{ $property['title'] }}</h3></div>
+    <div><p class="listing-location">{{ $property['location'] }}</p><h3><a class="listing-title-link" href="/imoveis/{{ rawurlencode($property['slug']) }}">{{ $property['title'] }}</a></h3></div>
     <strong class="listing-price">{{ $property['price_label'] ?: 'Consulte' }}</strong>
   </div>
   <div class="listing-meta">
