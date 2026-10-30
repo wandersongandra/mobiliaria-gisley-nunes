@@ -6,6 +6,12 @@ const workflow = readFileSync(
   new URL('../.github/workflows/hostgator-deploy-gated.yml', import.meta.url),
   'utf8'
 );
+const deployScript = readFileSync(new URL('./deploy-hostgator.sh', import.meta.url), 'utf8');
+const gitignore = readFileSync(new URL('../.gitignore', import.meta.url), 'utf8');
+
+assert.match(deployScript, /RELEASE_MANIFEST="\$PROJECT_ROOT\/storage\/app\/release\.json"/);
+assert.match(gitignore, /^\/storage\/app\/release\.json$/m,
+  'The generated private release manifest must not make the production checkout dirty');
 
 assert.match(workflow, /permissions:\n  contents: read\n  actions: read\n/);
 assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
