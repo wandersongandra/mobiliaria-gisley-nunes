@@ -480,6 +480,68 @@ class UploadLifecycleTest extends TestCase
         )->assertForbidden()->assertJson(['error' => 'UPLOAD_AUTH_REQUIRED']);
     }
 
+    public function test_authorized_presigned_put_rejects_fake_image_bytes_without_leaving_a_file(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        try {
+            config(['app.url' => 'https://test.local', 'app.admin_url' => 'https://test.local']);
+            $propertyId = $this->createDraftProperty();
+            $session = $this->createManagerSession();
+            $bytes = 'this is not a JPEG file';
+
+            $presign = $this->withSession($session)
+                ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+                ->postJson('/api/admin/uploads/presign', [
+                    'propertyId' => $propertyId,
+                    'fileName' => 'foto.jpg',
+                    'contentType' => 'image/jpeg',
+                    'size' => strlen($bytes),
+                ])
+                ->assertOk();
+
+            $storagePath = (string) $presign->json('storagePath');
+            $this->withSession($session)
+                ->call('PUT', $presign->json('uploadUrl'), [], $this->prepareCookiesForRequest(), [], [
+                    'HTTP_ORIGIN' => 'https://test.local',
+                    'HTTP_HOST' => 'test.local',
+                    'CONTENT_TYPE' => 'image/jpeg',
+                    'CONTENT_LENGTH' => (string) strlen($bytes),
+                    'HTTP_X_UPLOAD_AUTHORIZATION' => (string) $presign->json('uploadHeaders.X-Upload-Authorization'),
+                ], $bytes)
+                ->assertStatus(400)
+                ->assertJson(['error' => 'INVALID_ASSET']);
+
+            $this->assertFileDoesNotExist($root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $storagePath));
+        } finally {
+            File::deleteDirectory($root);
+        }
+    }
+
+    public function test_local_stream_rejects_invalid_image_contents_and_removes_the_file(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        $storage = app(R2Storage::class);
+        $path = R2Storage::PREFIX.Str::uuid().'/forged.jpg';
+        $stream = fopen('php://temp', 'w+b');
+        $this->assertIsResource($stream);
+        $bytes = 'not really a jpeg';
+        fwrite($stream, $bytes);
+        rewind($stream);
+
+        try {
+            try {
+                $storage->putStream($path, $stream, 'image/jpeg', strlen($bytes));
+                $this->fail('A spoofed Content-Type must not create a stored image.');
+            } catch (RuntimeException $error) {
+                $this->assertSame('INVALID_ASSET', $error->getMessage());
+            }
+            $this->assertFalse($storage->exists($path));
+        } finally {
+            fclose($stream);
+            File::deleteDirectory($root);
+        }
+    }
+
     public function test_local_stream_upload_rejects_excess_bytes_and_removes_partial_file(): void
     {
         $root = $this->configureTemporaryMediaRoot();

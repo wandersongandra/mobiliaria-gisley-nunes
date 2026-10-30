@@ -190,6 +190,17 @@ class LocalMediaStorage
             if ($copied !== $size) {
                 throw new RuntimeException('INVALID_FILE');
             }
+
+            // O PUT autenticado deve obedecer às mesmas garantias de formato
+            // e dimensões da rota que registra a foto. Sem esta validação,
+            // payloads arbitrários ficam órfãos no disco privado até o cron.
+            if (! @fflush($output)) {
+                throw new RuntimeException('MEDIA_STORAGE_WRITE_FAILED');
+            }
+            $bytes = @file_get_contents($target);
+            if (! is_string($bytes) || self::imageInfoFromBytes($bytes, $contentType) === null) {
+                throw new RuntimeException('INVALID_ASSET');
+            }
         } catch (RuntimeException $error) {
             @unlink($target);
             throw $error;

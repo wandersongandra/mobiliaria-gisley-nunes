@@ -17,6 +17,10 @@ Options -Indexes
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    # Sensitive admin/auth routes must never disclose OAuth codes or one-use
+    # invitations in Referer headers, including on redirects and errors.
+    # THE_REQUEST preserves the original URL after Laravel's internal rewrite.
+    Header always set Referrer-Policy "no-referrer" "expr=%{THE_REQUEST} =~ m#^\S+\s+/(?:api/(?:admin|auth)|admin|oauth/google/return)(?:/|\?|\s)#"
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
     Header always set X-Permitted-Cross-Domain-Policies "none"
     Header always set Strict-Transport-Security "max-age=31536000"
