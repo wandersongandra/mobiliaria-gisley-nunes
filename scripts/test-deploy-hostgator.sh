@@ -22,7 +22,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 mkdir -p "$PROJECT_ROOT/public/assets" "$PROJECT_ROOT/public/admin" "$PROJECT_ROOT/public/images" \
-    "$PROJECT_ROOT/storage" "$PROJECT_ROOT/bootstrap/cache" "$MOCK_BIN" "$TMP_DIR"
+    "$PROJECT_ROOT/storage/app" "$PROJECT_ROOT/bootstrap/cache" "$MOCK_BIN" "$TMP_DIR"
 touch "$PROJECT_ROOT/public/.user.ini"
 PUBLIC_FILES=(
     "$PROJECT_ROOT/public/index.php" "$PROJECT_ROOT/public/.htaccess"
@@ -207,6 +207,9 @@ grep -Fxq 'artisan app:assert-migrations-current --no-ansi' "$PHP_AUDIT_FILE"
 grep -Fxq 'sha=2222222222222222222222222222222222222222' "$RELEASE_AUDIT_FILE"
 grep -Eq '^built_at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$RELEASE_AUDIT_FILE"
 grep -Fxq 'asset_version=222222222222' "$RELEASE_AUDIT_FILE"
+test "$(stat -c '%a' "$PROJECT_ROOT/storage/app/release.json")" = '600'
+grep -Eq '^\{"sha":"2222222222222222222222222222222222222222","built_at":"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z","asset_version":"222222222222"\}$' "$PROJECT_ROOT/storage/app/release.json"
+assert_absent "$PROJECT_ROOT/storage/app/.release.*"
 for public_file in "${PUBLIC_FILES[@]}"; do
     test "$(stat -c '%a' "$public_file")" = '644'
 done
@@ -219,6 +222,21 @@ test "$(grep -c '^public_asset_probe=present$' "$CURL_AUDIT_FILE")" -eq 6
 assert_absent "$PROJECT_ROOT/public/.fpm_sec_check.*.php"
 assert_absent "$TMP_DIR/gisley-fpm-*"
 test ! -e "$PROJECT_ROOT/.deploy-lock"
+
+# A release manifest symlink must never be followed or overwritten.
+mv -- "$PROJECT_ROOT/storage/app/release.json" "$PROJECT_ROOT/storage/app/release.json.saved"
+ln -s /dev/null "$PROJECT_ROOT/storage/app/release.json"
+set +e
+run_deploy >/dev/null 2>"$TEST_ROOT/release-symlink.err"
+release_symlink_status=$?
+set -e
+test "$release_symlink_status" -ne 0
+grep -q 'manifesto de release não pode ser symlink' "$TEST_ROOT/release-symlink.err"
+test -L "$PROJECT_ROOT/storage/app/release.json"
+unlink "$PROJECT_ROOT/storage/app/release.json"
+mv -- "$PROJECT_ROOT/storage/app/release.json.saved" "$PROJECT_ROOT/storage/app/release.json"
+test ! -e "$PROJECT_ROOT/.deploy-lock"
+
 grep -q '^request_cache_control=present$' "$CURL_AUDIT_FILE"
 grep -q '^request_pragma=present$' "$CURL_AUDIT_FILE"
 grep -q '^cache_buster=present$' "$CURL_AUDIT_FILE"

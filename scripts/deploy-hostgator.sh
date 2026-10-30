@@ -20,6 +20,7 @@ FPM_CHECK_FILE=''
 FPM_HEADERS_FILE=''
 FPM_BODY_FILE=''
 FPM_CURL_CONFIG_FILE=''
+RELEASE_MANIFEST_TMP=''
 LOCK_ACQUIRED=0
 
 fail() {
@@ -36,6 +37,9 @@ cleanup() {
             rm -f -- "$temporary_file" 2>/dev/null || true
         fi
     done
+    if [[ -n "$RELEASE_MANIFEST_TMP" ]]; then
+        rm -f -- "$RELEASE_MANIFEST_TMP" 2>/dev/null || true
+    fi
 }
 
 handle_signal() {
@@ -301,6 +305,25 @@ else
     printf 'migrations não executadas; defina RUN_MIGRATIONS=1 em uma janela aprovada\n'
 fi
 "$PHP_BIN" artisan app:assert-migrations-current --no-ansi
+
+# Persist release metadata outside PHP's configuration and opcode caches.
+# This file is never web-accessible: authenticated diagnostics read it from
+# storage/app, and an atomic rename avoids partial reads across workers.
+RELEASE_MANIFEST="$PROJECT_ROOT/storage/app/release.json"
+[[ -d "$PROJECT_ROOT/storage/app" && ! -L "$PROJECT_ROOT/storage/app" ]] \
+    || fail 'diretório privado do release inválido'
+[[ ! -L "$RELEASE_MANIFEST" ]] || fail 'manifesto de release não pode ser symlink'
+RELEASE_MANIFEST_TMP="$(mktemp "$PROJECT_ROOT/storage/app/.release.XXXXXX")" \
+    || fail 'falha ao criar manifesto de release temporário'
+printf '{"sha":"%s","built_at":"%s","asset_version":"%s"}\n' \
+    "$APP_RELEASE_SHA" "$APP_RELEASE_BUILT_AT" "$APP_ASSET_VERSION" \
+    > "$RELEASE_MANIFEST_TMP" || fail 'falha ao escrever manifesto de release'
+chmod 0600 -- "$RELEASE_MANIFEST_TMP" || fail 'falha ao proteger manifesto de release'
+mv -f -- "$RELEASE_MANIFEST_TMP" "$RELEASE_MANIFEST" \
+    || fail 'falha ao publicar manifesto de release'
+RELEASE_MANIFEST_TMP=''
+[[ -r "$RELEASE_MANIFEST" && ! -L "$RELEASE_MANIFEST" ]] \
+    || fail 'manifesto de release indisponível após escrita'
 
 HEALTH_CACHE_BUSTER="$(openssl rand -hex 16)" || fail 'falha ao gerar cache-buster do health check'
 if [[ "$HEALTH_URL" == *\?* ]]; then
