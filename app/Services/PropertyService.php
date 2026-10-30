@@ -129,6 +129,9 @@ class PropertyService
                     ->orderBy('location')
                     ->pluck('location')
                     ->map(static fn ($value): string => (string) $value)
+                    // Street addresses are not neighborhoods and must not become filter facets.
+                    ->filter(fn (string $location): bool => ! $this->looksLikeStreetAddress($location))
+                    ->values()
                     ->all(),
                 'types' => DB::table('morada_properties')
                     ->where('status', 'published')
@@ -741,10 +744,9 @@ class PropertyService
 
         foreach ($publicProperties as $property) {
             $name = trim(explode('·', (string) ($property['location'] ?? ''))[0]);
-            if ($name === '') {
-                $name = trim((string) ($property['city'] ?? ''));
-            }
-            if ($name === '') {
+            // Neither a full street address nor a city name is a neighborhood.
+            // Keep the property in the public catalog, but do not generate a false local landing page.
+            if ($name === '' || $this->looksLikeStreetAddress($name)) {
                 continue;
             }
 
@@ -757,6 +759,12 @@ class PropertyService
         uasort($groups, fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
 
         return array_values($groups);
+    }
+
+    private function looksLikeStreetAddress(string $location): bool
+    {
+        return preg_match('/^(?:avenida|av\\.?|rua|r\\.?|travessa|tv\\.?|alameda|rodovia|estrada|pra[cç]a)\\s+/iu', $location) === 1
+            || preg_match('/,\\s*(?:n[º°o]?\\.?\\s*)?\\d{1,6}\\b/u', $location) === 1;
     }
 
     private function safeMediaUrl(mixed $value): string
