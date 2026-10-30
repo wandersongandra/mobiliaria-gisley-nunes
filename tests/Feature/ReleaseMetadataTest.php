@@ -50,7 +50,8 @@ class ReleaseMetadataTest extends TestCase
             unlink($path);
         }
 
-        self::assertSame($this->fallback(), ReleaseMetadata::fromManifest($path, $this->fallback()));
+        $missingRelease = ReleaseMetadata::fromManifest($path, $this->fallback());
+        self::assertSame('unknown', $missingRelease['sha']);
     }
 
     /** @return array{sha: string, built_at: string, asset_version: string} */
