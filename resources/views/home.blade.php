@@ -18,7 +18,14 @@
           </div>
         </div>
         <div class="hero-visual">
-          <div class="hero-image-wrap"><img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=85" alt="Casa contemporânea cercada por jardim ao entardecer" width="1600" height="1067" loading="eager" fetchpriority="high" decoding="async" /><span class="image-caption">Imagem de referência · arquitetura residencial</span></div>
+          @if(!empty($heroProperty))
+            <a class="hero-image-wrap hero-image-link" href="/imoveis/{{ rawurlencode($heroProperty['slug']) }}" aria-label="Conhecer o imóvel: {{ $heroProperty['title'] }}">
+              <img src="{{ $heroProperty['cover_url'] }}" alt="{{ $heroProperty['title'] }}, {{ $heroProperty['location'] }}" width="1200" height="800" loading="eager" fetchpriority="high" decoding="async" />
+              <span class="image-caption">Imóvel do catálogo · ver anúncio <span aria-hidden="true">↗</span></span>
+            </a>
+          @else
+            <div class="hero-image-wrap"><img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=85" alt="Casa contemporânea cercada por jardim ao entardecer" width="1600" height="1067" loading="eager" fetchpriority="high" decoding="async" /><span class="image-caption">Imagem de referência · arquitetura residencial</span></div>
+          @endif
           <div class="hero-seal" aria-label="Atendimento direto"><span>atendimento</span><strong>direto</strong><small>◆</small></div>
         </div>
       </section>
@@ -39,8 +46,8 @@
       <section class="section shell listings-section home-listings" id="imoveis" aria-labelledby="listings-title">
         <div class="section-heading"><div><p class="eyebrow">imóveis disponíveis</p><h2 id="listings-title">Imóveis à venda e para alugar<br /><em>em Belo Horizonte.</em></h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
         <div class="listing-grid" id="listing-grid">
-          @foreach(($initialProperties ?? []) as $index => $property)
-            @include('partials.property-card', ['property' => $property, 'imageLoading' => $index === 0 ? 'eager' : 'lazy'])
+          @foreach(($initialProperties ?? []) as $property)
+            @include('partials.property-card', ['property' => $property, 'imageLoading' => 'lazy'])
           @endforeach
         </div>
         <div class="empty-state" id="empty-state" @if(!empty($initialProperties)) hidden @endif>

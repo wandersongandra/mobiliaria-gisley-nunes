@@ -72,7 +72,7 @@ function listingCard(item, index = 0) {
       <span class="listing-image-shade" aria-hidden="true"></span>
     </a>
     <div class="listing-info">
-      <div><p class="listing-location">${escapeHTML(item.location)}</p><h3>${escapeHTML(item.title)}</h3></div>
+      <div><p class="listing-location">${escapeHTML(item.location)}</p><h3><a class="listing-title-link" href="${href}">${escapeHTML(item.title)}</a></h3></div>
       <strong class="listing-price">${escapeHTML(item.price)}</strong>
     </div>
     <div class="listing-meta">${item.meta.map((meta) => `<span>${escapeHTML(meta)}</span>`).join('')}</div>
