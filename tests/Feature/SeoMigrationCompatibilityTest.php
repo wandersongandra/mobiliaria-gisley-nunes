@@ -121,6 +121,36 @@ class SeoMigrationCompatibilityTest extends TestCase
             ->assertSee('/bairros/lourdes', false);
     }
 
+    public function test_street_address_is_not_exposed_as_a_neighborhood_or_filter_facet(): void
+    {
+        $this->publishProperty(
+            'Apartamento com endereço cadastrado',
+            'apartamento-com-endereco-cadastrado-cods-920001',
+            'AV DIVINO MARQUES GUIMARAES, 2249, BL 04'
+        );
+
+        $this->get('/imoveis')
+            ->assertOk()
+            ->assertSee('Apartamento com endereço cadastrado');
+
+        $this->get('/bairros')
+            ->assertOk()
+            ->assertSee('<meta name="robots" content="noindex,follow"', false)
+            ->assertDontSee('AV DIVINO MARQUES GUIMARAES');
+
+        $this->get('/bairros/av-divino-marques-guimaraes-2249-bl-04')
+            ->assertNotFound();
+
+        $this->get('/sitemap.xml')
+            ->assertOk()
+            ->assertSee('/imoveis/apartamento-com-endereco-cadastrado-cods-920001', false)
+            ->assertDontSee('/bairros', false);
+
+        $this->getJson('/api/v2/properties')
+            ->assertOk()
+            ->assertJsonFragment(['locations' => []]);
+    }
+
     public function test_legacy_property_slug_redirects_when_the_import_preserves_the_old_slug(): void
     {
         $property = $this->publishProperty(
