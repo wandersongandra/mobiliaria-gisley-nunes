@@ -308,7 +308,7 @@ class PageController extends Controller
             'price' => $property['price'],
             'priceCurrency' => 'BRL',
             'image' => array_values(array_filter(array_map(
-                fn (array $photo): ?string => $this->absoluteImageUrl($photo['url'] ?? null),
+                fn (array $photo): string => $this->absoluteImageUrl($photo['url'] ?? null),
                 $property['photos']
             ))),
             'itemOffered' => [
