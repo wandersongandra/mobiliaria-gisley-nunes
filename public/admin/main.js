@@ -447,7 +447,7 @@ function renderProperties() {
 }
 
 function fillForm(property = {}) {
-  for (const [key, value] of Object.entries({ title: property.title || '', location: property.location || '', city: property.city || 'Belo Horizonte', purpose: property.purpose || 'Comprar', type: property.type || 'Apartamento', price: property.price || '', priceLabel: property.price_label || '', bedrooms: property.bedrooms ?? 2, bathrooms: property.bathrooms ?? 2, areaM2: property.area_m2 ?? 80, suites: property.suites ?? 0, parkingSpots: property.parking_spots ?? 0, condoFee: property.condo_fee ?? 0, iptu: property.iptu ?? 0, description: property.description || '' })) { if (form.elements[key]) form.elements[key].value = value; }
+  for (const [key, value] of Object.entries({ title: property.title || '', location: property.location || '', neighborhood: property.neighborhood || '', city: property.city || 'Belo Horizonte', purpose: property.purpose || 'Comprar', type: property.type || 'Apartamento', price: property.price || '', priceLabel: property.price_label || '', bedrooms: property.bedrooms ?? 2, bathrooms: property.bathrooms ?? 2, areaM2: property.area_m2 ?? 80, suites: property.suites ?? 0, parkingSpots: property.parking_spots ?? 0, condoFee: property.condo_fee ?? 0, iptu: property.iptu ?? 0, description: property.description || '' })) { if (form.elements[key]) form.elements[key].value = value; }
   form.elements.published.checked = property.status !== 'draft' && property.status !== 'archived';
   form.elements.featured.checked = Boolean(property.is_featured);
 }
