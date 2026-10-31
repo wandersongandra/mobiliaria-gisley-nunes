@@ -665,6 +665,8 @@ class PropertyService
 
     public function publicProperty(array $row): array
     {
+        $photos = array_values($row['photos'] ?? []);
+
         return [
             'slug' => (string) ($row['slug'] ?? ''),
             'title' => (string) ($row['title'] ?? ''),
@@ -685,13 +687,31 @@ class PropertyService
             'is_featured' => (bool) ($row['is_featured'] ?? false),
             'cover_url' => $this->safeMediaUrl($row['cover_url'] ?? ''),
             'updated_at' => $row['updated_at'] ?? null,
-            'photos' => array_map(fn (array $photo): array => [
+            'photos' => array_map(fn (array $photo, int $index): array => [
                 'url' => $this->safeMediaUrl($photo['url'] ?? ''),
-                'alt_text' => (string) ($photo['alt_text'] ?? ''),
+                'alt_text' => $this->publicPhotoAlt($photo, (string) ($row['title'] ?? ''), $index + 1),
                 'sort_order' => (int) ($photo['sort_order'] ?? 0),
                 'is_cover' => (bool) ($photo['is_cover'] ?? false),
-            ], $row['photos'] ?? []),
+            ], $photos, array_keys($photos)),
         ];
+    }
+
+    /**
+     * Remove nomes de arquivo e rótulos numéricos importados apenas na saída
+     * pública. Mantém as legendas descritivas e os registros originais intactos.
+     *
+     * @param array<string, mixed> $photo
+     */
+    private function publicPhotoAlt(array $photo, string $title, int $ordinal): string
+    {
+        $alt = trim((string) ($photo['alt_text'] ?? ''));
+        if ($alt === '' || preg_match('/^(?:\d+|foto\s*\d+|whatsapp(?:\s+image)?\b.*)$/iu', $alt) === 1) {
+            $name = trim($title);
+
+            return $name !== '' ? $name.' — foto '.$ordinal : 'Foto '.$ordinal.' do imóvel';
+        }
+
+        return $alt;
     }
 
     public function adminProperty(array $row): array
