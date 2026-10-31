@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Services\PropertyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -164,10 +166,10 @@ class SeoMigrationCompatibilityTest extends TestCase
         $row = app(PropertyService::class)->getPropertyBySlug($property['slug']);
         $this->assertNotNull($row);
 
-        \Illuminate\Support\Facades\DB::table('morada_properties')
+        DB::table('morada_properties')
             ->where('slug', $property['slug'])
             ->update(['neighborhood' => 'Santa Mônica']);
-        \Illuminate\Support\Facades\Cache::forget(PropertyService::PUBLIC_CATALOG_CACHE_KEY);
+        Cache::forget(PropertyService::PUBLIC_CATALOG_CACHE_KEY);
 
         $this->get('/bairros')
             ->assertOk()
@@ -189,10 +191,10 @@ class SeoMigrationCompatibilityTest extends TestCase
             'apartamento-de-dois-quartos-cods-920003',
             'Lourdes · Belo Horizonte'
         );
-        \Illuminate\Support\Facades\DB::table('morada_properties')
+        DB::table('morada_properties')
             ->where('slug', $property['slug'])
             ->update(['title' => 'Apartamento  de dois quartos']);
-        \Illuminate\Support\Facades\Cache::forget(PropertyService::PUBLIC_CATALOG_CACHE_KEY);
+        Cache::forget(PropertyService::PUBLIC_CATALOG_CACHE_KEY);
 
         $this->get('/imoveis/'.$property['slug'])
             ->assertOk()
