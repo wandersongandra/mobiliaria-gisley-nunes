@@ -89,7 +89,12 @@ jobs:
             | xargs -0 -n1 php -l
 
       - name: Format check
-        run: composer run format:check
+        run: |
+          if ! composer run format:check; then
+            vendor/bin/pint app/Services/PropertyService.php
+            git diff -- app/Services/PropertyService.php
+            exit 1
+          fi
 
       - name: Static analysis
         run: composer run analyse
