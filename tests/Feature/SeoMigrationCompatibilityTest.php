@@ -154,6 +154,57 @@ class SeoMigrationCompatibilityTest extends TestCase
             ->assertJsonFragment(['locations' => []]);
     }
 
+    public function test_confirmed_neighborhood_generates_a_page_even_when_location_contains_a_street(): void
+    {
+        $property = $this->publishProperty(
+            'Apartamento com bairro confirmado',
+            'apartamento-com-bairro-confirmado-cods-920002',
+            'Rua das Flores, 120'
+        );
+        $row = app(PropertyService::class)->getPropertyBySlug($property['slug']);
+        $this->assertNotNull($row);
+
+        \Illuminate\Support\Facades\DB::table('morada_properties')
+            ->where('slug', $property['slug'])
+            ->update(['neighborhood' => 'Santa Mônica']);
+        \Illuminate\Support\Facades\Cache::forget(PropertyService::PUBLIC_CATALOG_CACHE_KEY);
+
+        $this->get('/bairros')
+            ->assertOk()
+            ->assertSee('Santa Mônica')
+            ->assertDontSee('Rua das Flores');
+
+        $this->get('/bairros/santa-monica')
+            ->assertOk()
+            ->assertSee($property['title'])
+            ->assertSee('<meta name="robots" content="noindex,follow"', false);
+
+        $this->get('/bairros/rua-das-flores-120')->assertNotFound();
+    }
+
+    public function test_legacy_title_spacing_is_normalized_without_altering_the_stored_record(): void
+    {
+        $property = $this->publishProperty(
+            'Apartamento de dois quartos',
+            'apartamento-de-dois-quartos-cods-920003',
+            'Lourdes · Belo Horizonte'
+        );
+        \Illuminate\Support\Facades\DB::table('morada_properties')
+            ->where('slug', $property['slug'])
+            ->update(['title' => 'Apartamento  de dois quartos']);
+        \Illuminate\Support\Facades\Cache::forget(PropertyService::PUBLIC_CATALOG_CACHE_KEY);
+
+        $this->get('/imoveis/'.$property['slug'])
+            ->assertOk()
+            ->assertSee('<title>Apartamento de dois quartos | Gisley Nunes Imóveis</title>', false)
+            ->assertDontSee('Apartamento  de dois quartos');
+
+        $row = app(PropertyService::class)->getPropertyBySlug($property['slug']);
+        $this->assertNotNull($row);
+        $this->assertSame('Apartamento  de dois quartos', $row['title']);
+        $this->assertSame('Apartamento de dois quartos', app(PropertyService::class)->adminProperty($row)['title']);
+    }
+
     public function test_property_metadata_has_compact_description_and_absolute_image_urls(): void
     {
         $property = $this->publishProperty(
