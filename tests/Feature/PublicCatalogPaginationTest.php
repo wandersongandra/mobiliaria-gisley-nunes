@@ -61,6 +61,32 @@ class PublicCatalogPaginationTest extends TestCase
             ->assertJsonFragment(['types' => ['Apartamento', 'Casa']]);
     }
 
+    public function test_explicit_neighborhood_is_a_filter_without_exposing_the_street_address(): void
+    {
+        $this->insertPublishedProperties(2);
+        DB::table('morada_properties')->where('slug', 'imovel-de-catalogo-2')->update([
+            'location' => 'Rua das Flores, 120',
+            'neighborhood' => 'Santa Mônica',
+        ]);
+        Cache::forget(PropertyService::PUBLIC_CATALOG_FACETS_CACHE_KEY);
+
+        $facetsResponse = $this->getJson('/api/v2/properties')
+            ->assertOk()
+            ->assertJsonFragment(['locations' => ['Lourdes · Belo Horizonte', 'Santa Mônica']]);
+        $this->assertNotContains('Rua das Flores, 120', $facetsResponse->json('facets.locations'));
+
+        $this->getJson('/api/v2/properties?location='.rawurlencode('Santa Mônica'))
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('properties.0.slug', 'imovel-de-catalogo-2')
+            ->assertJsonPath('properties.0.neighborhood', 'Santa Mônica');
+
+        $this->getJson('/api/v2/properties?location='.rawurlencode('Lourdes · Belo Horizonte'))
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('properties.0.slug', 'imovel-de-catalogo-1');
+    }
+
     public function test_v2_catalog_treats_sql_fragments_as_values_not_query_code(): void
     {
         $this->insertPublishedProperties(1);
