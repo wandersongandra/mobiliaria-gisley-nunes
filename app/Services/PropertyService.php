@@ -700,7 +700,7 @@ class PropertyService
      * Remove nomes de arquivo e rótulos numéricos importados apenas na saída
      * pública. Mantém as legendas descritivas e os registros originais intactos.
      *
-     * @param array<string, mixed> $photo
+     * @param  array<string, mixed>  $photo
      */
     private function publicPhotoAlt(array $photo, string $title, int $ordinal): string
     {
