@@ -152,7 +152,8 @@ class PageController extends Controller
 
     public function bairros(Request $request)
     {
-        $neighborhoods = $this->properties->neighborhoods($this->properties->publicCatalog());
+        $publicProperties = $this->properties->publicCatalog();
+        $neighborhoods = $this->properties->neighborhoods($publicProperties);
         $data = $this->pageData(
             'Imóveis por bairro em Belo Horizonte | Gisley Nunes',
             'Encontre imóveis disponíveis por bairro em Belo Horizonte e região. Consulte as opções e fale com a Gisley Nunes.',
@@ -160,6 +161,7 @@ class PageController extends Controller
             robots: empty($neighborhoods) ? 'noindex,follow' : 'index,follow,max-image-preview:large'
         );
         $data['neighborhoods'] = $neighborhoods;
+        $data['publishedTotal'] = count($publicProperties);
         $data['pageLd'] = $this->jsonLd([
             '@context' => 'https://schema.org',
             '@type' => 'CollectionPage',
@@ -287,7 +289,7 @@ class PageController extends Controller
         $property = $this->properties->publicProperty($row);
         $data = $this->pageData(
             $property['title'].' | Gisley Nunes Imóveis',
-            $property['description'] ?: 'Conheça '.$property['title'].' em '.$property['location'].'.',
+            $this->propertyMetaDescription($property),
             '/imoveis/'.$property['slug'],
             $property['cover_url'] ?: null,
             'article'
@@ -306,7 +308,7 @@ class PageController extends Controller
             'price' => $property['price'],
             'priceCurrency' => 'BRL',
             'image' => array_values(array_filter(array_map(
-                fn (array $photo): ?string => $photo['url'] ?: null,
+                fn (array $photo): string => $this->absoluteImageUrl($photo['url'] ?? null),
                 $property['photos']
             ))),
             'itemOffered' => [
@@ -368,6 +370,48 @@ class PageController extends Controller
         ), 404);
     }
 
+    /** @param array<string, mixed> $property */
+    private function propertyMetaDescription(array $property): string
+    {
+        $title = preg_replace('/\s+/u', ' ', trim((string) ($property['title'] ?? ''))) ?: 'Imóvel';
+        $city = trim((string) ($property['city'] ?? '')) ?: 'Belo Horizonte';
+        $purpose = match ($property['purpose'] ?? '') {
+            'Comprar' => 'à venda',
+            'Alugar' => 'para alugar',
+            default => 'disponível',
+        };
+
+        $features = [];
+        foreach (['bedrooms' => ['quarto', 'quartos'], 'bathrooms' => ['banheiro', 'banheiros'], 'parking_spots' => ['vaga', 'vagas']] as $field => $labels) {
+            $count = (int) ($property[$field] ?? 0);
+            if ($count > 0) {
+                $features[] = $count.' '.($count === 1 ? $labels[0] : $labels[1]);
+            }
+        }
+        $area = (float) ($property['area_m2'] ?? 0);
+        if ($area > 0) {
+            $features[] = number_format($area, $area === floor($area) ? 0 : 1, ',', '.').' m²';
+        }
+
+        $description = $title.' '.$purpose.' em '.$city.'.';
+        if ($features !== []) {
+            $description .= ' '.implode(', ', $features).'.';
+        }
+        $price = trim((string) ($property['price_label'] ?? ''));
+        if ($price !== '' && $price !== 'Sob consulta') {
+            $description .= ' '.$price.'.';
+        }
+
+        return Str::limit($description.' Veja fotos e fale com a equipe.', 160, '…');
+    }
+
+    private function absoluteImageUrl(?string $url): string
+    {
+        $value = trim((string) $url);
+
+        return str_starts_with($value, '/') ? $this->origin().$value : $value;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -389,7 +433,7 @@ class PageController extends Controller
                 'title' => $title,
                 'description' => $description,
                 'canonical' => $this->origin().$path,
-                'ogImage' => $ogImage ?: $this->origin().'/images/gisley-nunes-imoveis-logo.jpeg',
+                'ogImage' => $this->absoluteImageUrl($ogImage) ?: $this->origin().'/images/gisley-nunes-imoveis-logo.jpeg',
                 'ogImageAlt' => $title,
                 'ogType' => $ogType,
                 'robots' => $robots,

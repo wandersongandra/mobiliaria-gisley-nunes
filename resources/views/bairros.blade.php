@@ -11,7 +11,7 @@
       </section>
 
       <section class="neighborhood-directory shell" aria-labelledby="neighborhood-title">
-        <div class="directory-head"><div><p class="eyebrow">bairros com imóveis publicados</p><h2 id="neighborhood-title">{{ count($neighborhoods) }} {{ count($neighborhoods) === 1 ? 'bairro disponível' : 'bairros disponíveis' }}</h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
+        <div class="directory-head"><div><p class="eyebrow">bairros com imóveis publicados</p><h2 id="neighborhood-title">@if(count($neighborhoods)){{ count($neighborhoods) }} {{ count($neighborhoods) === 1 ? 'bairro disponível' : 'bairros disponíveis' }}@else Bairros em atualização @endif</h2></div><a class="text-link" href="/imoveis">Ver todos os imóveis <span>↗</span></a></div>
         @if(count($neighborhoods))
           <div class="neighborhood-grid">
             @foreach($neighborhoods as $index => $neighborhood)
@@ -19,7 +19,15 @@
             @endforeach
           </div>
         @else
-          <div class="empty-state"><p>Ainda não há imóveis publicados por bairro. Fale com a equipe para informar o que você procura.</p><a class="button button-primary" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a></div>
+          <div class="empty-state">
+            @if($publishedTotal > 0)
+              <p>Já existem imóveis publicados, mas os bairros ainda não foram identificados no cadastro. Confira todas as opções disponíveis ou conte à equipe o que procura.</p>
+              <a class="button button-primary" href="/imoveis">Ver todos os imóveis <span aria-hidden="true">↗</span></a>
+            @else
+              <p>Ainda não há imóveis publicados por bairro. Fale com a equipe para informar o que você procura.</p>
+              <a class="button button-primary" href="/contato">Falar com a equipe <span aria-hidden="true">↗</span></a>
+            @endif
+          </div>
         @endif
       </section>
 

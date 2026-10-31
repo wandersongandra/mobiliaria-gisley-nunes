@@ -136,7 +136,10 @@ class SeoMigrationCompatibilityTest extends TestCase
         $this->get('/bairros')
             ->assertOk()
             ->assertSee('<meta name="robots" content="noindex,follow"', false)
-            ->assertDontSee('AV DIVINO MARQUES GUIMARAES');
+            ->assertDontSee('AV DIVINO MARQUES GUIMARAES')
+            ->assertSee('Bairros em atualização')
+            ->assertSee('Já existem imóveis publicados, mas os bairros ainda não foram identificados no cadastro.')
+            ->assertSee('Ver todos os imóveis');
 
         $this->get('/bairros/av-divino-marques-guimaraes-2249-bl-04')
             ->assertNotFound();
@@ -149,6 +152,44 @@ class SeoMigrationCompatibilityTest extends TestCase
         $this->getJson('/api/v2/properties')
             ->assertOk()
             ->assertJsonFragment(['locations' => []]);
+    }
+
+    public function test_property_metadata_has_compact_description_and_absolute_image_urls(): void
+    {
+        $property = $this->publishProperty(
+            'Apartamento de dois quartos',
+            'apartamento-seo-metadata-cods-930001',
+            'Lourdes · Belo Horizonte',
+            '/media/property-cover.jpg'
+        );
+
+        $response = $this->get('/imoveis/'.$property['slug'])->assertOk();
+        $origin = rtrim((string) config('app.url'), '/');
+        $response->assertSee('<meta property="og:image" content="'.$origin.'/media/property-cover.jpg"', false);
+        $response->assertSee($origin.'/media/property-cover.jpg', false);
+        $html = $response->getContent();
+        $this->assertIsString($html);
+        $this->assertSame(1, preg_match('/<meta name="description" content="([^"]+)"/', $html, $matches));
+        $description = html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $this->assertLessThanOrEqual(160, mb_strlen($description));
+        $this->assertStringContainsString('Apartamento de dois quartos', $description);
+        $this->assertStringNotContainsString('Imóvel cadastrado para teste de compatibilidade SEO.', $description);
+    }
+
+    public function test_public_photo_alt_replaces_only_uninformative_legacy_labels(): void
+    {
+        $property = app(PropertyService::class)->publicProperty([
+            'title' => 'Apartamento real',
+            'photos' => [
+                ['url' => '/media/1.jpg', 'alt_text' => 'WhatsApp Image 2026-10-30'],
+                ['url' => '/media/2.jpg', 'alt_text' => '2'],
+                ['url' => '/media/3.jpg', 'alt_text' => 'Sala integrada'],
+            ],
+        ]);
+
+        $this->assertSame('Apartamento real — foto 1', $property['photos'][0]['alt_text']);
+        $this->assertSame('Apartamento real — foto 2', $property['photos'][1]['alt_text']);
+        $this->assertSame('Sala integrada', $property['photos'][2]['alt_text']);
     }
 
     public function test_legacy_property_slug_redirects_when_the_import_preserves_the_old_slug(): void
@@ -168,7 +209,7 @@ class SeoMigrationCompatibilityTest extends TestCase
     }
 
     /** @return array{slug: string, title: string} */
-    private function publishProperty(string $title, string $slug, string $location): array
+    private function publishProperty(string $title, string $slug, string $location, ?string $photoUrl = null): array
     {
         $service = app(PropertyService::class);
 
@@ -190,7 +231,7 @@ class SeoMigrationCompatibilityTest extends TestCase
             'id' => $photoId,
             'property_id' => $draft['id'],
             'storage_path' => 'gisley/properties/'.$draft['id'].'/'.$photoId.'.jpg',
-            'url' => 'https://media.example.test/'.$photoId.'.jpg',
+            'url' => $photoUrl ?? 'https://media.example.test/'.$photoId.'.jpg',
             'alt_text' => 'Fachada do imóvel',
             'sort_order' => 0,
             'is_cover' => 1,
