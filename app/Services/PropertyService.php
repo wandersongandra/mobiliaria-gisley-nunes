@@ -85,7 +85,13 @@ class PropertyService
         }
 
         if (isset($filters['location'])) {
-            $query->where('p.location', $filters['location']);
+            $location = (string) $filters['location'];
+            $query->where(static function (Builder $builder) use ($location): void {
+                $builder->where('p.neighborhood', $location)
+                    ->orWhere(static function (Builder $legacy) use ($location): void {
+                        $legacy->whereNull('p.neighborhood')->where('p.location', $location);
+                    });
+            });
         }
 
         if (isset($filters['type'])) {
@@ -124,10 +130,10 @@ class PropertyService
             fn (): array => [
                 'locations' => DB::table('morada_properties')
                     ->where('status', 'published')
-                    ->where('location', '<>', '')
+                    ->selectRaw("COALESCE(NULLIF(neighborhood, ''), location) AS facet_location")
                     ->distinct()
-                    ->orderBy('location')
-                    ->pluck('location')
+                    ->orderBy('facet_location')
+                    ->pluck('facet_location')
                     ->map(static fn ($value): string => (string) $value)
                     // Street addresses are not neighborhoods and must not become filter facets.
                     ->filter(fn (string $location): bool => ! $this->looksLikeStreetAddress($location))
@@ -289,7 +295,7 @@ class PropertyService
     public function normalizeInput(array $input): array
     {
         $allowed = [
-            'title', 'slug', 'location', 'city', 'purpose', 'type', 'price', 'priceLabel',
+            'title', 'slug', 'location', 'neighborhood', 'city', 'purpose', 'type', 'price', 'priceLabel',
             'bedrooms', 'bathrooms', 'areaM2', 'suites', 'parkingSpots', 'condoFee', 'iptu',
             'description', 'status', 'featured',
         ];
@@ -304,9 +310,17 @@ class PropertyService
             }
         }
 
-        $title = $this->text($input['title'] ?? '', 160, true);
+        $title = $this->singleLine($this->text($input['title'] ?? '', 160, true));
         $location = $this->text($input['location'] ?? '', 180, true);
         $city = $this->text($input['city'] ?? 'Belo Horizonte', 120, true);
+        $neighborhood = null;
+        if (array_key_exists('neighborhood', $input)) {
+            $neighborhood = $this->singleLine($this->text($input['neighborhood'], 120, false));
+            if ($neighborhood !== '' && $this->looksLikeStreetAddress($neighborhood)) {
+                throw new RuntimeException('INVALID_PROPERTY');
+            }
+            $neighborhood = $neighborhood !== '' ? $neighborhood : null;
+        }
         $purpose = (string) ($input['purpose'] ?? 'Comprar');
         $type = (string) ($input['type'] ?? 'Apartamento');
         $status = (string) ($input['status'] ?? 'draft');
@@ -328,7 +342,7 @@ class PropertyService
             ? 'R$ '.number_format($price, $priceDecimals, ',', '.').($purpose === 'Alugar' ? ' / mês' : '')
             : 'Sob consulta';
 
-        return [
+        $normalized = [
             'title' => $title,
             'slug' => $slug,
             'location' => $location,
@@ -352,6 +366,13 @@ class PropertyService
             'status' => $status,
             'is_featured' => $this->boolean($input['featured'] ?? false) ? 1 : 0,
         ];
+
+        // Legacy editors that omit this optional field must not erase an existing bairro.
+        if (array_key_exists('neighborhood', $input)) {
+            $normalized['neighborhood'] = $neighborhood;
+        }
+
+        return $normalized;
     }
 
     public function saveProperty(array $input, ?string $id = null, bool $requireDraft = false, ?string $createdByOpenId = null): array
@@ -669,8 +690,9 @@ class PropertyService
 
         return [
             'slug' => (string) ($row['slug'] ?? ''),
-            'title' => (string) ($row['title'] ?? ''),
+            'title' => $this->singleLine((string) ($row['title'] ?? '')),
             'location' => (string) ($row['location'] ?? ''),
+            'neighborhood' => (string) ($row['neighborhood'] ?? ''),
             'city' => (string) ($row['city'] ?? ''),
             'purpose' => (string) ($row['purpose'] ?? ''),
             'type' => (string) ($row['type'] ?? ''),
@@ -689,7 +711,7 @@ class PropertyService
             'updated_at' => $row['updated_at'] ?? null,
             'photos' => array_map(fn (array $photo, int $index): array => [
                 'url' => $this->safeMediaUrl($photo['url'] ?? ''),
-                'alt_text' => $this->publicPhotoAlt($photo, (string) ($row['title'] ?? ''), $index + 1),
+                'alt_text' => $this->publicPhotoAlt($photo, $this->singleLine((string) ($row['title'] ?? '')), $index + 1),
                 'sort_order' => (int) ($photo['sort_order'] ?? 0),
                 'is_cover' => (bool) ($photo['is_cover'] ?? false),
             ], $photos, array_keys($photos)),
@@ -734,8 +756,9 @@ class PropertyService
         return [
             'id' => (string) ($row['id'] ?? ''),
             'slug' => (string) ($row['slug'] ?? ''),
-            'title' => (string) ($row['title'] ?? ''),
+            'title' => $this->singleLine((string) ($row['title'] ?? '')),
             'location' => (string) ($row['location'] ?? ''),
+            'neighborhood' => (string) ($row['neighborhood'] ?? ''),
             'city' => (string) ($row['city'] ?? ''),
             'purpose' => (string) ($row['purpose'] ?? ''),
             'type' => (string) ($row['type'] ?? ''),
@@ -763,7 +786,10 @@ class PropertyService
         $groups = [];
 
         foreach ($publicProperties as $property) {
-            $name = trim(explode('·', (string) ($property['location'] ?? ''))[0]);
+            $name = $this->singleLine((string) ($property['neighborhood'] ?? ''));
+            if ($name === '') {
+                $name = trim(explode('·', (string) ($property['location'] ?? ''))[0]);
+            }
             // Neither a full street address nor a city name is a neighborhood.
             // Keep the property in the public catalog, but do not generate a false local landing page.
             if ($name === '' || $this->looksLikeStreetAddress($name)) {
@@ -846,6 +872,11 @@ class PropertyService
         return str_contains($message, 'unique constraint failed: morada_properties.slug')
             || str_contains($message, 'morada_properties_slug_unique')
             || str_contains($message, "for key 'slug'");
+    }
+
+    private function singleLine(string $value): string
+    {
+        return preg_replace('/\s+/u', ' ', trim($value)) ?? $value;
     }
 
     private function text(mixed $value, int $max, bool $required): string
