@@ -29,7 +29,11 @@ class LeadRetentionTest extends TestCase
                 'name' => 'Contato anonimizado',
                 'email' => 'anonimizado+'.$id.'@invalid.local',
                 'message' => 'Dados pessoais removidos conforme política de retenção.',
+                'phone' => null,
                 'property_path' => null,
+                'assigned_to_email' => null,
+                'internal_notes' => null,
+                'follow_up_date' => null,
             ]);
             $this->assertNotNull(DB::table('morada_contact_leads')->where('id', $id)->value('anonymized_at'));
         }
@@ -62,9 +66,13 @@ class LeadRetentionTest extends TestCase
             'id' => $id,
             'name' => 'Cliente Teste',
             'email' => 'cliente@example.test',
+            'phone' => '31991234567',
             'interest' => 'Quero comprar um imóvel',
             'message' => 'Procuro um apartamento.',
             'property_path' => '/imoveis/apartamento-teste',
+            'assigned_to_email' => 'corretor@example.test',
+            'internal_notes' => 'Retorno pendente.',
+            'follow_up_date' => now()->toDateString(),
             'status' => $status,
             'created_at' => $createdAt ?? $updatedAt,
             'updated_at' => $updatedAt,

@@ -11,8 +11,8 @@ Autenticação administrativa depende da sessão Laravel e da linha revogável e
 | media.manage | sim | somente imóveis em rascunho |
 | site.read | sim | sim |
 | site.manage / testimonial.manage | sim | não |
-| lead.read / lead.status | sim | sim |
-| lead.erase / audit.read / team.manage | sim | não |
+| lead.read / lead.status / lead.assign | sim | sim |
+| lead.export / lead.erase / audit.read / team.manage | sim | não |
 
 O papel bootstrap vem de `GISELY_ADMIN_OPEN_IDS`; qualquer outra identidade
 exige convite ou vínculo validado pelo OAuth. Alterar, remover ou desativar um

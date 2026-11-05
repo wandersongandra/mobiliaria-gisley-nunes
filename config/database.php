@@ -2,6 +2,22 @@
 
 use Illuminate\Support\Str;
 
+$mysqlConnectionOptions = [];
+if (extension_loaded('pdo_mysql')) {
+    $sslCaAttribute = defined('Pdo\\Mysql::ATTR_SSL_CA')
+        ? (int) constant('Pdo\\Mysql::ATTR_SSL_CA')
+        : PDO::MYSQL_ATTR_SSL_CA;
+    $sslVerifyAttribute = defined('Pdo\\Mysql::ATTR_SSL_VERIFY_SERVER_CERT')
+        ? (int) constant('Pdo\\Mysql::ATTR_SSL_VERIFY_SERVER_CERT')
+        : PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT;
+
+    $mysqlConnectionOptions = array_filter([
+        PDO::ATTR_TIMEOUT => 10,
+        $sslCaAttribute => env('MYSQL_ATTR_SSL_CA'),
+        $sslVerifyAttribute => env('MYSQL_ATTR_SSL_CA') ? env('DB_SSL_VERIFY', true) : null,
+    ], static fn ($value) => $value !== null && $value !== '');
+}
+
 return [
     'default' => env('DB_CONNECTION', 'mysql'),
 
@@ -32,11 +48,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => 'InnoDB',
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::ATTR_TIMEOUT => 10,
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => env('MYSQL_ATTR_SSL_CA') ? env('DB_SSL_VERIFY', true) : null,
-            ], static fn ($value) => $value !== null && $value !== '') : [],
+            'options' => $mysqlConnectionOptions,
         ],
     ],
 

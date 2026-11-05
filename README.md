@@ -94,7 +94,7 @@ No cPanel, crie uma tarefa para executar o Scheduler a cada minuto. Substitua pe
 * * * * * cd /CAMINHO/ABSOLUTO/DO/PROJETO && /CAMINHO/DO/PHP artisan schedule:run >/dev/null 2>&1
 ```
 
-O Scheduler limpa diariamente, às 03:00, uploads R2 sem registro no banco após 24 horas. Às 03:30, anonimiza nome, e-mail, mensagem e caminho do imóvel de leads fechados ou perdidos há mais de dois anos. Sem o cron, essas rotinas não executam.
+O Scheduler limpa diariamente, às 03:00, uploads R2 sem registro no banco após 24 horas. Às 03:30, anonimiza nome, e-mail, telefone, mensagem, caminho do imóvel, responsável, notas internas e data de retorno de leads fechados ou perdidos há mais de dois anos. Sem o cron, essas rotinas não executam.
 
 ## Backup e restauração do MySQL
 
@@ -125,6 +125,8 @@ Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. A comparação do c
 
 ## Mudanças de Rotas
 
+- `GET /api/admin/leads/assignees`: lista apenas integrantes ativos para atribuição de contatos; protegido por `lead.assign`.
+- `POST /api/admin/leads/export`: exportação de contatos exige `lead.export`, disponível para gestores, e mantém rate limit e CSRF.
 - `GET /health/live`: confirma que o processo Laravel iniciou.
 - `GET /health/ready`: confirma que o runtime e o banco estão disponíveis.
 - `GET /_app/health`: alias compatível de liveness para o monitoramento anterior.

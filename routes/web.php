@@ -105,9 +105,11 @@ Route::prefix('api/admin')
             ->middleware(['capability:testimonial.manage', 'throttle:destructive']);
 
         Route::post('/leads/export', [AdminCrmController::class, 'exportLeads'])
-            ->middleware(['capability:lead.read', 'throttle:export']);
+            ->middleware(['capability:lead.export', 'throttle:export']);
         Route::get('/leads', [AdminCrmController::class, 'leads'])
             ->middleware('capability:lead.read');
+        Route::get('/leads/assignees', [AdminCrmController::class, 'leadAssignees'])
+            ->middleware('capability:lead.assign');
         Route::patch('/leads/{id}', [AdminCrmController::class, 'updateLead'])
             ->middleware('capability:lead.status');
         Route::delete('/leads/{id}', [AdminCrmController::class, 'deleteLead'])

@@ -1,0 +1,22 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://painel.gisleynunesimoveis.com.br"
+        ],
+        "methods": [
+          "PUT"
+        ],
+        "headers": [
+          "Content-Type",
+          "If-None-Match"
+        ]
+      },
+      "exposeHeaders": [
+        "ETag"
+      ],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

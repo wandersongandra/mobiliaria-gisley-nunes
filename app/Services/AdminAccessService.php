@@ -20,6 +20,7 @@ class AdminAccessService
             'site.read',
             'lead.read',
             'lead.status',
+            'lead.assign',
         ],
         'manager' => [
             'property.read',
@@ -32,6 +33,8 @@ class AdminAccessService
             'testimonial.manage',
             'lead.read',
             'lead.status',
+            'lead.assign',
+            'lead.export',
             'lead.erase',
             'audit.read',
             'team.manage',

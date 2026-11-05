@@ -22,7 +22,7 @@
             </div>
           </div>
           <form class="contact-form" id="contact-form" method="post" action="/api/contact"><label class="contact-honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
-            <div class="form-row"><label>Seu nome<input required name="name" autocomplete="name" maxlength="120" placeholder="Seu nome" /></label><label>Seu e-mail<input required type="email" name="email" autocomplete="email" maxlength="255" placeholder="voce@email.com" /></label></div>
+            <div class="form-row"><label>Seu nome<input required name="name" autocomplete="name" maxlength="120" placeholder="Seu nome" /></label><label>Seu e-mail<input required type="email" name="email" autocomplete="email" maxlength="255" placeholder="voce@email.com" /></label></div><label>Telefone ou WhatsApp <small>opcional</small><input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="32" placeholder="(31) 99999-9999" /></label>
             <label>Como podemos ajudar?<select name="interest"><option>Quero comprar um imóvel</option><option>Quero alugar um imóvel</option><option>Quero anunciar meu imóvel</option><option>Tenho outra dúvida</option></select></label>
             <label>Mensagem<textarea required name="message" rows="3" maxlength="3000" placeholder="Conte o que você procura"></textarea></label>
             <button class="button button-primary" type="submit">Enviar mensagem <span aria-hidden="true">↗</span></button>

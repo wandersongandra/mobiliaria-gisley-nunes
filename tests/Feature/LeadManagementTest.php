@@ -78,6 +78,35 @@ class LeadManagementTest extends TestCase
             ->assertJsonPath('leads.0.status', 'perdido');
     }
 
+    public function test_search_matches_contact_fields_and_summary_counts_all_pipeline_stages(): void
+    {
+        $session = $this->createAdminSession('manager');
+        $match = $this->createLead([
+            'name' => 'Busca pelo WhatsApp',
+            'phone' => '31991234567',
+            'status' => 'contacted',
+        ]);
+        $this->createLead(['status' => 'closed']);
+        $this->createLead(['status' => 'lost']);
+
+        $this->withSession($session)
+            ->getJson('/api/admin/leads?search=31991234567')
+            ->assertOk()
+            ->assertJsonCount(1, 'leads')
+            ->assertJsonPath('leads.0.id', $match)
+            ->assertJsonPath('summary.new', 0)
+            ->assertJsonPath('summary.em_contato', 1)
+            ->assertJsonPath('summary.fechado', 1)
+            ->assertJsonPath('summary.perdido', 1)
+            ->assertJsonPath('summary.total', 3);
+
+        $this->withSession($session)
+            ->getJson('/api/admin/leads?search=%2831%29%2099123-4567')
+            ->assertOk()
+            ->assertJsonCount(1, 'leads')
+            ->assertJsonPath('leads.0.id', $match);
+    }
+
     public function test_lead_reads_are_audited_without_copying_lead_personal_data(): void
     {
         $session = $this->createAdminSession('manager');
@@ -145,6 +174,69 @@ class LeadManagementTest extends TestCase
             ->patchJson('/api/admin/leads/'.$leadId, ['status' => 'qualified'])
             ->assertUnprocessable();
 
+    }
+
+    public function test_lead_follow_up_assignment_and_notes_are_validated_and_audited_without_note_contents(): void
+    {
+        $leadId = $this->createLead();
+        $editorSession = $this->createAdminSession('editor');
+        $managerSession = $this->createAdminSession('manager');
+
+        $this->withSession($editorSession)
+            ->getJson('/api/admin/leads/assignees')
+            ->assertOk()
+            ->assertJsonPath('assignees.0.email', 'editor@example.test');
+
+        $this->withSession($managerSession)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->patchJson('/api/admin/leads/'.$leadId, [
+                'assigned_to_email' => 'editor@example.test',
+                'internal_notes' => 'Nota interna confidencial.',
+                'follow_up_date' => '2026-11-10',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('morada_contact_leads', [
+            'id' => $leadId,
+            'assigned_to_email' => 'editor@example.test',
+            'internal_notes' => 'Nota interna confidencial.',
+            'follow_up_date' => '2026-11-10',
+        ]);
+        $audit = DB::table('morada_audit_log')->where('action', 'lead.update')->first();
+        $this->assertNotNull($audit);
+        $this->assertStringNotContainsString('Nota interna confidencial.', (string) $audit->details);
+
+        $this->withSession($managerSession)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->patchJson('/api/admin/leads/'.$leadId, ['assigned_to_email' => 'inactive@example.test'])
+            ->assertUnprocessable();
+
+        $this->withSession($managerSession)
+            ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+            ->patchJson('/api/admin/leads/'.$leadId, ['internal_notes' => "Nota\x01inválida"])
+            ->assertUnprocessable()
+            ->assertJson(['error' => 'INVALID_LEAD_DETAILS']);
+    }
+
+    public function test_only_managers_can_export_and_exports_omit_internal_notes(): void
+    {
+        $leadId = $this->createLead(['internal_notes' => 'Nota que não deve sair no arquivo.']);
+        $editorSession = $this->createAdminSession('editor');
+        $managerSession = $this->createAdminSession('manager');
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'];
+
+        $this->withSession($editorSession)
+            ->withHeaders($headers)
+            ->postJson('/api/admin/leads/export', ['format' => 'json'])
+            ->assertForbidden();
+
+        $this->withSession($managerSession)
+            ->withHeaders($headers)
+            ->postJson('/api/admin/leads/export', ['format' => 'json'])
+            ->assertOk()
+            ->assertJsonPath('leads.0.id', $leadId)
+            ->assertJsonMissingPath('leads.0.internal_notes')
+            ->assertDontSee('Nota que não deve sair no arquivo');
     }
 
     public function test_exports_use_the_same_filters_and_csv_neutralizes_formulas(): void

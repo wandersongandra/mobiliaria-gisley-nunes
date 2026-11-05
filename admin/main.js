@@ -11,7 +11,7 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0, em_contato: 0, fechado: 0, perdido: 0, total: 0 }, leadAssignees: [], leadFilters: { search: '', status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, team: [], invitations: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
 let propertySearchTimer = 0;
 let propertyLoadSequence = 0;
 let leadLoadSequence = 0;
@@ -140,9 +140,11 @@ function clearSensitiveState() {
   state.propertySummary = null;
   state.propertyFilters = { search: '', status: '', page: 1, per_page: 20 };
   state.leads = [];
+  state.leadSummary = { new: 0, em_contato: 0, fechado: 0, perdido: 0, total: 0 };
+  state.leadAssignees = [];
   state.leadPagination = null;
   leadsLoaded = false;
-  state.leadFilters = { status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
+  state.leadFilters = { search: '', status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
   state.team = [];
   state.invitations = [];
   state.audit = [];
@@ -159,6 +161,12 @@ function clearSensitiveState() {
   teamLoaded = false;
   if (propertyList) propertyList.innerHTML = '';
   if (leadList) leadList.innerHTML = '';
+  $('#metric-leads-new').textContent = '—';
+  $('#side-leads-new').textContent = '0';
+  for (const status of ['new', 'em_contato', 'fechado', 'perdido', 'total']) {
+    const value = $(`#lead-summary-${status}`);
+    if (value) value.textContent = '—';
+  }
   if (teamList) teamList.innerHTML = '';
   if (invitationList) invitationList.innerHTML = '';
   if (invitationResult) invitationResult.hidden = true;
@@ -676,6 +684,7 @@ function switchView(name) {
     }
   }
   if (activeView?.id === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
+  if (activeView?.id === 'leads-view' && leadsLoaded) { void loadLeads(); }
   if (activeView?.id === 'team-view' && state.user?.role === 'manager' && !teamLoaded) { void loadTeam(); }
   if (activeView?.id === 'audit-view' && state.user?.role === 'manager' && !auditLoaded) { auditLoaded = true; loadAudit(); }
 }
@@ -779,6 +788,7 @@ const auditLabels = {
   'testimonial.create': 'Depoimento adicionado',
   'testimonial.remove': 'Depoimento removido',
   'lead.status': 'Status do contato alterado',
+  'lead.update': 'Dados do contato atualizados',
   'lead.delete': 'Dados de contato apagados',
   'team.create': 'Acesso de equipe criado',
   'team.invite': 'Convite de equipe gerado',
@@ -1007,15 +1017,11 @@ async function createTeamInvitation(event) {
 }
 
 function ensureLeadsPanel() {
-  if ($('#leads-panel')) return $('#leads-panel');
-  const metrics = document.querySelector('.metrics-grid');
-  if (!metrics) return null;
-  const panel = document.createElement('section');
-  panel.id = 'leads-panel';
-  panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><button class="outline-button lead-export" data-lead-export="csv" type="button">Exportar CSV</button><button class="outline-button lead-export" data-lead-export="json" type="button">Exportar JSON</button></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
-  metrics.insertAdjacentElement('afterend', panel);
-  $('#lead-filters').addEventListener('submit', (event) => {
+  const panel = $('#leads-view');
+  if (!panel || panel.dataset.initialized === 'true') return panel;
+  panel.dataset.initialized = 'true';
+  const filters = $('#lead-filters');
+  filters.addEventListener('submit', (event) => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
     const dateFrom = String(values.get('date_from') || '');
@@ -1031,6 +1037,7 @@ function ensureLeadsPanel() {
     status.dataset.tone = '';
     state.leadFilters = {
       ...state.leadFilters,
+      search: String(values.get('search') || '').trim(),
       status: String(values.get('status') || ''),
       date_from: dateFrom,
       date_to: dateTo,
@@ -1039,6 +1046,15 @@ function ensureLeadsPanel() {
     };
     void loadLeads();
   });
+  $('#clear-lead-filters')?.addEventListener('click', () => {
+    filters.reset();
+    state.leadFilters = { search: '', status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
+    const status = $('#lead-status');
+    status.textContent = '';
+    status.dataset.tone = '';
+    void loadLeads();
+  });
+  $('#refresh-leads')?.addEventListener('click', () => { void loadLeads(); });
   panel.querySelectorAll('[data-lead-page]').forEach((button) => button.addEventListener('click', () => {
     const current = state.leadPagination?.current_page || 1;
     const last = state.leadPagination?.last_page || 1;
@@ -1047,7 +1063,7 @@ function ensureLeadsPanel() {
   }));
   panel.querySelectorAll('[data-lead-export]').forEach((button) => button.addEventListener('click', async () => {
     const payload = { format: button.dataset.leadExport };
-    for (const key of ['status', 'date_from', 'date_to']) {
+    for (const key of ['search', 'status', 'date_from', 'date_to']) {
       if (state.leadFilters[key]) payload[key] = state.leadFilters[key];
     }
 
@@ -1071,13 +1087,18 @@ function renderLeads() {
     .forEach((control) => { control.disabled = false; });
   const list = $('#lead-list');
   const newCount = Number(state.leadSummary?.new || 0);
-  $('#lead-total').textContent = `${newCount} ${newCount === 1 ? 'novo' : 'novos'}`;
   $('#metric-leads-new').textContent = String(newCount).padStart(2, '0');
+  $('#side-leads-new').textContent = String(newCount);
+  for (const status of ['new', 'em_contato', 'fechado', 'perdido', 'total']) {
+    const value = $(`#lead-summary-${status}`);
+    if (value) value.textContent = String(Number(state.leadSummary?.[status] || 0));
+  }
 
   const items = state.leads;
   const filters = $('#lead-filters');
   // Avoid overwriting a date or select value that the operator is editing.
   if (!filters.contains(document.activeElement)) {
+    filters.elements.search.value = state.leadFilters.search;
     filters.elements.status.value = state.leadFilters.status;
     filters.elements.date_from.value = state.leadFilters.date_from;
     filters.elements.date_to.value = state.leadFilters.date_to;
@@ -1091,7 +1112,20 @@ function renderLeads() {
     const propertyLink = String(lead.property_path || '').startsWith('/imoveis/')
       ? `<a class="lead-property" href="${escapeHTML(lead.property_path)}" target="_blank" rel="noopener">Ver imóvel ↗</a>` : '';
     const statusOptions = [['new', 'Novo'], ['em_contato', 'Em contato'], ['fechado', 'Fechado'], ['perdido', 'Perdido']];
-    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><label class="lead-status-control"><span class="sr-only">Status de ${escapeHTML(lead.name)}</span><select data-lead-status="${escapeHTML(lead.id)}">${statusOptions.map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button type="button" data-lead-save="${escapeHTML(lead.id)}">Salvar status</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
+    const phone = String(lead.phone || '').replace(/\D/g, '');
+    const assigned = String(lead.assigned_to_email || '');
+    const activeAssignee = state.leadAssignees.some((item) => item.email.toLowerCase() === assigned.toLowerCase());
+    const inactiveOption = assigned && !activeAssignee
+      ? `<option value="${escapeHTML(assigned)}" selected>${escapeHTML(assigned)} (acesso inativo)</option>` : '';
+    const assignees = state.leadAssignees.map((item) => `<option value="${escapeHTML(item.email)}" ${assigned.toLowerCase() === item.email.toLowerCase() ? 'selected' : ''}>${escapeHTML(item.name)}</option>`).join('');
+    const followUpDate = String(lead.follow_up_date || '').slice(0, 10);
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const overdue = followUpDate && followUpDate < todayKey && !['fechado', 'perdido'].includes(lead.status);
+    const phoneActions = phone
+      ? `<a class="lead-contact-action lead-whatsapp" href="https://wa.me/${encodeURIComponent(phone)}" target="_blank" rel="noopener noreferrer" aria-label="Conversar com ${escapeHTML(lead.name)} pelo WhatsApp">WhatsApp ↗</a><a class="lead-contact-action" href="tel:${escapeHTML(phone)}">Ligar</a>`
+      : '<span class="lead-no-phone">Telefone não informado</span>';
+    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}" data-assigned="${escapeHTML(assigned)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span>${overdue ? '<span class="lead-overdue">Retorno atrasado</span>' : ''}</div><div class="lead-contact-links"><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a>${phoneActions}</div><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-fields"><label>Etapa<select data-lead-field="status" aria-label="Etapa de ${escapeHTML(lead.name)}">${statusOptions.map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Responsável<select data-lead-field="assignee" aria-label="Responsável por ${escapeHTML(lead.name)}"><option value="">Sem responsável</option>${inactiveOption}${assignees}</select></label><label>Próximo retorno<input data-lead-field="follow-up" type="date" aria-label="Data do próximo retorno de ${escapeHTML(lead.name)}" value="${escapeHTML(followUpDate)}" /></label><label class="lead-note-field">Notas internas<textarea data-lead-field="notes" maxlength="2000" rows="2" aria-label="Notas internas sobre ${escapeHTML(lead.name)}">${escapeHTML(lead.internal_notes || '')}</textarea></label><div class="lead-actions"><button type="button" data-lead-save="${escapeHTML(lead.id)}">Salvar alterações</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></div></article>`;
   }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato encontrado.</h4><p>Ajuste os filtros ou aguarde novos contatos pelo site.</p></div>';
 
   list.querySelectorAll('[data-lead-delete]').forEach((button) => button.addEventListener('click', async () => {
@@ -1105,7 +1139,7 @@ function renderLeads() {
     setButtonPending(button, true, 'Apagando…');
     try {
       await request(`/api/admin/leads/${button.dataset.leadDelete}`, { method: 'DELETE' });
-      await loadLeads();
+      if (!await loadLeads()) return;
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Dados pessoais apagados permanentemente.';
@@ -1122,12 +1156,20 @@ function renderLeads() {
   }));
 
   list.querySelectorAll('[data-lead-save]').forEach((button) => button.addEventListener('click', async () => {
-    const statusInput = list.querySelector(`[data-lead-status="${CSS.escape(button.dataset.leadSave)}"]`);
-    if (!(statusInput instanceof HTMLSelectElement)) return;
+    const row = button.closest('.lead-row');
+    if (!row) return;
+    const assigneeInput = row.querySelector('[data-lead-field="assignee"]');
+    const assigned = String(assigneeInput?.value || '');
+    const payload = {
+      status: row.querySelector('[data-lead-field="status"]')?.value,
+      internal_notes: row.querySelector('[data-lead-field="notes"]')?.value ?? '',
+      follow_up_date: row.querySelector('[data-lead-field="follow-up"]')?.value || null
+    };
+    if (assigned !== row.dataset.assigned) payload.assigned_to_email = assigned || null;
     setButtonPending(button, true, 'Salvando…');
     try {
-      await request(`/api/admin/leads/${button.dataset.leadSave}`, { method: 'PATCH', body: JSON.stringify({ status: statusInput.value }) });
-      await loadLeads();
+      await request(`/api/admin/leads/${button.dataset.leadSave}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      if (!await loadLeads()) return;
       const status = $('#lead-status');
       if (status) {
         status.textContent = 'Contato atualizado.';
@@ -1142,6 +1184,15 @@ function renderLeads() {
       }
     }
   }));
+}
+
+async function loadLeadAssignees() {
+  try {
+    const result = await request('/api/admin/leads/assignees');
+    if (state.user) state.leadAssignees = Array.isArray(result.assignees) ? result.assignees : [];
+  } catch {
+    state.leadAssignees = [];
+  }
 }
 
 async function loadLeads() {
@@ -1168,9 +1219,13 @@ async function loadLeads() {
     state.leadSummary = result.summary || { new: 0 };
     leadsLoaded = true;
     renderLeads();
+    return true;
   } catch (error) {
     if (generation !== leadLoadSequence || error?.name === 'AbortError') return;
-    if (!leadsLoaded) $('#metric-leads-new').textContent = '—';
+    if (!leadsLoaded) {
+      $('#metric-leads-new').textContent = '—';
+      $('#side-leads-new').textContent = '—';
+    }
     ensureLeadsPanel();
     if ($('#lead-list')) {
       $('#lead-list').innerHTML = '<div class="empty-properties compact" role="alert"><p>Não foi possível carregar os contatos agora.</p><button id="retry-admin-leads" class="outline-button" type="button">Tentar novamente</button></div>';
@@ -1191,6 +1246,7 @@ async function loadLeads() {
       panel.querySelectorAll('#lead-filters button, #lead-filters input, #lead-filters select, [data-lead-export]')
         .forEach((control) => { control.disabled = false; });
     }
+    return false;
   } finally {
     if (generation === leadLoadSequence) leadRequestController = null;
   }
@@ -1253,8 +1309,10 @@ async function init() {
     if (!session.authenticated) return showLogin();
     state.user = session.user;
     showDashboard();
+    ensureLeadsPanel();
     switchView(viewFromHash());
-    await Promise.all([loadProperties(), loadLeads()]);
+    await Promise.all([loadProperties(), loadLeads(), loadLeadAssignees()]);
+    if (leadsLoaded) renderLeads();
   } catch (error) {
     if (error.message !== 'AUTH_REQUIRED') showLogin();
   }

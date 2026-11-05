@@ -29,8 +29,8 @@ class CrmService
         'phoneDisplay' => '(31) 99155-4677',
         'whatsapp' => '5531991554677',
         'email' => 'gisleynunesimoveis@gmail.com',
-        'instagramDisplay' => '',
-        'instagramUrl' => '',
+        'instagramDisplay' => '@gisleynunesimoveis',
+        'instagramUrl' => 'https://www.instagram.com/gisleynunesimoveis/',
     ];
 
     public function getSiteInfo(): array
@@ -145,7 +145,7 @@ class CrmService
 
     public function createContactLead(array $input): string
     {
-        $allowed = ['name', 'email', 'message', 'interest', 'propertyPath', 'website'];
+        $allowed = ['name', 'email', 'phone', 'message', 'interest', 'propertyPath', 'website'];
         if (array_diff(array_keys($input), $allowed)) {
             throw new RuntimeException('INVALID_CONTACT');
         }
@@ -167,11 +167,21 @@ class CrmService
             throw new RuntimeException('INVALID_CONTACT');
         }
 
+        $phoneInput = $this->text($input['phone'] ?? '', 32, false, 'INVALID_CONTACT');
+        if ($phoneInput !== '' && ! preg_match('/^[0-9\s()+.\-]+$/', $phoneInput)) {
+            throw new RuntimeException('INVALID_CONTACT');
+        }
+        $phone = preg_replace('/\D+/', '', $phoneInput) ?: '';
+        if ($phone !== '' && (strlen($phone) < 10 || strlen($phone) > 15)) {
+            throw new RuntimeException('INVALID_CONTACT');
+        }
+
         $id = (string) Str::uuid();
         DB::table('morada_contact_leads')->insert([
             'id' => $id,
             'name' => $this->text($input['name'] ?? '', 120, true, 'INVALID_CONTACT'),
             'email' => $this->email($input['email'] ?? '', 'INVALID_CONTACT'),
+            'phone' => $phone !== '' ? $phone : null,
             'interest' => $interest,
             'message' => $this->text($input['message'] ?? '', 3000, true, 'INVALID_CONTACT'),
             'property_path' => $propertyPath !== '' ? $propertyPath : null,
@@ -202,6 +212,37 @@ class CrmService
         return DB::table('morada_contact_leads')->where('status', 'new')->count();
     }
 
+    /** @return array{new: int, em_contato: int, fechado: int, perdido: int, total: int} */
+    public function leadStatusSummary(): array
+    {
+        $summary = ['new' => 0, 'em_contato' => 0, 'fechado' => 0, 'perdido' => 0, 'total' => 0];
+        foreach (DB::table('morada_contact_leads')->select(['status', DB::raw('COUNT(*) AS total')])->groupBy('status')->get() as $row) {
+            $summary['total'] += (int) $row->total;
+            $status = match ($row->status) {
+                'contacted', 'qualified', 'em_contato' => 'em_contato',
+                'closed', 'fechado' => 'fechado',
+                'lost', 'perdido' => 'perdido',
+                default => $row->status,
+            };
+            if (array_key_exists($status, $summary) && $status !== 'total') {
+                $summary[$status] += (int) $row->total;
+            }
+        }
+
+        return $summary;
+    }
+
+    /** @return list<array{name: string, email: string}> */
+    public function listLeadAssignees(): array
+    {
+        return DB::table('morada_staff_access')
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['name', 'email'])
+            ->map(fn ($row): array => ['name' => (string) $row->name, 'email' => (string) $row->email])
+            ->all();
+    }
+
     public function countExportLeads(array $filters): int
     {
         return $this->leadQuery($filters)->count();
@@ -210,7 +251,9 @@ class CrmService
     /** @return \Generator<int, array<string, mixed>> */
     public function exportLeadCursor(array $filters): \Generator
     {
-        foreach ($this->leadQuery($filters)->cursor() as $lead) {
+        foreach ($this->leadQuery($filters)
+            ->select(['id', 'name', 'email', 'phone', 'interest', 'message', 'property_path', 'status', 'assigned_to_email', 'follow_up_date', 'created_at', 'updated_at'])
+            ->cursor() as $lead) {
             yield $this->leadView((array) $lead);
         }
     }
@@ -224,6 +267,51 @@ class CrmService
         return DB::table('morada_contact_leads')
             ->where('id', $id)
             ->update(['status' => $status, 'updated_at' => now()]) > 0;
+    }
+
+    public function updateLeadDetails(string $id, array $details): bool
+    {
+        $updates = [];
+        if (array_key_exists('status', $details)) {
+            $status = $details['status'];
+            if (! is_string($status) || ! in_array($status, self::LEAD_STATUSES, true)) {
+                throw new RuntimeException('INVALID_LEAD_STATUS');
+            }
+            $updates['status'] = $status;
+        }
+        if (array_key_exists('assigned_to_email', $details)) {
+            $email = $details['assigned_to_email'];
+            if ($email !== null) {
+                $email = strtolower((string) $email);
+                if (! DB::table('morada_staff_access')->where('email', $email)->where('active', true)->exists()) {
+                    throw new RuntimeException('INVALID_LEAD_ASSIGNEE');
+                }
+            }
+            $updates['assigned_to_email'] = $email;
+        }
+        if (array_key_exists('internal_notes', $details)) {
+            $updates['internal_notes'] = $details['internal_notes'] === null
+                ? null
+                : $this->text($details['internal_notes'], 2000, false, 'INVALID_LEAD_DETAILS');
+        }
+        if (array_key_exists('follow_up_date', $details)) {
+            $updates['follow_up_date'] = $details['follow_up_date'];
+        }
+        if ($updates === []) {
+            throw new RuntimeException('INVALID_LEAD_DETAILS');
+        }
+
+        return DB::transaction(function () use ($id, $updates): bool {
+            $lead = DB::table('morada_contact_leads')->where('id', $id)->lockForUpdate()->first(['id']);
+            if (! $lead) {
+                return false;
+            }
+
+            $updates['updated_at'] = now();
+            DB::table('morada_contact_leads')->where('id', $id)->update($updates);
+
+            return true;
+        });
     }
 
     public function anonymizeExpiredLeads(): int
@@ -248,8 +336,12 @@ class CrmService
                         ->update([
                             'name' => 'Contato anonimizado',
                             'email' => 'anonimizado+'.$id.'@invalid.local',
+                            'phone' => null,
                             'message' => 'Dados pessoais removidos conforme política de retenção.',
                             'property_path' => null,
+                            'internal_notes' => null,
+                            'assigned_to_email' => null,
+                            'follow_up_date' => null,
                             'anonymized_at' => now(),
                         ]);
                 }
@@ -278,6 +370,20 @@ class CrmService
 
         if (isset($filters['date_to'])) {
             $query->where('created_at', '<', Carbon::parse($filters['date_to'])->addDay()->toDateString().' 00:00:00');
+        }
+
+        if (isset($filters['search']) && $filters['search'] !== '') {
+            $term = '%'.$filters['search'].'%';
+            $phoneTerm = preg_replace('/\D+/', '', $filters['search']) ?: '';
+            $query->where(function (Builder $nested) use ($term, $phoneTerm): void {
+                foreach (['name', 'email', 'interest', 'message'] as $column) {
+                    $nested->orWhere($column, 'like', $term);
+                }
+                $nested->orWhere('phone', 'like', $term);
+                if ($phoneTerm !== '') {
+                    $nested->orWhere('phone', 'like', '%'.$phoneTerm.'%');
+                }
+            });
         }
 
         return $query->orderByDesc('created_at')->orderByDesc('id');

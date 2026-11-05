@@ -9,13 +9,13 @@
       </section>
 
       <section class="shell legal-section">
-        <p>Última atualização: outubro de 2026. Esta política explica, de forma resumida, como os dados enviados pelo site são utilizados e protegidos.</p>
+        <p>Última atualização: novembro de 2026. Esta política explica, de forma resumida, como os dados enviados pelo site são utilizados e protegidos.</p>
 
         <h2>1. Dados que coletamos</h2>
-        <p>Quando você envia o formulário de contato, recebemos os dados preenchidos voluntariamente, como nome, e-mail, interesse, mensagem e, quando o contato parte da página de um imóvel, a referência dessa página.</p>
+        <p>Quando você envia o formulário de contato, recebemos os dados preenchidos voluntariamente, como nome, e-mail, interesse, mensagem e telefone ou WhatsApp, quando informado. Quando o contato parte da página de um imóvel, também recebemos a referência dessa página.</p>
 
         <h2>2. Para que usamos os dados</h2>
-        <p>Essas informações são registradas no CRM da imobiliária para responder à solicitação, entender o imóvel ou serviço de interesse, organizar o atendimento, agendar visitas e dar continuidade a uma eventual negociação.</p>
+        <p>Essas informações são registradas no CRM da imobiliária para responder à solicitação, entender o imóvel ou serviço de interesse, organizar o atendimento, agendar retornos ou visitas e dar continuidade a uma eventual negociação. O CRM também pode registrar a etapa do atendimento, o integrante responsável e notas internas relacionadas ao contato.</p>
 
         <h2>3. Canais e prestadores necessários</h2>
         <p>Os dados podem ser utilizados nos canais de atendimento da imobiliária, como e-mail e WhatsApp, e processados por fornecedores técnicos necessários à operação segura do site, do CRM, do banco de dados e da infraestrutura. Não utilizamos os dados enviados pelo formulário para venda de cadastros.</p>

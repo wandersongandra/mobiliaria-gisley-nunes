@@ -12,7 +12,7 @@ Respostas administrativas e de autenticação usam `Cache-Control: no-store`. Mu
 | `GET /api/v2/properties` | Não | `page`, `per_page` 20–100 e filtros `purpose`, `location`, `type`, `price_band`, `bedrooms`; `{properties,pagination,facets}` | `422` para paginação/filtros inválidos; IDs internos omitidos. |
 | `GET /api/properties/{slug}` | Não | Imóvel publicado | `404` para slug inválido/inexistente. |
 | `GET /api/site` | Não | Configuração e depoimentos públicos | Cache público. |
-| `POST /api/contact` | Origem exata | nome, email, interesse, mensagem, propertyPath, honeypot | 8/10 min por IP; `400` para entrada inválida, `201` para aceito. |
+| `POST /api/contact` | Origem exata | nome, email, telefone opcional, interesse, mensagem, propertyPath, honeypot | 8/10 min por IP; telefone aceita 10–15 dígitos; `400` para entrada inválida, `201` para aceito. |
 | `GET /media/{path}` | Não | Redireciona a URL R2 curta de foto publicada | `404` se não registrada/publicada. |
 
 As páginas HTML, `robots.txt`, `sitemap.xml` e `llms.txt` são públicas e não recebem IDs internos administrativos.
@@ -40,8 +40,10 @@ As páginas HTML, `robots.txt`, `sitemap.xml` e `llms.txt` são públicas e não
 | `PUT /api/admin/properties/{id}/photos/order`, `PUT /api/admin/photos/{id}/cover` | `media.manage` | UUIDs e ordenação estrita. |
 | `GET/PUT /api/admin/site` | `site.read` / `site.manage` | Configuração pública. |
 | `POST/DELETE /api/admin/testimonials[/{id}]` | `testimonial.manage` | Cria/remove depoimento. |
-| `GET /api/admin/leads`, `POST /api/admin/leads/export` | `lead.read` | Filtros status/data; export streaming CSV/JSON. A exportação usa limite dedicado de 20 requisições/10 min por IP e exige CSRF/origem same-origin. |
-| `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | Atualiza/apaga lead. |
+| `GET /api/admin/leads` | `lead.read` | Filtros status/período/busca; resumo por etapa e retornos paginados. |
+| `GET /api/admin/leads/assignees` | `lead.assign` | Lista equipe ativa para atribuir contatos. |
+| `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | PATCH aceita `status`, `assigned_to_email`, `internal_notes` (até 2.000 caracteres) e `follow_up_date` (`YYYY-MM-DD`); atribuição exige `lead.assign`. Auditoria registra os campos alterados, sem valores das notas. DELETE apaga os dados do lead. |
+| `POST /api/admin/leads/export` | `lead.export` | Exportação streaming CSV/JSON, somente gestor; CSV neutraliza fórmulas e arquivos não incluem notas internas. Limite dedicado de 20 requisições/10 min por IP e CSRF/origem same-origin. |
 | `GET /api/admin/audit` | `audit.read` | `limit` 1–250. |
 | `GET/POST/PATCH/DELETE /api/admin/team...` | `team.manage` | Equipe, convites e revogação. |
 
