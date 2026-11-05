@@ -80,6 +80,7 @@ class BackendContractTest extends TestCase
             ->postJson('/api/contact', [
                 'name' => 'Cliente Teste',
                 'email' => 'cliente@example.com',
+                'phone' => '(31) 99123-4567',
                 'interest' => 'Quero comprar um imóvel',
                 'message' => 'Procuro um apartamento em Belo Horizonte.',
                 'propertyPath' => '/imoveis',
@@ -90,8 +91,26 @@ class BackendContractTest extends TestCase
 
         $this->assertDatabaseHas('morada_contact_leads', [
             'email' => 'cliente@example.com',
+            'phone' => '31991234567',
             'status' => 'new',
         ]);
+    }
+
+    public function test_contact_phone_rejects_short_or_malformed_values(): void
+    {
+        config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
+
+        $this->withHeader('Origin', 'http://localhost')
+            ->postJson('/api/contact', [
+                'name' => 'Cliente Teste',
+                'email' => 'cliente@example.com',
+                'phone' => '12345',
+                'interest' => 'Quero comprar um imóvel',
+                'message' => 'Procuro um apartamento.',
+                'website' => '',
+            ])
+            ->assertBadRequest()
+            ->assertJson(['error' => 'INVALID_CONTACT']);
     }
 
     public function test_contact_rejects_non_scalar_fields_without_http_500_or_persistence(): void

@@ -35,6 +35,7 @@ class RouteSurfaceTest extends TestCase
         'GET api/admin/audit',
         'GET api/admin/forms',
         'GET api/admin/leads',
+        'GET api/admin/leads/assignees',
         'GET api/admin/leads/{id}',
         'GET api/admin/photos/{id}/media',
         'GET api/admin/profile',
@@ -134,6 +135,7 @@ class RouteSurfaceTest extends TestCase
 
         $this->assertNotNull($route);
         $this->assertContains('throttle:export', $route->middleware());
+        $this->assertContains('capability:lead.export', $route->middleware());
     }
 
     public function test_photo_upload_rate_limits_before_reading_the_request_body(): void

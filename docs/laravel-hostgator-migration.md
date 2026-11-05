@@ -41,7 +41,7 @@ Substituir o runtime Node.js/Express por PHP/Laravel sem alterar a experiência 
    * * * * * cd /CAMINHO/ABSOLUTO/DO/PROJETO && /CAMINHO/DO/PHP artisan schedule:run >/dev/null 2>&1
    ```
 
-   O scheduler limpa diariamente às 03:00 uploads locais sem registro no banco após 24 horas e anonimiza às 03:30 leads fechados ou perdidos há mais de dois anos. Sem o cron, essas rotinas não serão executadas.
+   O scheduler limpa diariamente às 03:00 uploads locais sem registro no banco após 24 horas e anonimiza às 03:30 leads fechados ou perdidos há mais de dois anos. A rotina remove dados de contato e substitui o conteúdo do histórico por um registro genérico. Sem o cron, essas rotinas não serão executadas.
 
 ## Variáveis de ambiente
 

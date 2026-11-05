@@ -15,6 +15,14 @@ class LeadRetentionTest extends TestCase
     {
         $expiredLost = $this->createLead('perdido', now()->subYears(2)->subDay());
         $expiredClosed = $this->createLead('fechado', now()->subYears(3));
+        DB::table('morada_lead_activities')->insert([
+            'id' => (string) Str::uuid(),
+            'lead_id' => $expiredLost,
+            'actor_email' => 'editor@example.test',
+            'type' => 'note',
+            'body' => 'Dados pessoais anotados durante o atendimento.',
+            'created_at' => now()->subYears(2),
+        ]);
         $oldOpen = $this->createLead('new', now()->subYears(4));
         $recentLost = $this->createLead('perdido', now()->subYear());
         $reopened = $this->createLead('new', now()->subDay(), now()->subYears(4));
@@ -29,15 +37,23 @@ class LeadRetentionTest extends TestCase
                 'name' => 'Contato anonimizado',
                 'email' => 'anonimizado+'.$id.'@invalid.local',
                 'message' => 'Dados pessoais removidos conforme política de retenção.',
+                'phone' => null,
                 'property_path' => null,
+                'assigned_to_email' => null,
+                'follow_up_date' => null,
             ]);
             $this->assertNotNull(DB::table('morada_contact_leads')->where('id', $id)->value('anonymized_at'));
         }
+        $this->assertDatabaseHas('morada_lead_activities', [
+            'lead_id' => $expiredLost,
+            'body' => 'Registro de atendimento preservado sem conteúdo pessoal.',
+        ]);
 
         $this->assertDatabaseHas('morada_contact_leads', [
             'id' => $oldOpen,
             'name' => 'Cliente Teste',
             'email' => 'cliente@example.test',
+            'phone' => '31991234567',
         ]);
         $this->assertDatabaseHas('morada_contact_leads', [
             'id' => $recentLost,
@@ -62,9 +78,12 @@ class LeadRetentionTest extends TestCase
             'id' => $id,
             'name' => 'Cliente Teste',
             'email' => 'cliente@example.test',
+            'phone' => '31991234567',
             'interest' => 'Quero comprar um imóvel',
             'message' => 'Procuro um apartamento.',
             'property_path' => '/imoveis/apartamento-teste',
+            'assigned_to_email' => 'corretor@example.test',
+            'follow_up_date' => now()->toDateString(),
             'status' => $status,
             'created_at' => $createdAt ?? $updatedAt,
             'updated_at' => $updatedAt,

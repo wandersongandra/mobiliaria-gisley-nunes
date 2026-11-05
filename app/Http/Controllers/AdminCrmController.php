@@ -115,7 +115,7 @@ class AdminCrmController extends Controller
             function () use ($filters): array {
                 return [
                     'paginator' => $this->crm->paginateLeads($filters),
-                    'newCount' => $this->crm->countNewLeads(),
+                    'summary' => $this->crm->leadStatusSummary(),
                 ];
             },
             static function (array $result) use ($filters): array {
@@ -123,6 +123,7 @@ class AdminCrmController extends Controller
 
                 return [
                     'filters' => array_intersect_key($filters, array_flip(['status', 'date_from', 'date_to'])),
+                    'searchApplied' => ! empty($filters['search']),
                     'page' => $paginator->currentPage(),
                     'perPage' => $paginator->perPage(),
                     'total' => $paginator->total(),
@@ -142,10 +143,16 @@ class AdminCrmController extends Controller
                 'from' => $paginator->firstItem(),
                 'to' => $paginator->lastItem(),
             ],
-            'summary' => [
-                'new' => $result['newCount'],
-            ],
+            'summary' => $result['summary'],
         ])->header('Cache-Control', 'no-store');
+    }
+
+    public function leadAssignees(Request $request): JsonResponse
+    {
+        $this->admin($request);
+
+        return response()->json(['assignees' => $this->crm->listLeadAssignees()])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function exportLeads(Request $request): StreamedResponse
@@ -183,7 +190,7 @@ class AdminCrmController extends Controller
             ]);
         }
 
-        $columns = ['id', 'name', 'email', 'interest', 'message', 'property_path', 'status', 'created_at', 'updated_at'];
+        $columns = ['id', 'name', 'email', 'phone', 'interest', 'message', 'property_path', 'status', 'assigned_to_email', 'follow_up_date', 'created_at', 'updated_at'];
 
         return response()->streamDownload(function () use ($filters, $columns): void {
             $output = fopen('php://output', 'w');
@@ -205,15 +212,28 @@ class AdminCrmController extends Controller
     public function updateLead(Request $request, string $id): JsonResponse
     {
         $this->assertId($id);
-        $status = $request->validate([
-            'status' => ['required', 'string', Rule::in(CrmService::LEAD_STATUSES)],
-        ])['status'];
+        $allowed = ['status', 'assigned_to_email', 'follow_up_date'];
+        if (array_diff(array_keys($request->all()), $allowed)) {
+            throw new RuntimeException('INVALID_LEAD_DETAILS');
+        }
+        $details = $request->validate([
+            'status' => ['sometimes', 'required', 'string', Rule::in(CrmService::LEAD_STATUSES)],
+            'assigned_to_email' => ['sometimes', 'nullable', 'email', 'max:255', Rule::exists('morada_staff_access', 'email')->where('active', true)],
+            'follow_up_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+        ]);
+        if ($details === []) {
+            throw new RuntimeException('INVALID_LEAD_DETAILS');
+        }
         $admin = $this->admin($request);
-        $this->criticalAudit->run($admin, 'lead.status', 'lead', $id, function () use ($id, $status, $admin): void {
-            if (! $this->crm->updateLeadStatus($id, $status, $admin)) {
+        if (array_key_exists('assigned_to_email', $details) && ! $this->access->hasCapability($admin, 'lead.assign')) {
+            throw new RuntimeException('CAPABILITY_REQUIRED');
+        }
+        $action = array_keys($details) === ['status'] ? 'lead.status' : 'lead.update';
+        $this->criticalAudit->run($admin, $action, 'lead', $id, function () use ($id, $details, $admin): void {
+            if (! $this->crm->updateLeadDetails($id, $details, $admin)) {
                 throw new RuntimeException('NOT_FOUND');
             }
-        }, ['status' => $status]);
+        }, ['fields' => array_keys($details)]);
 
         return response()->json(['ok' => true]);
     }
@@ -308,6 +328,7 @@ class AdminCrmController extends Controller
             'status' => ['nullable', 'string', Rule::in(CrmService::LEAD_STATUSES)],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d'],
+            'search' => ['nullable', 'string', 'max:100'],
         ];
         if (! $includeFormat) {
             $rules['per_page'] = ['sometimes', 'integer', 'between:20,100'];
@@ -335,6 +356,7 @@ class AdminCrmController extends Controller
             'status' => $validated['status'] ?? null,
             'date_from' => $validated['date_from'] ?? null,
             'date_to' => $validated['date_to'] ?? null,
+            'search' => isset($validated['search']) ? trim($validated['search']) : null,
             'per_page' => (int) ($validated['per_page'] ?? 20),
             'page' => (int) ($validated['page'] ?? 1),
             'format' => $validated['format'] ?? 'csv',

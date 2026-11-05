@@ -21,6 +21,7 @@ class AdminAccessService
             'lead.read',
             'lead.status',
             'lead.history',
+            'lead.assign',
         ],
         'manager' => [
             'property.read',
@@ -34,6 +35,8 @@ class AdminAccessService
             'lead.read',
             'lead.status',
             'lead.history',
+            'lead.assign',
+            'lead.export',
             'lead.erase',
             'audit.read',
             'team.manage',

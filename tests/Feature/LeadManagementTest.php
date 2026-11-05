@@ -78,6 +78,89 @@ class LeadManagementTest extends TestCase
             ->assertJsonPath('leads.0.status', 'perdido');
     }
 
+    public function test_search_matches_phone_and_summary_counts_all_pipeline_stages(): void
+    {
+        $session = $this->createAdminSession('manager');
+        $match = $this->createLead([
+            'name' => 'Busca pelo WhatsApp',
+            'phone' => '31991234567',
+            'status' => 'contacted',
+        ]);
+        $this->createLead(['status' => 'closed']);
+        $this->createLead(['status' => 'lost']);
+
+        $this->withSession($session)
+            ->getJson('/api/admin/leads?search=31991234567')
+            ->assertOk()
+            ->assertJsonCount(1, 'leads')
+            ->assertJsonPath('leads.0.id', $match)
+            ->assertJsonPath('summary.new', 0)
+            ->assertJsonPath('summary.em_contato', 1)
+            ->assertJsonPath('summary.fechado', 1)
+            ->assertJsonPath('summary.perdido', 1)
+            ->assertJsonPath('summary.total', 3);
+
+        $this->withSession($session)
+            ->getJson('/api/admin/leads?search=%2831%29%2099123-4567')
+            ->assertOk()
+            ->assertJsonCount(1, 'leads')
+            ->assertJsonPath('leads.0.id', $match);
+    }
+
+    public function test_active_assignees_follow_up_and_history_are_updated_safely(): void
+    {
+        $leadId = $this->createLead();
+        $editorSession = $this->createAdminSession('editor');
+        $managerSession = $this->createAdminSession('manager');
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
+
+        $this->withSession($editorSession)
+            ->getJson('/api/admin/leads/assignees')
+            ->assertOk()
+            ->assertJsonPath('assignees.0.email', 'editor@example.test');
+
+        $this->withSession($managerSession)
+            ->withHeaders($headers)
+            ->patchJson('/api/admin/leads/'.$leadId, [
+                'assigned_to_email' => 'editor@example.test',
+                'follow_up_date' => '2026-11-10',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('morada_contact_leads', [
+            'id' => $leadId,
+            'assigned_to_email' => 'editor@example.test',
+            'follow_up_date' => '2026-11-10',
+        ]);
+        $this->assertDatabaseCount('morada_lead_activities', 2);
+
+        $this->withSession($managerSession)
+            ->withHeaders($headers)
+            ->patchJson('/api/admin/leads/'.$leadId, ['assigned_to_email' => 'inactive@example.test'])
+            ->assertUnprocessable();
+    }
+
+    public function test_only_managers_can_export_leads(): void
+    {
+        $leadId = $this->createLead(['phone' => '31991234567']);
+        $editorSession = $this->createAdminSession('editor');
+        $managerSession = $this->createAdminSession('manager');
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local', 'X-CSRF-TOKEN' => 'csrf-contract-token'];
+
+        $this->withSession($editorSession)
+            ->withHeaders($headers)
+            ->postJson('/api/admin/leads/export', ['format' => 'json'])
+            ->assertForbidden();
+
+        $this->withSession($managerSession)
+            ->withHeaders($headers)
+            ->postJson('/api/admin/leads/export', ['format' => 'json'])
+            ->assertOk()
+            ->assertJsonPath('leads.0.id', $leadId)
+            ->assertJsonPath('leads.0.phone', '31991234567')
+            ->assertJsonMissingPath('leads.0.internal_notes');
+    }
+
     public function test_lead_reads_are_audited_without_copying_lead_personal_data(): void
     {
         $session = $this->createAdminSession('manager');
