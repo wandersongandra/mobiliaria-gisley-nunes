@@ -11,8 +11,8 @@ Autenticação administrativa depende da sessão Laravel e da linha revogável e
 | media.manage | sim | somente imóveis próprios em rascunho |
 | site.read | sim | sim |
 | site.manage / testimonial.manage | sim | não |
-| lead.read / lead.status / lead.history | sim | sim |
-| form.manage / lead.erase / audit.read / team.manage | sim | não |
+| lead.read / lead.status / lead.history / lead.assign | sim | sim |
+| lead.export / form.manage / lead.erase / audit.read / team.manage | sim | não |
 
 O cadastro pessoal do corretor (`GET/PUT /api/admin/profile`) é restrito à
 sessão autenticada do próprio usuário. O endereço e a data de nascimento não

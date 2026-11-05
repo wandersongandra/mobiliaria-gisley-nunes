@@ -525,6 +525,7 @@ function initContactForm() {
         body: JSON.stringify({
           name: data.name,
           email: data.email,
+          phone: data.phone,
           interest: data.interest,
           message: data.message,
           propertyPath: window.location.pathname,

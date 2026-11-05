@@ -12,7 +12,7 @@ Respostas administrativas e de autenticação usam `Cache-Control: no-store`. Mu
 | `GET /api/v2/properties` | Não | `page`, `per_page` 20–100 e filtros `purpose`, `location`, `type`, `price_band`, `bedrooms`; `{properties,pagination,facets}` | `422` para paginação/filtros inválidos; IDs internos omitidos. |
 | `GET /api/properties/{slug}` | Não | Imóvel publicado | `404` para slug inválido/inexistente. |
 | `GET /api/site` | Não | Configuração e depoimentos públicos | Cache público. |
-| `POST /api/contact` | Origens explicitamente permitidas | nome, email, interesse, mensagem, propertyPath, honeypot | 8/10 min por IP; `400` para entrada inválida, `201` para aceito. |
+| `POST /api/contact` | Origens explicitamente permitidas | nome, email, telefone opcional, interesse, mensagem, propertyPath, honeypot | 8/10 min por IP; telefone aceita 10–15 dígitos; `400` para entrada inválida, `201` para aceito. |
 | `GET /media/{path}` | Não | Entrega pelo Laravel uma foto publicada existente em `MEDIA_ROOT`, fora do Document Root | `404` se não registrada/publicada ou se o arquivo local não existir. |
 
 As páginas HTML, `robots.txt`, `sitemap.xml` e `llms.txt` são públicas e não recebem IDs internos administrativos.
@@ -51,9 +51,11 @@ Estas rotas existem no código e são relevantes para a operação, mas não amp
 | `GET/PUT /api/admin/site` | `site.read` / `site.manage` | Configuração pública. |
 | `POST/DELETE /api/admin/testimonials[/{id}]` | `testimonial.manage` | Cria/remove depoimento. |
 | `GET/PUT /api/admin/profile` | sessão autenticada | Cadastro do próprio corretor: endereço e data de nascimento; não aceita alteração de papel/e-mail. |
-| `GET /api/admin/leads`, `/export` | `lead.read` | Filtros status/data; export streaming CSV/JSON. A exportação usa limite dedicado de 20 requisições/10 min por IP. |
+| `GET /api/admin/leads` | `lead.read` | Filtros status/período/busca, resumo por etapa e lista paginada. |
+| `GET /api/admin/leads/assignees` | `lead.assign` | Lista integrantes ativos para atribuição de contatos. |
+| `POST /api/admin/leads/export` | `lead.export` | Exportação streaming CSV/JSON somente para gestores; CSV neutraliza fórmulas, com limite dedicado e CSRF/origem same-origin. |
 | `GET /api/admin/leads/{id}` | `lead.read` | Abre o atendimento e devolve o histórico persistido. |
-| `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | Atualiza/apaga lead; alteração de status pode gerar atividade de histórico. |
+| `PATCH/DELETE /api/admin/leads/{id}` | `lead.status` / `lead.erase` | PATCH aceita status, responsável e data de retorno (`YYYY-MM-DD`); atribuição exige `lead.assign` e as alterações operacionais geram histórico. DELETE apaga o lead. |
 | `POST /api/admin/leads/{id}/activities` | `lead.history` | Acrescenta anotação de contato; histórico não é editável pelo painel. |
 | `GET/POST/PUT/DELETE /api/admin/forms...` | `form.manage` | Biblioteca de modelos de formulários. A definição é JSON limitado e não é executada como HTML/script. |
 | `GET /api/admin/audit` | `audit.read` | `limit` 1–250. |

@@ -33,6 +33,12 @@ Execute somente migrations novas: nunca edite uma migration já aplicada em
 ambiente compartilhado. Antes de promoção, valide `php artisan migrate:status`.
 O banco de produção deve usar InnoDB, `utf8mb4` e modo estrito.
 
-Leads fechados/perdidos há mais de dois anos são anonimizados pelo scheduler.
+Leads fechados/perdidos há mais de dois anos são anonimizados pelo scheduler:
+nome, e-mail, telefone, mensagem, caminho do imóvel, responsável e data de
+retorno são removidos, e o conteúdo do histórico é substituído por um registro
+genérico. Etapa e datas operacionais permanecem para histórico agregado.
+As colunas `phone`, `assigned_to_email` e `follow_up_date` foram introduzidas
+pela migration `2026_11_05_000013_enhance_lead_follow_up`, que também cria o
+índice composto para consultas de retorno por etapa.
 O backup MySQL deve ser restaurado primeiro em banco vazio isolado e validado
 antes de qualquer troca de aplicação.

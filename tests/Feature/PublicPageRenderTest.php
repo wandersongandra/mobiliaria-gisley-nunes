@@ -60,6 +60,19 @@ class PublicPageRenderTest extends TestCase
         $response->assertSee('nonce="'.$nonce.'"', false);
     }
 
+    public function test_contact_forms_include_optional_phone_and_instagram_is_rendered(): void
+    {
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('name="phone" type="tel" autocomplete="tel"', false)
+            ->assertSee('href="https://www.instagram.com/gisleynunesimoveis/"', false)
+            ->assertSee('@gisleynunesimoveis');
+
+        $this->get('/contato')
+            ->assertOk()
+            ->assertSee('name="phone" type="tel" autocomplete="tel"', false);
+    }
+
     public function test_production_hsts_does_not_lock_unverified_subdomains_to_https(): void
     {
         $this->app->instance('env', 'production');
@@ -97,6 +110,7 @@ class PublicPageRenderTest extends TestCase
         $response->assertSee($property['title']);
         $response->assertSee('<h1>'.$property['title'].'</h1>', false);
         $response->assertSee('property-description-copy', false);
+        $response->assertSee('name="phone" type="tel" autocomplete="tel"', false);
         $response->assertSee('id="property-data"', false);
         $response->assertSee('"slug":"'.$property['slug'].'"', false);
     }

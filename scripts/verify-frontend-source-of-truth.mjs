@@ -22,7 +22,8 @@ for (const filename of ['index.html', 'main.js', 'styles.css', 'refinements.css'
 const adminHtml = await readFile(path.join(root, 'admin', 'index.html'), 'utf8');
 for (const filename of ['main.js', 'styles.css', 'refinements.css']) {
   const bytes = await readFile(path.join(root, 'admin', filename));
-  const version = createHash('sha256').update(bytes).digest('hex');
+  const normalized = bytes.toString('utf8').replace(/\r\n/g, '\n');
+  const version = createHash('sha256').update(normalized, 'utf8').digest('hex');
   if (!adminHtml.includes(`/admin/${filename}?v=${version}"`)) {
     throw new Error(`ADMIN_ASSET_VERSION_MISMATCH:${filename}`);
   }

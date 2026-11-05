@@ -11,13 +11,14 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadFilters: { status: '', date_from: '', date_to: '', page: 1, per_page: 20 }, leadDetail: null, team: [], invitations: [], forms: [], editingFormId: null, audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadAssignees: [], leadFilters: { status: '', date_from: '', date_to: '', search: '', page: 1, per_page: 20 }, leadDetail: null, team: [], invitations: [], forms: [], editingFormId: null, audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
 let propertySearchTimer = 0;
 let propertyLoadSequence = 0;
 let leadLoadSequence = 0;
 let teamLoading = false;
 let teamRefreshQueued = false;
 let leadsLoaded = false;
+let leadAssigneesLoaded = false;
 let propertyRequestController = null;
 let leadRequestController = null;
 let teamRequestController = null;
@@ -280,7 +281,17 @@ function ensureManagementPanels() {
   };
 
   addNav('profile-view', 'Meu cadastro', '◎');
+  addNav('leads-view', 'Atendimentos', '◷');
   if (state.user?.role === 'manager') addNav('forms-view', 'Formulários', '▤', true);
+
+  if (!$('#leads-view')) {
+    const section = document.createElement('section');
+    section.id = 'leads-view';
+    section.className = 'admin-view';
+    section.hidden = true;
+    section.innerHTML = '<div class="section-bar"><div><p class="admin-kicker">relacionamento</p><h3>Atendimentos, <em>com continuidade.</em></h3><p class="section-description">Acompanhe a origem, etapa, responsável e próximo retorno de cada contato.</p></div></div>';
+    dashboardMain.append(section);
+  }
 
   if (!$('#profile-view')) {
     const section = document.createElement('section');
@@ -836,6 +847,7 @@ function switchView(name) {
     }
   }
   if (activeView?.id === 'site-view' && !siteLoaded) { siteLoaded = true; loadSite(); }
+  if (activeView?.id === 'leads-view') { void loadLeads(); }
   if (activeView?.id === 'team-view' && state.user?.role === 'manager' && !teamLoaded) { void loadTeam(); }
   if (activeView?.id === 'profile-view') { void loadProfile(); }
   if (activeView?.id === 'forms-view' && state.user?.role === 'manager') { void loadFormTemplates(); }
@@ -941,6 +953,7 @@ const auditLabels = {
   'testimonial.create': 'Depoimento adicionado',
   'testimonial.remove': 'Depoimento removido',
   'lead.status': 'Status do contato alterado',
+  'lead.update': 'Atendimento atualizado',
   'lead.delete': 'Dados de contato apagados',
   'team.create': 'Acesso de equipe criado',
   'team.invite': 'Convite de equipe gerado',
@@ -1170,18 +1183,18 @@ async function createTeamInvitation(event) {
 
 function ensureLeadsPanel() {
   if ($('#leads-panel')) return $('#leads-panel');
-  const metrics = document.querySelector('.metrics-grid');
-  if (!metrics) return null;
+  const view = $('#leads-view');
+  if (!view) return null;
   const panel = document.createElement('section');
   panel.id = 'leads-panel';
   panel.className = 'leads-panel';
-  panel.innerHTML = '<div class="leads-panel-head"><div><p class="admin-kicker">relacionamento</p><h3>Contatos recebidos pelo site.</h3><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Status<select name="status"><option value="">Todos</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>De<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Filtrar</button><button class="outline-button lead-export" data-lead-export="csv" type="button">Exportar CSV</button><button class="outline-button lead-export" data-lead-export="json" type="button">Exportar JSON</button></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
+  panel.innerHTML = '<div class="lead-summary" id="lead-summary" aria-label="Resumo dos atendimentos"></div><div class="leads-panel-head"><div><p id="lead-status" class="lead-status" role="status" aria-live="polite"></p></div><span id="lead-total" class="lead-total">0 novos</span></div><form id="lead-filters" class="lead-filters"><label>Buscar contato<input name="search" type="search" maxlength="100" placeholder="Nome, e-mail, telefone ou mensagem" /></label><label>Etapa<select name="status"><option value="">Todas</option><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>Recebido de<input name="date_from" type="date" /></label><label>Até<input name="date_to" type="date" /></label><label>Por página<select name="per_page"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button class="outline-button" type="submit">Aplicar filtros</button><button class="outline-button" type="reset">Limpar</button><button class="outline-button lead-export" data-lead-export="csv" type="button">Exportar CSV</button><button class="outline-button lead-export" data-lead-export="json" type="button">Exportar JSON</button></form><div id="lead-list" class="lead-list" aria-live="polite"></div><div class="lead-pagination"><span id="lead-page-summary" aria-live="polite"></span><div><button class="outline-button" type="button" data-lead-page="previous">Anterior</button><button class="outline-button" type="button" data-lead-page="next">Próxima</button></div></div>';
   const detail = document.createElement('section');
   detail.id = 'lead-detail';
   detail.className = 'site-card';
   detail.hidden = true;
   panel.append(detail);
-  metrics.insertAdjacentElement('afterend', panel);
+  view.append(panel);
   $('#lead-filters').addEventListener('submit', (event) => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
@@ -1199,11 +1212,18 @@ function ensureLeadsPanel() {
     state.leadFilters = {
       ...state.leadFilters,
       status: String(values.get('status') || ''),
+      search: String(values.get('search') || '').trim(),
       date_from: dateFrom,
       date_to: dateTo,
       per_page: Number(values.get('per_page')) || 20,
       page: 1
     };
+    void loadLeads();
+  });
+  $('#lead-filters').addEventListener('reset', (event) => {
+    event.preventDefault();
+    $('#lead-filters').reset();
+    state.leadFilters = { status: '', date_from: '', date_to: '', search: '', page: 1, per_page: 20 };
     void loadLeads();
   });
   panel.querySelectorAll('[data-lead-page]').forEach((button) => button.addEventListener('click', () => {
@@ -1214,7 +1234,7 @@ function ensureLeadsPanel() {
   }));
   panel.querySelectorAll('[data-lead-export]').forEach((button) => button.addEventListener('click', async () => {
     const payload = { format: button.dataset.leadExport };
-    for (const key of ['status', 'date_from', 'date_to']) {
+    for (const key of ['status', 'date_from', 'date_to', 'search']) {
       if (state.leadFilters[key]) payload[key] = state.leadFilters[key];
     }
 
@@ -1240,11 +1260,15 @@ function renderLeads() {
   const newCount = Number(state.leadSummary?.new || 0);
   $('#lead-total').textContent = `${newCount} ${newCount === 1 ? 'novo' : 'novos'}`;
   $('#metric-leads-new').textContent = String(newCount).padStart(2, '0');
+  const summaryLabels = [['total', 'Total'], ['new', 'Novos'], ['em_contato', 'Em contato'], ['fechado', 'Fechados'], ['perdido', 'Perdidos']];
+  $('#lead-summary').innerHTML = summaryLabels.map(([key, label]) => `<article><span>${label}</span><strong>${Number(state.leadSummary?.[key] || 0)}</strong></article>`).join('');
+  panel.querySelectorAll('[data-lead-export]').forEach((button) => { button.hidden = state.user?.role !== 'manager'; });
 
   const items = state.leads;
   const filters = $('#lead-filters');
-  // Avoid overwriting a date or select value that the operator is editing.
+  // Avoid overwriting filter values while the operator is editing them.
   if (!filters.contains(document.activeElement)) {
+    filters.elements.search.value = state.leadFilters.search;
     filters.elements.status.value = state.leadFilters.status;
     filters.elements.date_from.value = state.leadFilters.date_from;
     filters.elements.date_to.value = state.leadFilters.date_to;
@@ -1258,7 +1282,12 @@ function renderLeads() {
     const propertyLink = String(lead.property_path || '').startsWith('/imoveis/')
       ? `<a class="lead-property" href="${escapeHTML(lead.property_path)}" target="_blank" rel="noopener">Ver imóvel ↗</a>` : '';
     const statusOptions = [['new', 'Novo'], ['em_contato', 'Em contato'], ['fechado', 'Fechado'], ['perdido', 'Perdido']];
-    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small></div><div class="lead-actions"><label class="lead-status-control"><span class="sr-only">Status de ${escapeHTML(lead.name)}</span><select data-lead-status="${escapeHTML(lead.id)}">${statusOptions.map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button type="button" data-lead-save="${escapeHTML(lead.id)}">Salvar status</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
+    const phone = String(lead.phone || '').replace(/\D/g, '');
+    const whatsappPhone = phone && phone.length <= 11 ? `55${phone}` : phone;
+    const followUp = lead.follow_up_date ? new Date(`${lead.follow_up_date}T00:00:00`) : null;
+    const overdue = followUp && followUp < new Date(new Date().toDateString()) && !['fechado', 'perdido'].includes(lead.status);
+    const assigneeName = state.leadAssignees.find((user) => user.email === lead.assigned_to_email)?.name || lead.assigned_to_email || 'Não atribuído';
+    return `<article class="lead-row" data-status="${escapeHTML(lead.status)}"><div class="lead-main"><div class="lead-title"><strong>${escapeHTML(lead.name)}</strong><span>${formatDate(lead.created_at)}</span></div><div class="lead-contact-links"><a href="mailto:${escapeHTML(lead.email)}">${escapeHTML(lead.email)}</a>${phone ? `<a class="lead-contact-action" href="tel:+${whatsappPhone}">Ligar ${escapeHTML(lead.phone)}</a><a class="lead-contact-action lead-whatsapp" href="https://wa.me/${whatsappPhone}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp ↗</a>` : '<span class="lead-no-phone">Telefone não informado</span>'}</div><p>${escapeHTML(lead.message)}</p><small>${escapeHTML(lead.interest)} ${propertyLink}</small><small>Responsável: ${escapeHTML(assigneeName)} · Retorno: <span class="${overdue ? 'lead-overdue' : ''}">${followUp ? new Intl.DateTimeFormat('pt-BR').format(followUp) : 'Não agendado'}${overdue ? ' · atrasado' : ''}</span></small></div><div class="lead-actions"><label class="lead-status-control"><span class="sr-only">Status de ${escapeHTML(lead.name)}</span><select data-lead-status="${escapeHTML(lead.id)}">${statusOptions.map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button type="button" data-lead-save="${escapeHTML(lead.id)}">Salvar status</button>${state.user?.role === 'manager' ? `<button class="danger" type="button" data-lead-delete="${escapeHTML(lead.id)}">Apagar dados</button>` : ''}</div></article>`;
   }).join('') : '<div class="empty-properties compact"><span>✓</span><h4>Nenhum contato encontrado.</h4><p>Ajuste os filtros ou aguarde novos contatos pelo site.</p></div>';
 
   list.querySelectorAll('.lead-actions').forEach((actions) => {
@@ -1333,12 +1362,19 @@ async function loadLeadDetail(id) {
     const lead = result.lead;
     state.leadDetail = lead;
     const activities = Array.isArray(lead.activities) ? lead.activities : [];
-    detail.innerHTML = `<div class="leads-panel-head"><div><p class="admin-kicker">atendimento</p><h3>${escapeHTML(lead.name)}</h3><p>${escapeHTML(lead.email)} · ${escapeHTML(lead.interest)}</p></div><button type="button" class="outline-button" data-close-lead>Fechar</button></div><p>${escapeHTML(lead.message)}</p><div class="site-fields"><label>Status<select id="lead-detail-status"><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><button id="lead-detail-status-save" class="outline-button" type="button">Salvar status</button><label>Registrar contato<textarea id="lead-detail-body" maxlength="4000" rows="4" placeholder="Descreva a ligação, mensagem, visita ou próximo passo."></textarea></label><label>Tipo<select id="lead-detail-type"><option value="note">Anotação</option><option value="call">Ligação</option><option value="email">E-mail</option><option value="whatsapp">WhatsApp</option><option value="meeting">Reunião</option></select></label><button id="lead-detail-activity-save" class="admin-button admin-button-primary" type="button">Salvar no histórico <span>↗</span></button></div><div class="testimonial-list"><span class="metric-label">histórico de contatos</span>${activities.length ? activities.map((item) => `<article class="testimonial-row"><div><strong>${escapeHTML(item.type)}</strong><p>${escapeHTML(item.body)}</p><small>${escapeHTML(item.actorName)} · ${formatDate(item.createdAt)}</small></div></article>`).join('') : '<p>Nenhum contato registrado ainda.</p>'}</div>`;
+    const assignedUserIsActive = state.leadAssignees.some((user) => user.email === lead.assigned_to_email);
+    const inactiveAssignee = lead.assigned_to_email && !assignedUserIsActive
+      ? `<option value="${escapeHTML(lead.assigned_to_email)}">${escapeHTML(lead.assigned_to_email)} · inativo</option>`
+      : '';
+    const assigneeOptions = state.leadAssignees.map((user) => `<option value="${escapeHTML(user.email)}">${escapeHTML(user.name)} · ${escapeHTML(user.email)}</option>`).join('');
+    detail.innerHTML = `<div class="leads-panel-head"><div><p class="admin-kicker">atendimento</p><h3>${escapeHTML(lead.name)}</h3><p>${escapeHTML(lead.email)} · ${escapeHTML(lead.interest)}</p>${lead.phone ? `<p>Telefone: ${escapeHTML(lead.phone)}</p>` : ''}</div><button type="button" class="outline-button" data-close-lead>Fechar</button></div><p>${escapeHTML(lead.message)}</p><div class="site-fields lead-fields"><label>Status<select id="lead-detail-status"><option value="new">Novo</option><option value="em_contato">Em contato</option><option value="fechado">Fechado</option><option value="perdido">Perdido</option></select></label><label>Responsável<select id="lead-detail-assignee"><option value="">Sem responsável</option>${inactiveAssignee}${assigneeOptions}</select></label><label>Próximo retorno<input id="lead-detail-follow-up" type="date" /></label><button id="lead-detail-status-save" class="outline-button" type="button">Salvar atendimento</button><label>Registrar contato<textarea id="lead-detail-body" maxlength="4000" rows="4" placeholder="Descreva a ligação, mensagem, visita ou próximo passo."></textarea></label><label>Tipo<select id="lead-detail-type"><option value="note">Anotação</option><option value="call">Ligação</option><option value="email">E-mail</option><option value="whatsapp">WhatsApp</option><option value="meeting">Reunião</option></select></label><button id="lead-detail-activity-save" class="admin-button admin-button-primary" type="button">Salvar no histórico <span>↗</span></button></div><div class="testimonial-list"><span class="metric-label">histórico de contatos</span>${activities.length ? activities.map((item) => `<article class="testimonial-row"><div><strong>${escapeHTML(item.type)}</strong><p>${escapeHTML(item.body)}</p><small>${escapeHTML(item.actorName)} · ${formatDate(item.createdAt)}</small></div></article>`).join('') : '<p>Nenhum contato registrado ainda.</p>'}</div>`;
     $('#lead-detail-status').value = lead.status;
+    $('#lead-detail-assignee').value = lead.assigned_to_email || '';
+    $('#lead-detail-follow-up').value = lead.follow_up_date || '';
     $('[data-close-lead]').addEventListener('click', () => { detail.hidden = true; state.leadDetail = null; });
     $('#lead-detail-status-save').addEventListener('click', async (event) => {
       setButtonPending(event.currentTarget, true, 'Salvando…');
-      try { await request(`/api/admin/leads/${id}`, { method: 'PATCH', body: JSON.stringify({ status: $('#lead-detail-status').value }) }); await loadLeadDetail(id); await loadLeads(); } catch { event.currentTarget.disabled = false; }
+      try { await request(`/api/admin/leads/${id}`, { method: 'PATCH', body: JSON.stringify({ status: $('#lead-detail-status').value, assigned_to_email: $('#lead-detail-assignee').value || null, follow_up_date: $('#lead-detail-follow-up').value || null }) }); await loadLeadDetail(id); await loadLeads(); } catch { event.currentTarget.disabled = false; }
     });
     $('#lead-detail-activity-save').addEventListener('click', async (event) => {
       const body = $('#lead-detail-body').value.trim();
@@ -1364,6 +1400,15 @@ async function loadLeads() {
     .forEach((control) => { control.disabled = true; });
   if (list) list.innerHTML = '<div class="empty-properties compact" role="status">Carregando contatos…</div>';
   try {
+    if (!leadAssigneesLoaded) {
+      try {
+        const assignees = await request('/api/admin/leads/assignees');
+        state.leadAssignees = Array.isArray(assignees.assignees) ? assignees.assignees : [];
+        leadAssigneesLoaded = true;
+      } catch {
+        state.leadAssignees = [];
+      }
+    }
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(state.leadFilters)) {
       if (value !== '' && value !== null && value !== undefined) params.set(key, String(value));
@@ -1372,7 +1417,7 @@ async function loadLeads() {
     if (generation !== leadLoadSequence || !state.user) return;
     state.leads = result.leads || [];
     state.leadPagination = result.pagination || null;
-    state.leadSummary = result.summary || { new: 0 };
+    state.leadSummary = result.summary || { new: 0, em_contato: 0, fechado: 0, perdido: 0, total: 0 };
     leadsLoaded = true;
     renderLeads();
   } catch (error) {
