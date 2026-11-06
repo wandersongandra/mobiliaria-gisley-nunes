@@ -134,6 +134,50 @@ credenciais temporárias remanescentes após execução. A **restauração compl
 em ambiente isolado permanece pendente**; integridade de arquivo não equivale
 a comprovação de recuperação funcional da aplicação.
 
+#### Teste de restauração com bloqueio do banco real
+
+O comando `scripts/restore-hostgator-local-test.sh` foi criado para aceitar
+**somente um banco de teste já existente e vazio**, com `restore` no nome,
+distinto do banco configurado como produção. O diretório de mídia também deve
+existir, estar vazio, ter permissão `700` e ficar fora do checkout do site.
+Ele verifica os arquivos do conjunto antes de importar e rejeita caminhos
+suspeitos no arquivo compactado. **Não cria nem apaga bancos, tabelas de
+produção ou mídia do site.** Se um teste de importação falhar, o banco de
+teste pode ter ficado parcialmente preenchido: investigue antes de tentar
+outra vez, sempre em novo destino vazio.
+
+Passos para o responsável com acesso ao cPanel, usando exclusivamente o banco
+de teste **criado por ele** e vinculado ao usuário MySQL autorizado:
+
+1. Escolher um backup íntegro em `/home1/gisley77/.gisley-backups/gisley-...`.
+2. Criar um banco novo e vazio com `restore` no nome, concedendo acesso apenas
+   para o teste. Não usar nome de banco nem pastas de produção.
+3. Criar uma pasta privada de restauração, fora de `public/` e do repositório.
+4. Na raiz da aplicação, configurar os quatro caminhos/nomes reais:
+
+   ```bash
+   export GISELY_RESTORE_SOURCE_SET=/home1/gisley77/.gisley-backups/gisley-YYYYMMDDTHHMMSSZ-id
+   export GISELY_RESTORE_MEDIA_DIR=/home1/gisley77/gisley-restore-media-test
+   export GISELY_RESTORE_DATABASE=gisley77_restore_test
+   export GISELY_LOCAL_BACKUP_DATABASE=gisley77_gisley_nunes
+   bash scripts/restore-hostgator-local-test.sh --check
+   bash scripts/restore-hostgator-local-test.sh --run
+   ```
+
+   Por padrão, um arquivo temporário de configuração MySQL é derivado do
+   Laravel, protegido e removido após o teste. Caso o usuário web não tenha
+   acesso ao banco de teste, usar um arquivo de configuração privado separado
+   (`GISELY_RESTORE_MYSQL_DEFAULTS_FILE`) com usuário autorizado, permissão
+   `600` e **nunca incluir senhas nos comandos ou relatórios**.
+5. Conferir contagem de tabelas, relacionamentos essenciais e se as fotos
+   restauradas correspondem aos imóveis, sem abrir informações pessoais em
+   logs públicos. Registrar a evidência, data e checksum do conjunto.
+
+O teste automatizado `scripts/test-restore-hostgator-local-test.sh` exercita
+com dados fictícios as recusas de banco principal, banco já ocupado, mídia
+não vazia e a recuperação de um conjunto válido. **Passar esse teste não
+substitui a importação real acima.**
+
 ### Opção futura: cópia criptografada fora da hospedagem
 
 O script `scripts/backup-hostgator-encrypted.sh` captura **MySQL e fotos locais
@@ -253,8 +297,10 @@ operacionalmente**.
 - cPanel `br64`: MySQL `5.7.44-48`; sem backups automáticos disponibilizados
   na página *Backup*. O produto comercial Gator Backup não foi contratado
   por esta intervenção.
-- *Cron Jobs*: apenas `artisan schedule:run` do staging, com expressão
-  `*/21 * * * *`; **nenhum cron de produção evidenciado**.
+- *Cron Jobs* na primeira inspeção: apenas `artisan schedule:run` do staging,
+  com expressão `*/21 * * * *`. Depois foi confirmado o cron **do backup local**
+  de produção às 03h15. Isso **não comprova** que o `schedule:run` Laravel
+  esteja ativado na produção; o monitor de segurança ainda depende desse cron.
 - Usuário MySQL de produção: `ALL PRIVILEGES` sobre o banco. Uma conta web de
   menor privilégio exige separar explicitamente a credencial de migração e
   testar autorização no Laravel antes de alterar a produção.
