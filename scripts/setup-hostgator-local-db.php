@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
-// One-time HostGator setup: copy the Laravel connection settings into a
-// private MySQL client option file without printing the password in a shell.
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\DB;
+
+// Create a short-lived private MySQL client option file from Laravel's
+// database configuration without printing the password in a shell.
 if (PHP_SAPI !== 'cli' || $argc !== 2 || ! str_starts_with($argv[1], '/')) {
     fwrite(STDERR, "Usage: php scripts/setup-hostgator-local-db.php /absolute/private/mysql.cnf\n");
     exit(2);
@@ -20,9 +23,9 @@ if ($parent === false || $applicationRoot === false || str_starts_with($parent.'
 
 require $applicationRoot.'/vendor/autoload.php';
 $app = require $applicationRoot.'/bootstrap/app.php';
-$app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$app->make(Kernel::class)->bootstrap();
 
-$connection = \Illuminate\Support\Facades\DB::connection();
+$connection = DB::connection();
 $config = $connection->getConfig();
 if ($connection->getDriverName() !== 'mysql') {
     fwrite(STDERR, "Only the configured production MySQL connection is supported.\n");

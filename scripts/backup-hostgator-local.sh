@@ -105,7 +105,7 @@ fi
 
 mysqldump --defaults-extra-file="$defaults_file" \
   --single-transaction --quick --skip-lock-tables \
-  --routines --events --triggers --default-character-set=utf8mb4 \
+  --no-tablespaces --routines --events --triggers --default-character-set=utf8mb4 \
   -- "$database" | gzip -9 > "${temporary_set}/database.sql.gz"
 if [[ "$automatic_mysql_config" == true ]]; then
   rm -- "$defaults_file"

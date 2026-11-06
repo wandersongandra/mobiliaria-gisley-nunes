@@ -11,7 +11,7 @@ chmod 700 -- "$test_root/backups" "$test_root/media" "$test_root/bin"
 printf 'photo fixture\n' > "$test_root/media/photo.jpg"
 printf '[client]\nuser=test\npassword=test\n' > "$test_root/mysql.cnf"
 chmod 600 -- "$test_root/mysql.cnf"
-printf '#!/usr/bin/env bash\nprintf "CREATE TABLE fixture (id INT);\\n"\n' > "$test_root/bin/mysqldump"
+printf '#!/usr/bin/env bash\n[[ " $* " == *" --no-tablespaces "* ]] || exit 9\nprintf "CREATE TABLE fixture (id INT);\\n"\n' > "$test_root/bin/mysqldump"
 chmod 700 -- "$test_root/bin/mysqldump"
 
 export PATH="${test_root}/bin:${PATH}"
@@ -62,7 +62,7 @@ fi
 partials=("$test_root"/backups/.gisley-*)
 [[ ${#partials[@]} -eq 0 ]] || { echo 'FAIL: failed backup left incomplete files' >&2; exit 1; }
 
-printf '#!/usr/bin/env bash\nprintf "CREATE TABLE fixture (id INT);\\n"\n' > "$test_root/bin/mysqldump"
+printf '#!/usr/bin/env bash\n[[ " $* " == *" --no-tablespaces "* ]] || exit 9\nprintf "CREATE TABLE fixture (id INT);\\n"\n' > "$test_root/bin/mysqldump"
 chmod 700 "$test_root/bin/mysqldump"
 
 # A successful backup prunes only old complete sets belonging to this script.
