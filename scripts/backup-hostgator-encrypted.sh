@@ -54,6 +54,9 @@ done
 
 actual_certificate_fingerprint="$(openssl x509 -in "$backup_certificate" -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)"
 [[ "${actual_certificate_fingerprint,,}" == "${backup_certificate_fingerprint,,}" ]] || fail 'backup certificate fingerprint mismatch'
+printf 'backup-preflight' \
+  | openssl cms -encrypt -binary -outform DER -aes-256-cbc -recip "$backup_certificate" -out /dev/null >/dev/null 2>&1 \
+  || fail 'OpenSSL CMS encryption is not available for the configured certificate'
 
 if [[ "$backup_mode" == '--check' ]]; then
   echo 'Backup preflight: PASS (no backup created, no production data accessed).'
