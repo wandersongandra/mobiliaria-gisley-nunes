@@ -234,6 +234,71 @@ class UploadLifecycleTest extends TestCase
         }
     }
 
+    public function test_local_storage_never_reads_a_symlinked_photo_outside_the_media_root(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        $outside = sys_get_temp_dir().DIRECTORY_SEPARATOR.'gisley-outside-'.Str::uuid();
+        $key = 'gisley/properties/property-id/photo.jpg';
+        $link = $root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $key);
+        File::makeDirectory(dirname($link), 0750, true);
+        File::makeDirectory($outside, 0750, true);
+        File::put($outside.DIRECTORY_SEPARATOR.'private.jpg', 'not public');
+
+        try {
+            $this->assertTrue(symlink($outside.DIRECTORY_SEPARATOR.'private.jpg', $link));
+
+            $storage = app(R2Storage::class);
+            $this->assertFalse($storage->exists($key));
+            $this->assertFalse($storage->metadata($key)['exists']);
+            $this->assertNull($storage->imageInfo($key, 'image/jpeg'));
+
+            try {
+                $storage->path($key);
+                $this->fail('A media file symlink must never be exposed.');
+            } catch (RuntimeException $error) {
+                $this->assertSame('INVALID_ASSET', $error->getMessage());
+            }
+
+            try {
+                $storage->delete($key);
+                $this->fail('A media file symlink must never be deleted through a storage key.');
+            } catch (RuntimeException $error) {
+                $this->assertSame('INVALID_ASSET', $error->getMessage());
+            }
+            $this->assertFileExists($outside.DIRECTORY_SEPARATOR.'private.jpg');
+        } finally {
+            if (is_link($link)) {
+                unlink($link);
+            }
+            File::deleteDirectory($root);
+            File::deleteDirectory($outside);
+        }
+    }
+
+    public function test_local_storage_does_not_follow_a_symlinked_property_directory(): void
+    {
+        $root = $this->configureTemporaryMediaRoot();
+        $outside = sys_get_temp_dir().DIRECTORY_SEPARATOR.'gisley-outside-'.Str::uuid();
+        $link = $root.DIRECTORY_SEPARATOR.'gisley'.DIRECTORY_SEPARATOR.'properties';
+        File::makeDirectory(dirname($link), 0750, true);
+        File::makeDirectory($outside, 0750, true);
+        File::put($outside.DIRECTORY_SEPARATOR.'outside.jpg', 'not public');
+
+        try {
+            $this->assertTrue(symlink($outside, $link));
+
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('INVALID_ASSET');
+            app(R2Storage::class)->listPropertyObjects();
+        } finally {
+            if (is_link($link)) {
+                unlink($link);
+            }
+            File::deleteDirectory($root);
+            File::deleteDirectory($outside);
+        }
+    }
+
     public function test_image_inspection_rejects_a_renamed_payload(): void
     {
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL1NwAAAABJRU5ErkJggg==', true);
