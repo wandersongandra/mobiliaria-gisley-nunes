@@ -110,9 +110,9 @@ Configuração mínima no plano HostGator atual, após conferir os caminhos reai
    uma credencial exclusiva de backup, pode-se usar
    `GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE` com permissões `600`. O diretório
    de fotos padrão é `storage/app/private/media` do projeto implantado.
-3. Antes de agendar, executar `--check` e `--run` manualmente; conferir
-   `--verify-latest` e realizar **um restore real em banco e pasta isolados**.
-   Só então ativar um cron diário no horário de menor tráfego.
+3. Executar `--check`, `--run` e `--verify-latest` manualmente antes de
+   ativar o cron. Para validar a recuperabilidade de ponta a ponta, realizar
+   também **uma restauração real em banco e pasta isolados**, nunca na produção.
 4. Acompanhar o espaço livre do volume compartilhado. A rotina recusa iniciar
    se houver menos de 512 MiB disponíveis; ela não substitui o alerta de disco.
 
@@ -126,8 +126,13 @@ bash scripts/backup-hostgator-local.sh --run
 bash scripts/backup-hostgator-local.sh --verify-latest
 ```
 
-**Status:** automação preparada no código, mas cron e restauração real devem
-ser comprovados no cPanel para o controle ser considerado ativo.
+**Status em 06/11/2026:** dois conjuntos foram gerados na HostGator; o mais
+recente passou na verificação de hash e leitura dos arquivos. O dump contém
+17 definições de tabelas. O cron diário `15 3 * * *` foi confirmado no
+cPanel (horário do servidor, UTC-3). Pasta com permissão `700` e sem
+credenciais temporárias remanescentes após execução. A **restauração completa
+em ambiente isolado permanece pendente**; integridade de arquivo não equivale
+a comprovação de recuperação funcional da aplicação.
 
 ### Opção futura: cópia criptografada fora da hospedagem
 
