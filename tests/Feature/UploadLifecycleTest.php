@@ -24,6 +24,7 @@ class UploadLifecycleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        url()->forceRootUrl('https://test.local');
         $this->withServerVariables(['HTTPS' => 'on', 'SERVER_PORT' => '443', 'HTTP_HOST' => 'test.local']);
     }
 
