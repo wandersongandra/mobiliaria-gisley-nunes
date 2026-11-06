@@ -81,12 +81,59 @@ HostGator existente antes de considerar a execução periódica ativa.
 
 ## 4. Backup criptografado, retenção e restauração
 
+### Alternativa simplificada escolhida: backup na mesma HostGator
+
+O titular decidiu inicialmente armazenar as cópias no **mesmo plano de
+hospedagem da Gisley Nunes**, sem contratar serviços ou utilizar servidores de
+outros projetos. Isso cobre exclusão acidental e erro de atualização quando os
+arquivos de backup continuam íntegros. **Não cobre pane ou perda do servidor,
+sequestro da conta cPanel, ransomware no mesmo usuário ou falha do provedor.**
+
+O script `scripts/backup-hostgator-local.sh` salva o banco MySQL e a pasta
+privada de fotos em conjuntos `database.sql.gz`, `media.tar.gz` e
+`complete.sha256`. Ele verifica hashes e a leitura dos arquivos comprimidos,
+e mantém as **últimas 7 cópias completas** por padrão. Os arquivos não são
+criptografados: devem ficar exclusivamente numa pasta `700` **fora da
+aplicação e do document root**, com acesso limitado ao próprio usuário cPanel.
+Não publicar, anexar em tickets ou enviar os conjuntos por e-mail.
+
+Configuração mínima no plano HostGator atual, após conferir os caminhos reais:
+
+1. Criar `/home1/gisley77/.gisley-backups` com modo `700`; criar um arquivo
+   de opções MySQL fora do site, modo `600`, com usuário de leitura/backup,
+   por exemplo `/home1/gisley77/.gisley-backup-mysql.cnf`.
+2. Definir no cron do cPanel as variáveis `GISELY_LOCAL_BACKUP_DIR`,
+   `GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE`,
+   `GISELY_LOCAL_BACKUP_DATABASE` e executar o script com `--run`. O diretório
+   de fotos padrão é `storage/app/private/media` do projeto implantado.
+3. Antes de agendar, executar `--check` e `--run` manualmente; conferir
+   `--verify-latest` e realizar **um restore real em banco e pasta isolados**.
+   Só então ativar um cron diário no horário de menor tráfego.
+4. Acompanhar o espaço livre do volume compartilhado. A rotina recusa iniciar
+   se houver menos de 512 MiB disponíveis; ela não substitui o alerta de disco.
+
+Exemplo de execução manual (nunca incluir a senha MySQL na linha de comando):
+
+```bash
+export GISELY_LOCAL_BACKUP_DIR=/home1/gisley77/.gisley-backups
+export GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE=/home1/gisley77/.gisley-backup-mysql.cnf
+export GISELY_LOCAL_BACKUP_DATABASE=gisley77_gisley_nunes
+bash scripts/backup-hostgator-local.sh --check
+bash scripts/backup-hostgator-local.sh --run
+bash scripts/backup-hostgator-local.sh --verify-latest
+```
+
+**Status:** automação preparada no código, mas cron e restauração real devem
+ser comprovados no cPanel para o controle ser considerado ativo.
+
+### Opção futura: cópia criptografada fora da hospedagem
+
 O script `scripts/backup-hostgator-encrypted.sh` captura **MySQL e fotos locais
 privadas** em dois objetos CMS criptografados, com um manifesto SHA-256, sem
 persistir dump SQL nem fotos em claro no diretório de backups. Não faz upload,
 remove arquivos antigos, altera tabelas ou cria cron automaticamente.
 
-### Antes do primeiro backup
+### Antes do primeiro backup externo
 
 1. Em **máquina administrativa fora da HostGator**, gerar certificado público
    e chave privada protegida por senha (a chave privada nunca vai ao servidor):
