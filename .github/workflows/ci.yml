@@ -74,8 +74,19 @@ jobs:
         run: |
           bash -n scripts/deploy-hostgator.sh
           bash -n scripts/test-deploy-hostgator.sh
-          shellcheck scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh
+          bash -n scripts/backup-hostgator-encrypted.sh
+          bash -n scripts/backup-hostgator-local.sh
+          bash -n scripts/verify-hostgator-encrypted-set.sh
+          bash -n scripts/test-backup-hostgator-encrypted.sh
+          bash -n scripts/test-backup-hostgator-local.sh
+          bash -n scripts/restore-hostgator-local-test.sh
+          bash -n scripts/test-restore-hostgator-local-test.sh
+          php -l scripts/setup-hostgator-local-db.php
+          shellcheck scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh scripts/backup-hostgator-encrypted.sh scripts/backup-hostgator-local.sh scripts/restore-hostgator-local-test.sh scripts/verify-hostgator-encrypted-set.sh scripts/test-backup-hostgator-encrypted.sh scripts/test-backup-hostgator-local.sh scripts/test-restore-hostgator-local-test.sh
           bash scripts/test-deploy-hostgator.sh
+          bash scripts/test-backup-hostgator-encrypted.sh
+          bash scripts/test-backup-hostgator-local.sh
+          bash scripts/test-restore-hostgator-local-test.sh
 
       - name: Install Composer dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
@@ -153,6 +164,9 @@ jobs:
 
       - name: Build frontend assets
         run: pnpm build
+
+      - name: Public template regression tests
+        run: node --test test/*.test.js
 
       - name: Validate admin payload contract
         run: pnpm test:admin-contract

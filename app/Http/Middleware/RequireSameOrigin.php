@@ -29,10 +29,16 @@ class RequireSameOrigin
             $this->canonicalOrigin((string) config('app.admin_url')),
         ])));
 
-        // O Host recebido pode ser influenciado por um proxy mal configurado. A
-        // lista de origens vem somente de configuração implantada e compara
-        // esquema, host e porta para não aceitar outro serviço no mesmo host.
-        if ($allowedOrigins === [] || ! in_array($sourceOrigin, $allowedOrigins, true)) {
+        // Site público e painel administrativo são origens distintas, ainda
+        // que pertençam ao mesmo domínio registrável. Aceitar qualquer origem
+        // da allowlist permitiria que uma página pública iniciasse mutações no
+        // painel (ou vice-versa) caso a outra camada de CSRF fosse contornada.
+        // A origem da requisição precisa ser exatamente a do destino, e ambas
+        // devem corresponder a uma autoridade configurada pelo operador.
+        $targetOrigin = $this->canonicalOrigin($request->getSchemeAndHttpHost());
+        if ($targetOrigin === null
+            || ! in_array($targetOrigin, $allowedOrigins, true)
+            || ! hash_equals($targetOrigin, $sourceOrigin)) {
             return response()->json(['error' => 'INVALID_ORIGIN'], 403);
         }
 

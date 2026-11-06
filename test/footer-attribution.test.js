@@ -1,18 +1,24 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 
-const templates = await Promise.all([
-  readFile(new URL('../resources/views/partials/footer.blade.php', import.meta.url), 'utf8'),
-  readFile(new URL('../views/partials/footer.ejs', import.meta.url), 'utf8')
-]);
+const footer = await readFile(new URL('../resources/views/partials/footer.blade.php', import.meta.url), 'utf8');
+const views = new URL('../resources/views/', import.meta.url);
 
-test('rodapés identificam a autoria da Gandra.Tech com link seguro', () => {
-  for (const template of templates) {
-    assert.match(template, /Desenvolvido por/);
-    assert.match(template, /href="https:\/\/www\.gandra\.tech\//);
-    assert.match(template, />gandra\.tech<\/a>/);
-    assert.match(template, /target="_blank"/);
-    assert.match(template, /rel="noopener noreferrer"/);
+test('rodapé Laravel identifica a autoria da Gandra.Tech com link seguro', () => {
+  assert.match(footer, /Desenvolvido por/);
+  assert.match(footer, /href="https:\/\/www\.gandra\.tech\//);
+  assert.match(footer, />gandra\.tech<\/a>/);
+  assert.match(footer, /target="_blank"/);
+  assert.match(footer, /rel="noopener noreferrer"/);
+});
+
+test('todas as páginas Blade públicas incluem o rodapé institucional', async () => {
+  const pages = (await readdir(views)).filter((file) => file.endsWith('.blade.php'));
+  assert.ok(pages.length >= 8, 'o inventário das páginas públicas não pode estar vazio');
+
+  for (const page of pages) {
+    const template = await readFile(new URL(page, views), 'utf8');
+    assert.match(template, /@include\('partials\.footer'\)/, `rodapé ausente em ${page}`);
   }
 });

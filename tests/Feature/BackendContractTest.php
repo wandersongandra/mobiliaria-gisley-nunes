@@ -76,6 +76,9 @@ class BackendContractTest extends TestCase
     public function test_contact_form_is_persisted_with_same_origin(): void
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
+        url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
+        $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
         $this->withHeader('Origin', 'http://localhost')
             ->postJson('/api/contact', [
                 'name' => 'Cliente Teste',
@@ -99,6 +102,9 @@ class BackendContractTest extends TestCase
     public function test_contact_phone_rejects_short_or_malformed_values(): void
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
+        url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
+        $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
 
         $this->withHeader('Origin', 'http://localhost')
             ->postJson('/api/contact', [
@@ -116,6 +122,9 @@ class BackendContractTest extends TestCase
     public function test_contact_rejects_non_scalar_fields_without_http_500_or_persistence(): void
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
+        url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
+        $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
         $payload = [
             'name' => 'Cliente Teste',
             'email' => 'cliente@example.com',
@@ -137,6 +146,9 @@ class BackendContractTest extends TestCase
     public function test_contact_honeypot_array_is_silently_discarded_without_persistence(): void
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
+        url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
+        $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
         $this->withHeader('Origin', 'http://localhost')
             ->postJson('/api/contact', ['website' => ['bot' => 'value']])
             ->assertCreated()

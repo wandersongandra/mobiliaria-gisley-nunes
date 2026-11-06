@@ -475,6 +475,13 @@ class LocalMediaStorage
             throw new RuntimeException('INVALID_ASSET');
         }
 
+        // realpath(dirname(...)) valida apenas o diretório pai. Um link
+        // simbólico no último segmento poderia apontar para fora do disco
+        // privado, inclusive quando o candidato é a pasta de listagem.
+        if (is_link($candidate)) {
+            throw new RuntimeException('INVALID_ASSET');
+        }
+
         if ($mustExist && ! file_exists($candidate)) {
             throw new RuntimeException('ASSET_NOT_FOUND');
         }
