@@ -6,7 +6,8 @@ backup_script="${script_dir}/backup-hostgator-local.sh"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
 
-mkdir -m 700 -p -- "$test_root/backups" "$test_root/media" "$test_root/bin"
+mkdir -p -- "$test_root/backups" "$test_root/media" "$test_root/bin"
+chmod 700 -- "$test_root/backups" "$test_root/media" "$test_root/bin"
 printf 'photo fixture\n' > "$test_root/media/photo.jpg"
 printf '[client]\nuser=test\npassword=test\n' > "$test_root/mysql.cnf"
 chmod 600 -- "$test_root/mysql.cnf"
