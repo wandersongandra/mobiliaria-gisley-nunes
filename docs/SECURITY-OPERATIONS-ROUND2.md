@@ -132,8 +132,28 @@ off-site. **Não habilitar cron diário antes da primeira restauração bem-suce
 ### Verificação fora da hospedagem
 
 Copiar as duas saídas `.cms` e o manifesto `.sha256` para ambiente isolado.
-Conferir `sha256sum -c arquivo-manifest.sha256`. Usar chave privada fora da
-produção para descriptografar o SQL e a mídia:
+**A chave privada só pode existir neste ambiente externo, nunca no servidor
+HostGator nem em um runner de CI.** Validar a integridade do conjunto e a
+descriptografia sem gravar SQL/fotos em claro:
+
+```bash
+bash scripts/verify-hostgator-encrypted-set.sh \
+  --manifest /backup-externo/gisley-YYYYMMDDTHHMMSSZ-manifest-XXXXXXXX.sha256 \
+  --certificate /cofre/backup-public.pem
+
+GISELY_RESTORE_PRIVATE_KEY=/cofre/backup-private.pem \
+  bash scripts/verify-hostgator-encrypted-set.sh \
+  --manifest /backup-externo/gisley-YYYYMMDDTHHMMSSZ-manifest-XXXXXXXX.sha256 \
+  --certificate /cofre/backup-public.pem
+```
+
+O verificador rejeita conjuntos incompletos, nomes/caminhos inesperados,
+arquivos modificados e mídia ou SQL que não possam ser descriptografados.
+Ele **não substitui** um restore real: a recuperação no banco descartável é
+obrigatória para confirmar integridade da aplicação.
+
+Usar a chave privada fora da produção para restaurar o SQL e a mídia em
+diretórios exclusivos de teste:
 
 ```bash
 openssl cms -decrypt -inform DER -in banco.sql.gz.cms \
@@ -170,3 +190,23 @@ segundo política de retenção aprovada.
 
 Até reunir essas evidências, os controles permanecem **preparados, não ativados
 operacionalmente**.
+
+## 6. Inspeção HostGator em 06/11/2026 (somente leitura)
+
+- Portal do titular: 2FA **habilitado**; isso não comprova MFA do Google,
+  GitHub ou cPanel separadamente.
+- cPanel `br64`: MySQL `5.7.44-48`; sem backups automáticos disponibilizados
+  na página *Backup*. O produto comercial Gator Backup não foi contratado
+  por esta intervenção.
+- *Cron Jobs*: apenas `artisan schedule:run` do staging, com expressão
+  `*/21 * * * *`; **nenhum cron de produção evidenciado**.
+- Usuário MySQL de produção: `ALL PRIVILEGES` sobre o banco. Uma conta web de
+  menor privilégio exige separar explicitamente a credencial de migração e
+  testar autorização no Laravel antes de alterar a produção.
+- Sem usuários FTP adicionais. Preferências usuais de avisos do cPanel
+  ativadas. Alertas básicos do cPanel não substituem o monitor Laravel.
+- `br64` reporta aviso de ocupação dos volumes compartilhados `/home1` e
+  `/home2`. Solicitar avaliação à HostGator antes de criar arquivos grandes
+  no servidor; não confundir isso com a cota individual da conta.
+- Não foi executado backup real, upload, restauração, mudança de permissões,
+  criação de cron, merge nem deploy durante a inspeção.

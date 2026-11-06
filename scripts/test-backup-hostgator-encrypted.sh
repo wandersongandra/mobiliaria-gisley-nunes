@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 backup_script="${script_dir}/backup-hostgator-encrypted.sh"
+verify_script="${script_dir}/verify-hostgator-encrypted-set.sh"
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT
 
@@ -63,6 +64,27 @@ manifests=("$test_root"/output/*manifest-*.sha256)
   sha256sum -c -- "$(basename -- "${manifests[0]}")" >/dev/null
 )
 
+bash "$verify_script" --manifest "${manifests[0]}" --certificate "$test_root/public.pem" \
+  | grep -q 'Backup integrity: PASS'
+GISELY_RESTORE_PRIVATE_KEY="$test_root/private.pem" \
+  bash "$verify_script" --manifest "${manifests[0]}" --certificate "$test_root/public.pem" \
+  | grep -q 'Backup decryption: PASS'
+
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+  -out "$test_root/unrelated-private.pem" >/dev/null 2>&1
+if GISELY_RESTORE_PRIVATE_KEY="$test_root/unrelated-private.pem" \
+  bash "$verify_script" --manifest "${manifests[0]}" --certificate "$test_root/public.pem" >/dev/null 2>&1; then
+  echo 'FAIL: backup verification accepted an unrelated private key' >&2
+  exit 1
+fi
+
+# A corrupted archive must never be accepted by the off-host verifier.
+printf 'tampered\n' >> "${media_files[0]}"
+if bash "$verify_script" --manifest "${manifests[0]}" --certificate "$test_root/public.pem" >/dev/null 2>&1; then
+  echo 'FAIL: tampered backup set passed integrity verification' >&2
+  exit 1
+fi
+
 openssl cms -decrypt -inform DER -in "${database_files[0]}" \
   -recip "$test_root/public.pem" -inkey "$test_root/private.pem" \
   | gzip -dc | grep -q 'CREATE TABLE test'
@@ -82,4 +104,4 @@ partial_files=("$test_root"/output/*.partial)
   exit 1
 }
 
-echo 'Encrypted backup pipeline and restore smoke: PASS'
+echo 'Encrypted backup pipeline, off-host integrity and restore smoke: PASS'
