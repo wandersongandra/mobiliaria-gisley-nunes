@@ -3,6 +3,9 @@
 Este documento complementa os controles implementados no código. Ele não substitui a
 configuração do GitHub, Cloudflare, HostGator, MySQL, R2 ou Google OAuth.
 
+Os procedimentos de MFA, revisão periódica de acessos, monitoramento e backups
+criptografados estão em [SECURITY-OPERATIONS-ROUND2.md](SECURITY-OPERATIONS-ROUND2.md).
+
 ## GitHub
 
 Antes de proteger as branches, confirme a branch oficial de produção. Atualmente o
@@ -63,6 +66,10 @@ Validar antes do tráfego:
 
 ## Cloudflare e R2
 
+Novas fotos são armazenadas no **disco privado local** da HostGator. Os itens de
+R2 abaixo são condicionais à existência de objetos legados ainda usados; eles
+não substituem a validação do storage local e da rota `/media/{path}`.
+
 - modo TLS `Full (strict)`;
 - DNS proxied;
 - origem HostGator aceitando somente IPs oficiais da Cloudflare;
@@ -98,11 +105,11 @@ O release só pode ser liberado quando houver evidência anexada para:
 
 1. SHA publicado;
 2. CI completo verde;
-3. CodeQL PHP e JavaScript verde;
+3. CodeQL JavaScript e análise estática PHP/PHPStan verdes (o workflow CodeQL atual não analisa PHP);
 4. dependency review sem severidade alta;
 5. secret scan com histórico completo;
 6. produção-check aprovado;
-7. R2 privado;
+7. mídia local privada fora do Document Root; R2 privado se houver objetos legados;
 8. MySQL com privilégio mínimo;
 9. backup restaurado com sucesso;
 10. smoke test público e administrativo;

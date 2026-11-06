@@ -26,4 +26,13 @@ return [
         'idle_timeout_minutes' => (int) env('GISELY_ADMIN_IDLE_TIMEOUT_MINUTES', 60),
         'max_sessions' => (int) env('GISELY_MAX_ADMIN_SESSIONS', 3),
     ],
+
+    'security' => [
+        'monitor' => [
+            'logins_per_hour' => (int) env('GISELY_SECURITY_LOGIN_ALERT_THRESHOLD', 20),
+            'exports_per_hour' => (int) env('GISELY_SECURITY_EXPORT_ALERT_THRESHOLD', 5),
+            'destructive_per_hour' => (int) env('GISELY_SECURITY_DESTRUCTIVE_ALERT_THRESHOLD', 5),
+            'team_changes_per_hour' => (int) env('GISELY_SECURITY_TEAM_ALERT_THRESHOLD', 3),
+        ],
+    ],
 ];

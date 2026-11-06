@@ -16,6 +16,20 @@ class AdminAccessConfigurationTest extends TestCase
     use CreatesAdminIdentity;
     use RefreshDatabase;
 
+    public function test_editor_cannot_export_or_erase_leads_or_manage_team_permissions(): void
+    {
+        $access = app(AdminAccessService::class);
+        $editor = ['role' => 'editor'];
+        $manager = ['role' => 'manager'];
+
+        foreach (['lead.export', 'lead.erase', 'team.manage', 'audit.read', 'property.archive'] as $capability) {
+            $this->assertFalse($access->hasCapability($editor, $capability));
+            $this->assertTrue($access->hasCapability($manager, $capability));
+        }
+
+        $this->assertFalse($access->hasCapability(['role' => 'unknown'], 'lead.read'));
+    }
+
     public function test_bootstrap_user_ids_are_read_from_gisley_config(): void
     {
         config(['gisley.admin.bootstrap_open_ids' => ['bootstrap-test-user']]);

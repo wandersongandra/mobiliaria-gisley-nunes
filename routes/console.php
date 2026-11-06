@@ -37,3 +37,7 @@ Schedule::command('gisley:cleanup-orphaned-property-uploads')
 Schedule::command('gisley:anonymize-expired-leads')
     ->dailyAt('03:30')
     ->withoutOverlapping();
+
+Schedule::command('gisley:security-monitor --fail-on-alert')
+    ->hourlyAt(15)
+    ->withoutOverlapping();
