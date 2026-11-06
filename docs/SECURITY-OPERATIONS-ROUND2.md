@@ -99,15 +99,16 @@ Não publicar, anexar em tickets ou enviar os conjuntos por e-mail.
 
 Configuração mínima no plano HostGator atual, após conferir os caminhos reais:
 
-1. Criar `/home1/gisley77/.gisley-backups` com modo `700`; criar uma única vez
-   o arquivo privado de opções MySQL com o auxiliar
-   `php scripts/setup-hostgator-local-db.php /home1/gisley77/.gisley-backup-mysql.cnf`.
-   Ele reutiliza as configurações Laravel sem imprimir a senha e cria o arquivo
-   com modo `600`. A credencial atual é a da aplicação: reduzir privilégios
-   exige um usuário de backup separado, com testes prévios.
-2. Definir no cron do cPanel as variáveis `GISELY_LOCAL_BACKUP_DIR`,
-   `GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE`,
-   `GISELY_LOCAL_BACKUP_DATABASE` e executar o script com `--run`. O diretório
+1. Criar `/home1/gisley77/.gisley-backups` com modo `700`. Por padrão o script
+   usa o auxiliar `scripts/setup-hostgator-local-db.php` para aproveitar a
+   conexão MySQL do Laravel: a senha **não aparece no comando ou no log** e
+   o arquivo de opções é temporário, protegido por modo `600` e removido após
+   o dump. Se o processo for interrompido abruptamente, inspecionar/remover
+   com cuidado eventuais pastas ocultas `.gisley-*` incompletas.
+2. Definir no cron do cPanel somente `GISELY_LOCAL_BACKUP_DIR` e
+   `GISELY_LOCAL_BACKUP_DATABASE` e executar o script com `--run`. Se houver
+   uma credencial exclusiva de backup, pode-se usar
+   `GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE` com permissões `600`. O diretório
    de fotos padrão é `storage/app/private/media` do projeto implantado.
 3. Antes de agendar, executar `--check` e `--run` manualmente; conferir
    `--verify-latest` e realizar **um restore real em banco e pasta isolados**.
@@ -119,7 +120,6 @@ Exemplo de execução manual (nunca incluir a senha MySQL na linha de comando):
 
 ```bash
 export GISELY_LOCAL_BACKUP_DIR=/home1/gisley77/.gisley-backups
-export GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE=/home1/gisley77/.gisley-backup-mysql.cnf
 export GISELY_LOCAL_BACKUP_DATABASE=gisley77_gisley_nunes
 bash scripts/backup-hostgator-local.sh --check
 bash scripts/backup-hostgator-local.sh --run

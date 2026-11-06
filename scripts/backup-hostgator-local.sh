@@ -17,26 +17,39 @@ media_root="${GISELY_LOCAL_BACKUP_MEDIA_ROOT:-${project_root}/storage/app/privat
 defaults_file="${GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE:-}"
 database="${GISELY_LOCAL_BACKUP_DATABASE:-}"
 retention="${GISELY_LOCAL_BACKUP_KEEP:-7}"
+automatic_mysql_config=false
 
 fail() { echo "Local backup: $1" >&2; exit 1; }
 
 [[ "$output_dir" == /* && -d "$output_dir" && ! -L "$output_dir" ]] || fail 'backup directory must exist and be absolute (not a symlink)'
 [[ "$media_root" == /* && -d "$media_root" && ! -L "$media_root" ]] || fail 'private media directory missing or symbolic link'
-[[ "$defaults_file" == /* && -f "$defaults_file" && ! -L "$defaults_file" ]] || fail 'private MySQL defaults file missing or symbolic link'
 [[ "$database" =~ ^[a-zA-Z0-9_]{1,64}$ ]] || fail 'database name is invalid'
 [[ "$retention" =~ ^[1-9][0-9]?$ ]] || fail 'retention must be between 1 and 99 complete sets'
 
+if [[ -z "$defaults_file" ]]; then
+  automatic_mysql_config=true
+  [[ -f "${project_root}/vendor/autoload.php" ]] || fail 'Laravel vendor directory missing for automatic MySQL configuration'
+  [[ -f "${project_root}/scripts/setup-hostgator-local-db.php" ]] || fail 'automatic MySQL configuration helper missing'
+  command -v php >/dev/null 2>&1 || fail 'PHP CLI is unavailable'
+else
+  [[ "$defaults_file" == /* && -f "$defaults_file" && ! -L "$defaults_file" ]] || fail 'private MySQL defaults file missing or symbolic link'
+fi
+
 output_dir="$(cd -- "$output_dir" && pwd -P)"
 media_root="$(cd -- "$media_root" && pwd -P)"
-defaults_file="$(cd -- "$(dirname -- "$defaults_file")" && pwd -P)/$(basename -- "$defaults_file")"
+if [[ "$automatic_mysql_config" == false ]]; then
+  defaults_file="$(cd -- "$(dirname -- "$defaults_file")" && pwd -P)/$(basename -- "$defaults_file")"
+fi
 
 [[ "$output_dir" != "$project_root" && "$output_dir" != "$project_root/"* ]] || fail 'backups must be outside the application checkout'
 [[ "$output_dir" != "$media_root" && "$output_dir" != "$media_root/"* ]] || fail 'backups must be outside private media'
 [[ "$media_root" != "$public_root" && "$media_root" != "$public_root/"* ]] || fail 'media must not be in the public document root'
-[[ "$defaults_file" != "$public_root/"* ]] || fail 'MySQL configuration must not be publicly accessible'
-[[ "$defaults_file" != "$output_dir/"* ]] || fail 'MySQL configuration must not be included in backups'
 [[ "$(stat -c '%a' -- "$output_dir")" == '700' ]] || fail 'backup directory must have permissions 700'
-[[ "$(stat -c '%a' -- "$defaults_file")" == '600' || "$(stat -c '%a' -- "$defaults_file")" == '400' ]] || fail 'MySQL configuration must have permissions 600 or 400'
+if [[ "$automatic_mysql_config" == false ]]; then
+  [[ "$defaults_file" != "$public_root/"* ]] || fail 'MySQL configuration must not be publicly accessible'
+  [[ "$defaults_file" != "$output_dir/"* ]] || fail 'MySQL configuration must not be included in backups'
+  [[ "$(stat -c '%a' -- "$defaults_file")" == '600' || "$(stat -c '%a' -- "$defaults_file")" == '400' ]] || fail 'MySQL configuration must have permissions 600 or 400'
+fi
 [[ -w "$output_dir" ]] || fail 'backup directory is not writable'
 
 for executable in mysqldump gzip tar sha256sum stat mktemp find sort df awk mv rm; do
@@ -84,10 +97,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
+if [[ "$automatic_mysql_config" == true ]]; then
+  defaults_file="${temporary_set}/mysql.cnf"
+  php "${project_root}/scripts/setup-hostgator-local-db.php" "$defaults_file" >/dev/null
+  [[ -f "$defaults_file" && "$(stat -c '%a' -- "$defaults_file")" == '600' ]] || fail 'automatic MySQL configuration was not created privately'
+fi
+
 mysqldump --defaults-extra-file="$defaults_file" \
   --single-transaction --quick --skip-lock-tables \
   --routines --events --triggers --default-character-set=utf8mb4 \
   -- "$database" | gzip -9 > "${temporary_set}/database.sql.gz"
+if [[ "$automatic_mysql_config" == true ]]; then
+  rm -- "$defaults_file"
+fi
 
 tar --directory="$media_root" -czf "${temporary_set}/media.tar.gz" .
 [[ -s "${temporary_set}/database.sql.gz" && -s "${temporary_set}/media.tar.gz" ]] || fail 'empty archive'
