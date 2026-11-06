@@ -18,6 +18,7 @@ class OwnerRequestsTest extends TestCase
     {
         parent::setUp();
         config(['app.url' => 'https://test.local', 'app.admin_url' => 'https://test.local']);
+        $this->withServerVariables(['HTTPS' => 'on', 'SERVER_PORT' => '443', 'HTTP_HOST' => 'test.local']);
     }
 
     public function test_editor_can_edit_only_a_draft_property_created_by_the_same_identity(): void

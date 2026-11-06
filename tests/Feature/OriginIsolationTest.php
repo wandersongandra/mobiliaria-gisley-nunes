@@ -50,6 +50,14 @@ class OriginIsolationTest extends TestCase
         }
     }
 
+    public function test_the_same_hostname_over_http_cannot_authorize_an_https_mutation(): void
+    {
+        $response = $this->checkOrigin('https://painel.example.test/api/admin/profile', 'http://painel.example.test');
+
+        $this->assertSame(403, $response->getStatusCode());
+        $this->assertSame('INVALID_ORIGIN', json_decode((string) $response->getContent(), true)['error']);
+    }
+
     public function test_same_origin_referer_is_accepted_when_origin_is_absent(): void
     {
         $request = Request::create('https://painel.example.test/api/admin/profile', 'PUT');

@@ -21,6 +21,12 @@ class UploadLifecycleTest extends TestCase
     use CreatesAdminIdentity;
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withServerVariables(['HTTPS' => 'on', 'SERVER_PORT' => '443', 'HTTP_HOST' => 'test.local']);
+    }
+
     public function test_photo_registration_rejects_actual_object_size_mismatch(): void
     {
         config([
