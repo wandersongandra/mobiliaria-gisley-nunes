@@ -79,6 +79,7 @@ jobs:
           bash -n scripts/verify-hostgator-encrypted-set.sh
           bash -n scripts/test-backup-hostgator-encrypted.sh
           bash -n scripts/test-backup-hostgator-local.sh
+          php -l scripts/setup-hostgator-local-db.php
           shellcheck scripts/deploy-hostgator.sh scripts/test-deploy-hostgator.sh scripts/backup-hostgator-encrypted.sh scripts/backup-hostgator-local.sh scripts/verify-hostgator-encrypted-set.sh scripts/test-backup-hostgator-encrypted.sh scripts/test-backup-hostgator-local.sh
           bash scripts/test-deploy-hostgator.sh
           bash scripts/test-backup-hostgator-encrypted.sh

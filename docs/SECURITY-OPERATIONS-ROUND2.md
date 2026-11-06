@@ -99,9 +99,12 @@ Não publicar, anexar em tickets ou enviar os conjuntos por e-mail.
 
 Configuração mínima no plano HostGator atual, após conferir os caminhos reais:
 
-1. Criar `/home1/gisley77/.gisley-backups` com modo `700`; criar um arquivo
-   de opções MySQL fora do site, modo `600`, com usuário de leitura/backup,
-   por exemplo `/home1/gisley77/.gisley-backup-mysql.cnf`.
+1. Criar `/home1/gisley77/.gisley-backups` com modo `700`; criar uma única vez
+   o arquivo privado de opções MySQL com o auxiliar
+   `php scripts/setup-hostgator-local-db.php /home1/gisley77/.gisley-backup-mysql.cnf`.
+   Ele reutiliza as configurações Laravel sem imprimir a senha e cria o arquivo
+   com modo `600`. A credencial atual é a da aplicação: reduzir privilégios
+   exige um usuário de backup separado, com testes prévios.
 2. Definir no cron do cPanel as variáveis `GISELY_LOCAL_BACKUP_DIR`,
    `GISELY_LOCAL_BACKUP_MYSQL_DEFAULTS_FILE`,
    `GISELY_LOCAL_BACKUP_DATABASE` e executar o script com `--run`. O diretório
