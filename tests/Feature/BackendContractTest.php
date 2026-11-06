@@ -77,6 +77,7 @@ class BackendContractTest extends TestCase
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
         url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
         $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
         $this->withHeader('Origin', 'http://localhost')
             ->postJson('/api/contact', [
@@ -102,6 +103,7 @@ class BackendContractTest extends TestCase
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
         url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
         $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
 
         $this->withHeader('Origin', 'http://localhost')
@@ -121,6 +123,7 @@ class BackendContractTest extends TestCase
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
         url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
         $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
         $payload = [
             'name' => 'Cliente Teste',
@@ -144,6 +147,7 @@ class BackendContractTest extends TestCase
     {
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
         url()->forceRootUrl('http://localhost');
+        url()->forceScheme('http');
         $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
         $this->withHeader('Origin', 'http://localhost')
             ->postJson('/api/contact', ['website' => ['bot' => 'value']])
