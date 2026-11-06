@@ -19,6 +19,7 @@ class OwnerRequestsTest extends TestCase
         parent::setUp();
         config(['app.url' => 'https://test.local', 'app.admin_url' => 'https://test.local']);
         url()->forceRootUrl('https://test.local');
+        url()->forceScheme('https');
         $this->withServerVariables(['HTTPS' => 'on', 'SERVER_PORT' => '443', 'HTTP_HOST' => 'test.local']);
     }
 

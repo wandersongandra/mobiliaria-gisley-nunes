@@ -78,15 +78,6 @@ class BackendContractTest extends TestCase
         config(['app.url' => 'http://localhost', 'app.admin_url' => 'http://localhost']);
         url()->forceRootUrl('http://localhost');
         $this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => '80', 'HTTP_HOST' => 'localhost']);
-        Route::get('/api/test-current-origin', static function (Request $request) {
-            return response()->json([
-                'current' => $request->getSchemeAndHttpHost(),
-                'configured' => config('app.url'),
-                'source' => $request->header('Origin'),
-            ]);
-        });
-        $probe = $this->withHeader('Origin', 'http://localhost')->getJson('/api/test-current-origin');
-        $this->assertSame('http://localhost', $probe->json('current'), $probe->content());
         $this->withHeader('Origin', 'http://localhost')
             ->postJson('/api/contact', [
                 'name' => 'Cliente Teste',
