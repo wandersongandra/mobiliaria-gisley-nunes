@@ -63,6 +63,7 @@ if (process.argv.includes('--serve-fixtures')) {
 const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 const temporaryProfile = await mkdtemp(join(tmpdir(), 'gisley-admin-smoke-'));
 let chromium;
+let chromiumClosed;
 let chromiumExit;
 let chromiumStderr = '';
 let ws;
@@ -78,6 +79,7 @@ try {
     '--remote-debugging-port=0', `--user-data-dir=${temporaryProfile}`,
     `http://127.0.0.1:${port}/admin/`,
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  chromiumClosed = new Promise((resolveClose) => chromium.once('close', resolveClose));
   chromium.once('exit', (code, signal) => { chromiumExit = `${code ?? 'null'}/${signal ?? 'none'}`; });
   chromium.stderr.on('data', (chunk) => { chromiumStderr = (chromiumStderr + String(chunk)).slice(-1200); });
 
@@ -151,5 +153,17 @@ try {
   ws?.close();
   chromium?.kill('SIGTERM');
   await new Promise((resolveClose) => server.close(resolveClose));
-  await rm(temporaryProfile, { recursive: true, force: true });
+  // Chromium writes profile files asynchronously while shutting down. Removing
+  // the profile before the browser closes races with those writes on CI hosts.
+  if (chromiumClosed) {
+    const exitedGracefully = await Promise.race([
+      chromiumClosed.then(() => true),
+      delay(4000).then(() => false),
+    ]);
+    if (!exitedGracefully) {
+      chromium.kill('SIGKILL');
+      await chromiumClosed;
+    }
+  }
+  await rm(temporaryProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
