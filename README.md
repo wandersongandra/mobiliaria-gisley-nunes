@@ -125,6 +125,9 @@ Os endpoints devem responder HTTP 200 com `{"status":"ok"}`. A comparação do c
 
 ## Mudanças de Rotas
 
+- `GET /api/admin/attention`: agrega agenda de retornos e indicadores de conversão, sob autenticação administrativa.
+- `GET /api/admin/notifications`: lista apenas avisos destinados ao usuário autenticado, sem dados pessoais do lead no payload.
+- `PATCH /api/admin/notifications/{id}/read`: marca aviso como lido somente para seu destinatário e aceita repetição da operação.
 - `GET /api/admin/leads/assignees`: lista somente integrantes ativos para atribuição de contatos, protegido por `lead.assign`.
 - `POST /api/admin/leads/export`: exportação de contatos exige `lead.export` (gestor), rate limit e CSRF.
 - `GET /health/live`: confirma que o processo Laravel iniciou.

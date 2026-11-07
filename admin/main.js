@@ -1,6 +1,6 @@
 function ensureAdminStyles() {
   for (const href of ['/admin/styles.css', '/admin/refinements.css']) {
-    if (document.querySelector(`link[href="${href}"]`)) continue;
+    if (Array.from(document.querySelectorAll('link[rel="stylesheet"]')).some((link) => new URL(link.href).pathname === href)) continue;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = href;
@@ -11,7 +11,9 @@ function ensureAdminStyles() {
 ensureAdminStyles();
 
 
-const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadAssignees: [], leadFilters: { status: '', date_from: '', date_to: '', search: '', page: 1, per_page: 20 }, leadDetail: null, team: [], invitations: [], forms: [], editingFormId: null, audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+const state = { user: null, csrfToken: '', properties: [], propertyPagination: null, propertySummary: null, propertyFilters: { search: '', status: '', availability: '', page: 1, per_page: 20 }, leads: [], leadPagination: null, leadSummary: { new: 0 }, leadAssignees: [], leadFilters: { status: '', date_from: '', date_to: '', search: '', page: 1, per_page: 20 }, leadDetail: null, attention: null, notifications: [], notificationUnread: 0, team: [], invitations: [], forms: [], editingFormId: null, formFields: [], audit: [], editing: null, pendingFiles: [], pendingPreviewGeneration: 0 };
+let attentionTimer = 0;
+let attentionLoading = false;
 let propertySearchTimer = 0;
 let propertyLoadSequence = 0;
 let leadLoadSequence = 0;
@@ -46,6 +48,32 @@ if (dashboardHeading && dashboardHeading.tagName !== 'H1') {
 function escapeHTML(value) { return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]); }
 function formatDate(value) { return value ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(value)) : 'agora'; }
 function toast(message, tone = 'success') { const status = $('#editor-status'); status.textContent = message; status.dataset.tone = tone; }
+
+const commercialLabels = { available: 'Disponível', reserved: 'Reservado', sold: 'Vendido', rented: 'Alugado' };
+function localDay(value) { return value ? new Intl.DateTimeFormat('pt-BR').format(new Date(`${value}T12:00:00`)) : '—'; }
+
+function clearFieldErrors(targetForm) {
+  targetForm?.querySelectorAll('[data-field-error]').forEach((node) => node.remove());
+  targetForm?.querySelectorAll('[aria-invalid="true"]').forEach((field) => {
+    field.removeAttribute('aria-invalid');
+    field.removeAttribute('aria-describedby');
+  });
+}
+
+function fieldError(targetForm, name, message) {
+  const input = targetForm?.elements?.[name];
+  if (!input || typeof input.focus !== 'function') return false;
+  const error = document.createElement('small');
+  error.className = 'field-error';
+  error.dataset.fieldError = name;
+  error.id = `invalid-${name}`;
+  error.textContent = message;
+  input.closest('label')?.append(error);
+  input.setAttribute('aria-invalid', 'true');
+  input.setAttribute('aria-describedby', error.id);
+  input.focus();
+  return true;
+}
 
 function confirmAction({ title = 'Confirmar ação', message = 'Deseja continuar?' } = {}) {
   if (!confirmDialog) return Promise.resolve(false);
@@ -139,21 +167,33 @@ function clearSensitiveState() {
   state.properties = [];
   state.propertyPagination = null;
   state.propertySummary = null;
-  state.propertyFilters = { search: '', status: '', page: 1, per_page: 20 };
+  state.propertyFilters = { search: '', status: '', availability: '', page: 1, per_page: 20 };
   state.leads = [];
   state.leadPagination = null;
   state.leadDetail = null;
+  state.attention = null;
+  state.notifications = [];
+  state.notificationUnread = 0;
+  clearInterval(attentionTimer);
+  attentionTimer = 0;
   leadsLoaded = false;
   state.leadFilters = { status: '', date_from: '', date_to: '', page: 1, per_page: 20 };
   state.team = [];
   state.invitations = [];
   state.forms = [];
   state.editingFormId = null;
+  state.formFields = [];
   state.audit = [];
   state.editing = null;
   clearTimeout(propertySearchTimer);
   clearPendingFiles();
   if (dialog?.open) dialog.close();
+  const previewDialog = $('#property-preview-dialog');
+  if (previewDialog?.open) {
+    const image = previewDialog.querySelector('img[data-temp-url]');
+    if (image) URL.revokeObjectURL(image.dataset.tempUrl);
+    previewDialog.close();
+  }
   const propertyList = $('#property-list');
   const leadList = $('#lead-list');
   const teamList = $('#team-list');
@@ -169,6 +209,15 @@ function clearSensitiveState() {
   if (auditList) auditList.innerHTML = '';
   const leadDetail = $('#lead-detail');
   if (leadDetail) { leadDetail.hidden = true; leadDetail.innerHTML = ''; }
+  const notificationBox = $('#notification-center');
+  if (notificationBox) { notificationBox.hidden = true; notificationBox.querySelector('#notification-list')?.replaceChildren(); }
+  const noticeToggle = $('#notification-toggle');
+  if (noticeToggle) noticeToggle.setAttribute('aria-expanded', 'false');
+  if ($('#notification-count')) $('#notification-count').textContent = '0';
+  for (const selector of ['#attention-counts', '#attention-agenda', '#attention-metrics', '#property-preview-content']) {
+    const node = $(selector);
+    if (node) node.replaceChildren();
+  }
 }
 
 const invitationParams = new URLSearchParams(window.location.search);
@@ -239,6 +288,7 @@ function showDashboard() {
   loginScreen.hidden = true;
   dashboard.hidden = false;
   ensureManagementPanels();
+  ensureOperationsPanels();
   if (dashboardMain) dashboardMain.id = 'admin-main';
   skipLink?.setAttribute('href', '#admin-main');
   $('#user-name').textContent = state.user?.name?.split(' ')[0] || 'equipe';
@@ -313,6 +363,104 @@ function ensureManagementPanels() {
     $('#form-template-form').addEventListener('submit', saveFormTemplate);
     $('#form-template-cancel').addEventListener('click', () => resetFormTemplateForm());
   }
+
+  if (state.user?.role === 'manager') ensureVisualFormBuilder();
+}
+
+function ensureOperationsPanels() {
+  if (!form.elements.availability) {
+    const commercial = document.createElement('label');
+    commercial.className = 'commercial-field';
+    commercial.innerHTML = '<span>Situação comercial</span><select name="availability" required><option value="available">Disponível</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="rented">Alugado</option></select><small>Imóveis vendidos ou alugados permanecem no painel, mas saem da vitrine pública.</small>';
+    form.elements.purpose.closest('.field-pair')?.after(commercial);
+    form.elements.purpose.addEventListener('change', () => {
+      const availability = form.elements.availability;
+      if (availability.value === 'sold' && form.elements.purpose.value !== 'Comprar') availability.value = 'available';
+      if (availability.value === 'rented' && form.elements.purpose.value !== 'Alugar') availability.value = 'available';
+    });
+  }
+  if (!$('#property-availability-filter')) {
+    const label = document.createElement('label');
+    label.htmlFor = 'property-availability-filter';
+    label.innerHTML = 'Situação comercial<select id="property-availability-filter"><option value="">Todas</option><option value="available">Disponível</option><option value="reserved">Reservado</option><option value="sold">Vendido</option><option value="rented">Alugado</option></select>';
+    $('#property-status-filter')?.closest('label')?.after(label);
+    label.querySelector('select').addEventListener('change', (event) => {
+      state.propertyFilters.availability = event.target.value;
+      state.propertyFilters.page = 1;
+      void loadProperties();
+    });
+  }
+  if (!$('#preview-property')) {
+    const previewButton = document.createElement('button');
+    previewButton.id = 'preview-property';
+    previewButton.type = 'button';
+    previewButton.className = 'outline-button';
+    previewButton.textContent = 'Prévia do anúncio';
+    $('#save-property')?.before(previewButton);
+    previewButton.addEventListener('click', previewProperty);
+  }
+  if (!$('#property-preview-dialog')) {
+    const previewDialog = document.createElement('dialog');
+    previewDialog.id = 'property-preview-dialog';
+    previewDialog.className = 'property-preview-dialog';
+    previewDialog.setAttribute('aria-labelledby', 'property-preview-title');
+    previewDialog.innerHTML = '<div class="preview-dialog-head"><span class="admin-kicker">prévia interna · não publicada</span><button id="close-property-preview" type="button" class="outline-button">Fechar</button></div><div id="property-preview-content"></div>';
+    document.body.append(previewDialog);
+    $('#close-property-preview').addEventListener('click', () => previewDialog.close());
+    previewDialog.addEventListener('close', () => {
+      const image = previewDialog.querySelector('img[data-temp-url]');
+      if (image) URL.revokeObjectURL(image.dataset.tempUrl);
+    });
+  }
+
+  if (!$('#dashboard-attention')) {
+    const panel = document.createElement('section');
+    panel.id = 'dashboard-attention';
+    panel.className = 'operations-layout';
+    panel.innerHTML = '<article class="site-card"><div class="operations-head"><div><span class="metric-label">agenda comercial</span><strong class="site-card-title">Retornos que precisam de atenção</strong></div><button class="outline-button" id="refresh-attention" type="button">Atualizar</button></div><div id="attention-counts" class="attention-counts" role="status">Carregando agenda…</div><div id="attention-agenda" class="attention-agenda"></div></article><article class="site-card"><span class="metric-label">últimos 30 dias</span><strong class="site-card-title">Resultados dos atendimentos</strong><div id="attention-metrics" class="attention-metrics">Carregando indicadores…</div><small class="attention-note">Conversão = atendimentos marcados como fechados / total recebido. Tempo de resposta = primeira ligação, e-mail, WhatsApp ou reunião registrada.</small></article>';
+    $('#dashboard-view')?.append(panel);
+    $('#refresh-attention').addEventListener('click', () => { void loadAttention(); });
+  }
+
+  if (!$('#notification-toggle')) {
+    const toggle = document.createElement('button');
+    toggle.id = 'notification-toggle';
+    toggle.type = 'button';
+    toggle.className = 'outline-button notification-toggle';
+    toggle.setAttribute('aria-controls', 'notification-center');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.innerHTML = 'Avisos <span id="notification-count" aria-live="polite">0</span>';
+    $('.top-actions')?.prepend(toggle);
+    const center = document.createElement('section');
+    center.id = 'notification-center';
+    center.className = 'notification-center site-card';
+    center.hidden = true;
+    center.innerHTML = '<div class="operations-head"><strong class="site-card-title">Avisos do painel</strong><button class="outline-button" id="notification-close" type="button">Fechar</button></div><div id="notification-list"></div>';
+    $('.admin-topbar')?.after(center);
+    toggle.addEventListener('click', () => {
+      center.hidden = !center.hidden;
+      toggle.setAttribute('aria-expanded', String(!center.hidden));
+      if (!center.hidden) $('#notification-close')?.focus();
+    });
+    $('#notification-close').addEventListener('click', () => {
+      center.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.focus();
+    });
+  }
+}
+
+function previewProperty() {
+  const values = Object.fromEntries(new FormData(form));
+  const images = state.editing?.photos || [];
+  const cover = images.find((photo) => photo.is_cover) || images[0];
+  const dialog = $('#property-preview-dialog');
+  const url = !cover && state.pendingFiles.length ? URL.createObjectURL(state.pendingFiles[0]) : null;
+  const src = cover?.url || url;
+  const safeTitle = escapeHTML(values.title?.trim() || 'Título do anúncio');
+  const price = values.priceLabel?.trim() || (Number(values.price) > 0 ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(values.price)) : 'Sob consulta');
+  $('#property-preview-content').innerHTML = `<div class="property-preview-image">${src ? `<img src="${escapeHTML(src)}" alt="Prévia da capa de ${safeTitle}" ${url ? `data-temp-url="${escapeHTML(url)}"` : ''}/>` : '<span>Foto de capa ainda não adicionada</span>'}</div><div class="property-preview-copy"><span class="metric-label">${escapeHTML(commercialLabels[values.availability] || 'Disponível')} · ${escapeHTML(values.purpose || 'Comprar')} · ${escapeHTML(values.type || 'Imóvel')}</span><h2 id="property-preview-title">${safeTitle}</h2><p>${escapeHTML(values.neighborhood || values.location || 'Localização a confirmar')}, ${escapeHTML(values.city || 'Belo Horizonte')}</p><strong>${escapeHTML(price)}</strong><div class="attention-counts"><span>${escapeHTML(values.bedrooms || '0')} quartos</span><span>${escapeHTML(values.bathrooms || '0')} banheiros</span><span>${escapeHTML(values.areaM2 || '0')} m²</span></div><p class="property-preview-description">${escapeHTML(values.description || 'Descrição ainda não preenchida.')}</p><small>Esta é uma simulação interna. Nada será publicado ou salvo ao visualizar.</small></div>`;
+  dialog.showModal();
 }
 
 async function loadProfile() {
@@ -351,7 +499,114 @@ function resetFormTemplateForm() {
   formTemplate.reset();
   formTemplate.elements.active.checked = true;
   state.editingFormId = null;
+  state.formFields = [];
+  formTemplate.elements.definition.value = JSON.stringify({ _editor: 'visual-v1', fields: [] }, null, 2);
+  renderFormBuilder();
   $('#form-template-cancel').hidden = true;
+}
+
+const formFieldTypes = { text: 'Texto', email: 'E-mail', tel: 'Telefone', number: 'Número', date: 'Data', textarea: 'Texto longo', select: 'Lista de opções', checkbox: 'Confirmação' };
+
+function ensureVisualFormBuilder() {
+  const target = $('#form-template-form');
+  if (!target || $('#form-builder')) return;
+  // The visual editor provides a valid default; hidden advanced JSON must not trap native validation focus.
+  target.elements.definition.required = false;
+  const sourceLabel = target.elements.definition.closest('label');
+  const advanced = document.createElement('details');
+  advanced.className = 'form-builder-advanced';
+  advanced.innerHTML = '<summary>Editar definição JSON (avançado)</summary><p class="team-help">Use a edição avançada apenas se precisar manter outros campos do modelo. O editor visual preserva as demais propriedades do objeto.</p>';
+  sourceLabel.before(advanced);
+  advanced.append(sourceLabel);
+
+  const builder = document.createElement('section');
+  builder.id = 'form-builder';
+  builder.className = 'form-builder';
+  builder.innerHTML = '<div class="operations-head"><div><span class="metric-label">editor visual</span><strong class="site-card-title">Campos do formulário</strong></div><button id="form-field-add" class="outline-button" type="button">Adicionar campo ＋</button></div><div id="form-builder-fields"></div><div class="form-builder-preview"><span class="metric-label">prévia interna</span><div id="form-preview-fields" aria-label="Prévia dos campos"></div></div>';
+  advanced.before(builder);
+
+  $('#form-field-add').addEventListener('click', () => {
+    let number = 1;
+    while (state.formFields.some((field) => field?.name === `campo_${number}`)) number++;
+    state.formFields.push({ name: `campo_${number}`, label: `Campo ${number}`, type: 'text', required: false });
+    syncFormDefinition();
+    renderFormBuilder();
+  });
+  $('#form-builder-fields').addEventListener('input', handleFormBuilderChange);
+  $('#form-builder-fields').addEventListener('change', handleFormBuilderChange);
+  $('#form-builder-fields').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-remove-field]');
+    if (!button) return;
+    state.formFields.splice(Number(button.dataset.removeField), 1);
+    syncFormDefinition();
+    renderFormBuilder();
+  });
+  target.elements.definition.addEventListener('change', () => {
+    try {
+      const definition = JSON.parse(target.elements.definition.value);
+      if (!definition || typeof definition !== 'object' || !Array.isArray(definition.fields)) throw new Error('INVALID_DEFINITION');
+      state.formFields = definition.fields.filter((field) => field && typeof field === 'object' && !Array.isArray(field)).map((field) => ({ ...field }));
+      renderFormBuilder();
+    } catch {
+      const status = $('#forms-status');
+      if (status) { status.textContent = 'JSON inválido: informe um objeto com a lista fields.'; status.dataset.tone = 'error'; }
+    }
+  });
+  resetFormTemplateForm();
+}
+
+function syncFormDefinition() {
+  const input = $('#form-template-form')?.elements.definition;
+  if (!input) return;
+  let existing = {};
+  try { existing = JSON.parse(input.value); } catch { /* Preserve invalid JSON until explicitly corrected. */ }
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) existing = {};
+  input.value = JSON.stringify({ ...existing, _editor: 'visual-v1', fields: state.formFields }, null, 2);
+}
+
+function handleFormBuilderChange(event) {
+  const control = event.target.closest('[data-field-index][data-field-property]');
+  if (!control) return;
+  const field = state.formFields[Number(control.dataset.fieldIndex)];
+  if (!field) return;
+  const key = control.dataset.fieldProperty;
+  field[key] = key === 'required' ? control.checked : key === 'options' ? control.value.split(',').map((value) => value.trim()).filter(Boolean) : control.value;
+  if (field.type !== 'select') delete field.options;
+  if (field.type === 'select' && !Array.isArray(field.options)) field.options = [];
+  syncFormDefinition();
+  renderFormPreview();
+  if (event.type === 'change' && key === 'type') renderFormBuilder();
+}
+
+function renderFormBuilder() {
+  const list = $('#form-builder-fields');
+  if (!list) return;
+  list.innerHTML = state.formFields.length ? state.formFields.map((field, index) => `<fieldset class="form-field-row"><legend>Campo ${index + 1}</legend><div class="field-pair"><label>Rótulo<input data-field-index="${index}" data-field-property="label" maxlength="120" value="${escapeHTML(field.label || '')}" /></label><label>Identificador<input data-field-index="${index}" data-field-property="name" maxlength="60" pattern="[a-z][a-z0-9_]*" value="${escapeHTML(field.name || '')}" /></label></div><div class="field-pair"><label>Tipo<select data-field-index="${index}" data-field-property="type">${Object.entries(formFieldTypes).map(([type, label]) => `<option value="${type}" ${field.type === type ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field-check"><input type="checkbox" data-field-index="${index}" data-field-property="required" ${field.required ? 'checked' : ''} /> Obrigatório</label></div>${field.type === 'select' ? `<label>Opções (separadas por vírgulas)<input data-field-index="${index}" data-field-property="options" value="${escapeHTML((field.options || []).join(', '))}" /></label>` : ''}<button type="button" class="outline-button" data-remove-field="${index}">Remover campo</button></fieldset>`).join('') : '<p class="team-help">Adicione os campos necessários. Você poderá ver a prévia antes de salvar.</p>';
+  renderFormPreview();
+}
+
+function renderFormPreview() {
+  const preview = $('#form-preview-fields');
+  if (!preview) return;
+  preview.replaceChildren();
+  for (const field of state.formFields) {
+    const label = document.createElement('label');
+    label.textContent = `${field.label || 'Campo sem rótulo'}${field.required ? ' *' : ''}`;
+    const type = Object.hasOwn(formFieldTypes, field.type) ? field.type : 'text';
+    const input = document.createElement(type === 'textarea' ? 'textarea' : type === 'select' ? 'select' : 'input');
+    if (type === 'select') {
+      for (const option of field.options || []) {
+        const node = document.createElement('option');
+        node.textContent = option;
+        input.append(node);
+      }
+    } else if (type !== 'textarea') {
+      input.type = type;
+    }
+    input.disabled = true;
+    label.append(input);
+    preview.append(label);
+  }
 }
 
 function renderFormTemplates() {
@@ -375,6 +630,10 @@ function renderFormTemplates() {
     state.editingFormId = item.id;
     for (const [key, value] of Object.entries({ slug: item.slug, title: item.title, description: item.description || '', definition: JSON.stringify(item.definition || {}, null, 2) })) formTemplate.elements[key].value = value;
     formTemplate.elements.active.checked = Boolean(item.active);
+    state.formFields = Array.isArray(item.definition?.fields)
+      ? item.definition.fields.filter((field) => field && typeof field === 'object' && !Array.isArray(field)).map((field) => ({ ...field }))
+      : [];
+    renderFormBuilder();
     $('#form-template-cancel').hidden = false;
     formTemplate.elements.title.focus();
   }));
@@ -405,9 +664,24 @@ async function saveFormTemplate(event) {
   event.preventDefault();
   const formTemplate = event.currentTarget;
   const status = $('#forms-status');
+  clearFieldErrors(formTemplate);
   const data = Object.fromEntries(new FormData(formTemplate));
   data.active = formTemplate.elements.active.checked;
-  try { data.definition = JSON.parse(String(data.definition || '')); } catch { if (status) { status.textContent = 'A definição precisa ser um JSON válido.'; status.dataset.tone = 'error'; } return; }
+  try { data.definition = JSON.parse(String(data.definition || '')); } catch { if (status) { status.textContent = 'A definição precisa ser um JSON válido.'; status.dataset.tone = 'error'; } $('.form-builder-advanced').open = true; fieldError(formTemplate, 'definition', 'Corrija o JSON antes de salvar.'); return; }
+  if (data.definition?._editor === 'visual-v1') {
+    const fields = data.definition.fields;
+    const seen = new Set();
+    const invalid = !Array.isArray(fields) || fields.length > 40 || fields.some((field) => {
+      if (!field || typeof field !== 'object' || !/^[a-z][a-z0-9_]{0,59}$/.test(String(field.name || '')) || !String(field.label || '').trim() || !Object.hasOwn(formFieldTypes, field.type) || seen.has(field.name)) return true;
+      seen.add(field.name);
+      return field.type === 'select' && (!Array.isArray(field.options) || !field.options.length || field.options.length > 20);
+    });
+    if (invalid) {
+      if (status) { status.textContent = 'Revise os campos: identificadores únicos, rótulos e opções das listas são obrigatórios.'; status.dataset.tone = 'error'; }
+      $('#form-builder')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+  }
   setFormPending(formTemplate, true, 'Salvando…');
   try {
     const url = state.editingFormId ? `/api/admin/forms/${state.editingFormId}` : '/api/admin/forms';
@@ -435,13 +709,14 @@ function renderProperties() {
   $('#side-count').textContent = summary.total;
   $('#property-search').value = query;
   $('#property-status-filter').value = statusFilter;
+  if ($('#property-availability-filter')) $('#property-availability-filter').value = state.propertyFilters.availability || '';
   $('#property-per-page').value = String(state.propertyFilters.per_page);
   $('#property-list').innerHTML = items.length ? items.map((item) => {
     const canEdit = item.can_edit === true;
     const action = canEdit
       ? `<button class="row-action" data-edit="${item.id}" type="button" aria-label="Editar ${escapeHTML(item.title)}">Editar <span>↗</span></button>`
       : '<span class="row-locked" title="Somente Gestor pode alterar imóvel publicado ou arquivado">Somente Gestor</span>';
-    return `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span>${action}</article>`;
+    return `<article class="property-row"><div class="property-identity"><div class="property-thumb">${item.cover_url ? `<img src="${escapeHTML(item.cover_url)}" alt="" />` : '<span>⌂</span>'}</div><div><strong>${escapeHTML(item.title)}</strong><small>${escapeHTML(item.location)} · ${escapeHTML(item.type)}</small><small class="commercial-note">${escapeHTML(commercialLabels[item.availability] || 'Disponível')}</small></div></div><span class="status-pill ${item.status}"><i></i>${item.status === 'published' ? 'Publicado' : item.status === 'archived' ? 'Arquivado' : 'Rascunho'}</span><span class="updated-date">${formatDate(item.updated_at)}</span>${action}</article>`;
   }).join('') : (summary.total > 0 && (query || statusFilter)
     ? '<div class="empty-properties"><span>⌕</span><h4>Nenhum resultado.</h4><p>Tente outro termo ou status.</p></div>'
     : summary.total > 0
@@ -461,6 +736,7 @@ function fillForm(property = {}) {
   for (const [key, value] of Object.entries({ title: property.title || '', location: property.location || '', neighborhood: property.neighborhood || '', city: property.city || 'Belo Horizonte', purpose: property.purpose || 'Comprar', type: property.type || 'Apartamento', price: property.price || '', priceLabel: property.price_label || '', bedrooms: property.bedrooms ?? 2, bathrooms: property.bathrooms ?? 2, areaM2: property.area_m2 ?? 80, suites: property.suites ?? 0, parkingSpots: property.parking_spots ?? 0, condoFee: property.condo_fee ?? 0, iptu: property.iptu ?? 0, description: property.description || '' })) { if (form.elements[key]) form.elements[key].value = value; }
   form.elements.published.checked = property.status !== 'draft' && property.status !== 'archived';
   form.elements.featured.checked = Boolean(property.is_featured);
+  if (form.elements.availability) form.elements.availability.value = property.availability || 'available';
 }
 function renderPhotos(photos = []) { $('#photo-grid').innerHTML = photos.length ? photos.map((photo, index) => `<div class="photo-tile${photo.is_cover ? ' is-cover' : ''}"><img src="${escapeHTML(photo.url)}" alt="${escapeHTML(photo.alt_text)}" /><span>${photo.is_cover ? 'capa' : String(index + 1).padStart(2, '0')}</span><div class="photo-tile-actions"><button data-photo-cover="${photo.id}" type="button" aria-label="Definir como capa" title="Definir como capa">★</button><button data-photo-up="${photo.id}" type="button" aria-label="Mover para cima" ${index === 0 ? 'disabled' : ''}>↑</button><button data-photo-down="${photo.id}" type="button" aria-label="Mover para baixo" ${index === photos.length - 1 ? 'disabled' : ''}>↓</button><button data-photo-remove="${photo.id}" type="button" aria-label="Remover foto">×</button></div></div>`).join('') : '<div class="photo-empty"><span>＋</span><p>Adicione fotos para<br />dar vida ao imóvel.</p></div>'; document.querySelectorAll('[data-photo-remove]').forEach((button) => button.addEventListener('click', () => removePhoto(button.dataset.photoRemove))); document.querySelectorAll('[data-photo-cover]').forEach((button) => button.addEventListener('click', () => makeCover(button.dataset.photoCover))); document.querySelectorAll('[data-photo-up]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoUp, -1))); document.querySelectorAll('[data-photo-down]').forEach((button) => button.addEventListener('click', () => movePhoto(button.dataset.photoDown, 1))); }
 
@@ -570,6 +846,7 @@ function openEditor(property = null) {
   $('#dialog-title').textContent = property ? 'Editar imóvel' : 'Novo imóvel';
   fillForm(property || {});
   renderEditorPhotos();
+  clearFieldErrors(form);
   $('#editor-status').textContent = '';
   const archiveButton = $('#archive-property');
   if (archiveButton) archiveButton.hidden = !isManager || !property || property.status === 'archived';
@@ -591,6 +868,18 @@ function openEditor(property = null) {
 async function saveProperty(event) {
   if (event.submitter?.value === 'cancel') return;
   event.preventDefault();
+
+  clearFieldErrors(form);
+  const title = form.elements.title.value.trim();
+  if (!title) { fieldError(form, 'title', 'Informe o título do imóvel.'); return; }
+  if (!form.elements.location.value.trim()) { fieldError(form, 'location', 'Informe a localização do imóvel.'); return; }
+  if (!form.elements.city.value.trim()) { fieldError(form, 'city', 'Informe a cidade.'); return; }
+  const purpose = form.elements.purpose.value;
+  const availability = form.elements.availability?.value || 'available';
+  if ((availability === 'sold' && purpose !== 'Comprar') || (availability === 'rented' && purpose !== 'Alugar')) {
+    fieldError(form, 'availability', 'Situação comercial incompatível com a finalidade do anúncio.');
+    return;
+  }
 
   const button = $('#save-property');
   setButtonPending(button, true, 'Salvando…');
@@ -653,6 +942,9 @@ async function saveProperty(event) {
               ? 'Revise os campos obrigatórios e tente novamente.'
               : 'Não foi possível salvar. Confira os dados e tente novamente.';
       toast(message, 'error');
+      if (error.message === 'COVER_REQUIRED') $('#photo-upload-trigger')?.focus();
+      else if (error.message === 'INVALID_PROPERTY_NUMBER') fieldError(form, 'price', 'Confira preço, área e demais valores numéricos.');
+      else if (error.message === 'INVALID_PROPERTY' || error.message === 'VALIDATION_FAILED') fieldError(form, 'title', 'Confira os campos obrigatórios e os dados informados.');
     }
   } finally {
     setButtonPending(button, false);
@@ -1003,12 +1295,22 @@ function teamNotify(message, tone = 'success') {
 function renderTeam() {
   const list = $('#team-list');
   if (!list) return;
+  const stale = state.team.filter((member) => member.active && member.last_login_at && new Date(member.last_login_at) < new Date(Date.now() - 90 * 86400000));
+  const managers = state.team.filter((member) => member.active && member.role === 'manager');
+  let review = $('#team-access-review');
+  if (!review) {
+    review = document.createElement('div');
+    review.id = 'team-access-review';
+    review.className = 'team-access-review';
+    list.before(review);
+  }
+  review.textContent = `${managers.length} gestor(es) ativo(s) · ${state.team.filter((member) => member.active).length} acessos ativos · ${stale.length} sem login há mais de 90 dias. Revise periodicamente quem realmente precisa de cada permissão; nenhum acesso será removido automaticamente.`;
   list.innerHTML = state.team.length ? state.team.map((member) => {
     const isSelf = Boolean(member.is_self);
     const isBootstrap = Boolean(member.is_bootstrap);
     const roleLabel = member.role === 'manager' ? 'Gestor' : 'Corretor / Editor';
     return `<article class="team-row${member.active ? '' : ' is-inactive'}">
-      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a></div></div>
+      <div class="team-person"><span class="team-avatar">${escapeHTML((member.name || member.email || '?').charAt(0).toUpperCase())}</span><div><strong>${escapeHTML(member.name)}</strong><a href="mailto:${escapeHTML(member.email)}">${escapeHTML(member.email)}</a><small>Último login: ${member.last_login_at ? formatDate(member.last_login_at) : 'não registrado'}</small></div></div>
       <div class="team-permission"><span class="role-pill ${member.role}">${roleLabel}</span>${!member.active ? '<small>Acesso pausado</small>' : ''}${isSelf ? '<small>você</small>' : ''}${isBootstrap ? '<small>principal</small>' : ''}</div>
       <div class="team-actions">
         ${!isSelf && !isBootstrap ? `<button type="button" data-team-role="${escapeHTML(member.email)}" data-next-role="${member.role === 'manager' ? 'editor' : 'manager'}">${member.role === 'manager' ? 'Tornar editor' : 'Tornar gestor'}</button><button type="button" data-team-active="${escapeHTML(member.email)}" data-next-active="${member.active ? 'false' : 'true'}">${member.active ? 'Pausar acesso' : 'Reativar'}</button><button class="danger" type="button" data-team-remove="${escapeHTML(member.email)}">Remover</button>` : ''}
@@ -1352,6 +1654,88 @@ function renderLeads() {
   }));
 }
 
+function openAttentionLead(id) {
+  if (!id || !/^[a-f0-9-]{36}$/i.test(id)) return;
+  window.history.pushState(null, '', '#leads-view');
+  switchView('leads-view');
+  void loadLeadDetail(id).then(() => $('#lead-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+
+function renderAttention() {
+  const attention = state.attention;
+  if (!attention) return;
+  const counts = $('#attention-counts');
+  const agenda = $('#attention-agenda');
+  const metrics = $('#attention-metrics');
+  if (counts) counts.innerHTML = `<span class="${attention.overdue ? 'attention-urgent' : ''}">${Number(attention.overdue || 0)} atrasados</span><span>${Number(attention.today || 0)} para hoje</span><span>${Number(attention.nextSevenDays || 0)} próximos 7 dias</span>`;
+  if (agenda) {
+    const items = attention.appointments || [];
+    agenda.innerHTML = items.length ? items.map((lead) => `<article><div><strong>${escapeHTML(lead.name)}</strong><small>${escapeHTML(lead.interest)} · ${localDay(lead.followUpDate)}${lead.assignedTo ? ` · ${escapeHTML(lead.assignedTo)}` : ''}</small></div><button class="outline-button" type="button" data-attention-lead="${escapeHTML(lead.id)}">Atender</button></article>`).join('') : '<p>Sem retornos pendentes nos próximos sete dias.</p>';
+    agenda.querySelectorAll('[data-attention-lead]').forEach((button) => button.addEventListener('click', () => openAttentionLead(button.dataset.attentionLead)));
+  }
+  if (metrics) {
+    const data = attention.metrics || {};
+    metrics.innerHTML = `<article><span>Contatos recebidos</span><strong>${Number(data.totalLast30Days || 0)}</strong></article><article><span>Fechados</span><strong>${Number(data.closedLast30Days || 0)}</strong></article><article><span>Taxa de fechamento</span><strong>${data.conversionPercent === null ? '—' : `${Number(data.conversionPercent).toLocaleString('pt-BR')}%`}</strong></article><article><span>Primeira resposta registrada</span><strong>${data.averageFirstResponseMinutes === null ? '—' : `${Number(data.averageFirstResponseMinutes).toLocaleString('pt-BR')} min`}</strong><small>${Number(data.responsesMeasured || 0)} atendimento(s) medidos</small></article>`;
+  }
+  if ($('#metric-leads-new')) $('#metric-leads-new').textContent = String(Number(attention.newCount || 0)).padStart(2, '0');
+}
+
+function renderNotifications() {
+  const count = $('#notification-count');
+  if (count) {
+    count.textContent = String(state.notificationUnread);
+    $('#notification-toggle')?.setAttribute('aria-label', `Avisos do painel: ${state.notificationUnread} não lidos`);
+  }
+  const list = $('#notification-list');
+  if (!list) return;
+  list.innerHTML = state.notifications.length ? state.notifications.map((item) => `<article class="notification-item${item.readAt ? '' : ' is-unread'}"><div><strong>${item.kind === 'new_lead' ? 'Novo contato recebido' : 'Retorno de atendimento pendente'}</strong><small>${formatDate(item.createdAt)}</small></div><div><button type="button" class="outline-button" data-notification-open="${escapeHTML(item.id)}">Abrir</button>${!item.readAt ? `<button type="button" class="outline-button" data-notification-read="${escapeHTML(item.id)}">Marcar lido</button>` : ''}</div></article>`).join('') : '<p class="team-help">Nenhum aviso por enquanto.</p>';
+  list.querySelectorAll('[data-notification-open]').forEach((button) => button.addEventListener('click', async () => {
+    const notification = state.notifications.find((item) => item.id === button.dataset.notificationOpen);
+    if (!notification) return;
+    if (!notification.readAt) await markNotificationRead(notification.id);
+    $('#notification-center').hidden = true;
+    $('#notification-toggle').setAttribute('aria-expanded', 'false');
+    openAttentionLead(notification.leadId);
+  }));
+  list.querySelectorAll('[data-notification-read]').forEach((button) => button.addEventListener('click', () => { void markNotificationRead(button.dataset.notificationRead); }));
+}
+
+async function markNotificationRead(id) {
+  try {
+    await request(`/api/admin/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
+    await loadNotifications();
+  } catch {
+    const list = $('#notification-list');
+    if (list) list.insertAdjacentHTML('afterbegin', '<p role="alert">Não foi possível marcar o aviso como lido.</p>');
+  }
+}
+
+async function loadNotifications() {
+  const result = await request('/api/admin/notifications');
+  if (!state.user) return;
+  state.notifications = Array.isArray(result.items) ? result.items : [];
+  state.notificationUnread = Number(result.unread || 0);
+  renderNotifications();
+}
+
+async function loadAttention() {
+  if (!state.user || attentionLoading) return;
+  attentionLoading = true;
+  try {
+    const attention = await request('/api/admin/attention');
+    if (!state.user) return;
+    state.attention = attention;
+    renderAttention();
+    try { await loadNotifications(); } catch { /* Keep agenda usable if only the inbox request failed. */ }
+  } catch (error) {
+    if (error?.message === 'AUTH_REQUIRED') return;
+    const agenda = $('#attention-agenda');
+    if (agenda && !state.attention) agenda.innerHTML = '<p role="alert">Não foi possível carregar a agenda. Use Atualizar para tentar novamente.</p>';
+  } finally {
+    attentionLoading = false;
+  }
+}
+
 async function loadLeadDetail(id) {
   const detail = $('#lead-detail');
   if (!detail) return;
@@ -1506,7 +1890,11 @@ async function init() {
     state.user = session.user;
     showDashboard();
     switchView(viewFromHash());
-    await Promise.all([loadProperties(), loadLeads()]);
+    await Promise.all([loadProperties(), loadLeads(), loadAttention()]);
+    clearInterval(attentionTimer);
+    attentionTimer = window.setInterval(() => {
+      if (state.user && !document.hidden) void loadAttention();
+    }, 60000);
   } catch (error) {
     if (error.message !== 'AUTH_REQUIRED') showLogin();
   }

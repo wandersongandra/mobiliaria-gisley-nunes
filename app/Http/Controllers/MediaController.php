@@ -32,7 +32,9 @@ class MediaController extends Controller
 
         return response()->file($this->storage->path($key), [
             'Content-Type' => $mime,
-            'Cache-Control' => 'public, max-age=31536000, immutable',
+            // A disponibilidade comercial pode mudar sem alterar a URL da foto.
+            // URLs imutáveis por um ano impediriam a retirada efetiva do anúncio.
+            'Cache-Control' => 'public, max-age=300, must-revalidate',
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }

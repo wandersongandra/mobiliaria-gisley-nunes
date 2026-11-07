@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\AdminRequestContext;
 use App\Services\AdminAccessService;
 use App\Services\CriticalAuditService;
 use App\Services\CrmService;
+use App\Services\PanelNotificationService;
 use App\Support\Clock;
 use App\Support\Tokens;
 use Illuminate\Http\JsonResponse;
@@ -153,6 +154,31 @@ class AdminCrmController extends Controller
 
         return response()->json(['assignees' => $this->crm->listLeadAssignees()])
             ->header('Cache-Control', 'no-store');
+    }
+
+    public function attention(Request $request): JsonResponse
+    {
+        $this->access->requireCurrent($request);
+
+        return response()->json($this->crm->leadAttention())->header('Cache-Control', 'no-store');
+    }
+
+    public function notifications(Request $request, PanelNotificationService $notifications): JsonResponse
+    {
+        $admin = $this->access->requireCurrent($request);
+
+        return response()->json($notifications->inbox((string) $admin['email']))->header('Cache-Control', 'no-store');
+    }
+
+    public function readNotification(Request $request, string $id, PanelNotificationService $notifications): JsonResponse
+    {
+        $this->assertId($id);
+        $admin = $this->access->requireCurrent($request);
+        if (! $notifications->markRead((string) $admin['email'], $id)) {
+            return response()->json(['error' => 'NOT_FOUND'], 404);
+        }
+
+        return response()->json(['ok' => true])->header('Cache-Control', 'no-store');
     }
 
     public function exportLeads(Request $request): StreamedResponse

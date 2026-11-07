@@ -41,3 +41,7 @@ Schedule::command('gisley:anonymize-expired-leads')
 Schedule::command('gisley:security-monitor --fail-on-alert')
     ->hourlyAt(15)
     ->withoutOverlapping();
+
+Schedule::command('gisley:crm-reminders')
+    ->dailyAt('08:00')
+    ->withoutOverlapping();

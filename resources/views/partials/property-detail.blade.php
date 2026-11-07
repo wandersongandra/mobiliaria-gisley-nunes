@@ -42,7 +42,7 @@
     @endif
   </div>
   <div class="property-summary">
-    <div class="property-summary-topline"><span>{{ $property['purpose'] }}</span><span>{{ $property['type'] }}</span></div>
+    <div class="property-summary-topline"><span>{{ $property['purpose'] }}</span><span>{{ $property['type'] }}</span>@if(($property['availability'] ?? 'available') === 'reserved')<span>Reservado</span>@endif</div>
     <h1>{{ $property['title'] }}</h1>
     <p class="property-location">{{ $property['location'] }}</p>
     <strong class="property-price">{{ $property['price_label'] }}</strong>

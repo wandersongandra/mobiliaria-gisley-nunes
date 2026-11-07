@@ -6,6 +6,7 @@ use App\Services\AdminAccessService;
 use App\Services\AdminIdentityService;
 use App\Services\CriticalAuditService;
 use App\Services\CrmService;
+use App\Services\PanelNotificationService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,7 @@ class AuditIntegrityTest extends TestCase
             'area' => 'Antes',
             'updated_at' => now(),
         ]);
-        $crm = new class extends CrmService
+        $crm = new class(app(PanelNotificationService::class)) extends CrmService
         {
             public function recordAudit(array $admin, string $action, string $entityType, ?string $entityId = null, ?array $details = null): void
             {
@@ -55,7 +56,7 @@ class AuditIntegrityTest extends TestCase
 
     public function test_critical_mutation_derives_created_entity_id_and_details_after_mutation(): void
     {
-        $crm = new class extends CrmService
+        $crm = new class(app(PanelNotificationService::class)) extends CrmService
         {
             public ?string $entityId = null;
 

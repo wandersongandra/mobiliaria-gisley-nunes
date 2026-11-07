@@ -13,6 +13,8 @@ use RuntimeException;
 
 class CrmService
 {
+    public function __construct(private readonly PanelNotificationService $notifications) {}
+
     public const LEAD_STATUSES = ['new', 'em_contato', 'fechado', 'perdido'];
 
     public const LEAD_ACTIVITY_TYPES = ['note', 'call', 'email', 'whatsapp', 'meeting'];
@@ -179,18 +181,21 @@ class CrmService
         }
 
         $id = (string) Str::uuid();
-        DB::table('morada_contact_leads')->insert([
-            'id' => $id,
-            'name' => $this->text($input['name'] ?? '', 120, true, 'INVALID_CONTACT'),
-            'email' => $this->email($input['email'] ?? '', 'INVALID_CONTACT'),
-            'phone' => $phone !== '' ? $phone : null,
-            'interest' => $interest,
-            'message' => $this->text($input['message'] ?? '', 3000, true, 'INVALID_CONTACT'),
-            'property_path' => $propertyPath !== '' ? $propertyPath : null,
-            'status' => 'new',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::transaction(function () use ($id, $input, $phone, $interest, $propertyPath): void {
+            DB::table('morada_contact_leads')->insert([
+                'id' => $id,
+                'name' => $this->text($input['name'] ?? '', 120, true, 'INVALID_CONTACT'),
+                'email' => $this->email($input['email'] ?? '', 'INVALID_CONTACT'),
+                'phone' => $phone !== '' ? $phone : null,
+                'interest' => $interest,
+                'message' => $this->text($input['message'] ?? '', 3000, true, 'INVALID_CONTACT'),
+                'property_path' => $propertyPath !== '' ? $propertyPath : null,
+                'status' => 'new',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->notifications->newLead($id);
+        });
 
         return $id;
     }
@@ -232,6 +237,68 @@ class CrmService
         }
 
         return $summary;
+    }
+
+    /** @return array<string, mixed> */
+    public function leadAttention(): array
+    {
+        $today = now()->toDateString();
+        $week = now()->addDays(7)->toDateString();
+        $pending = DB::table('morada_contact_leads')
+            ->whereNotNull('follow_up_date')
+            ->whereNotIn('status', ['fechado', 'perdido', 'closed', 'lost']);
+
+        $appointments = (clone $pending)
+            ->where('follow_up_date', '<=', $week)
+            ->orderBy('follow_up_date')
+            ->orderBy('created_at')
+            ->limit(30)
+            ->get(['id', 'name', 'interest', 'status', 'assigned_to_email', 'follow_up_date'])
+            ->map(fn ($lead): array => [
+                'id' => (string) $lead->id,
+                'name' => (string) $lead->name,
+                'interest' => (string) $lead->interest,
+                'status' => (string) $lead->status,
+                'assignedTo' => $lead->assigned_to_email,
+                'followUpDate' => $lead->follow_up_date,
+            ])->all();
+
+        $windowStart = now()->subDays(30);
+        $recent = DB::table('morada_contact_leads')
+            ->where('created_at', '>=', $windowStart)
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw("SUM(CASE WHEN status IN ('fechado', 'closed') THEN 1 ELSE 0 END) AS won")
+            ->first();
+        $total = (int) ($recent->total ?? 0);
+        $won = (int) ($recent->won ?? 0);
+
+        // Only explicitly logged human contact (not status changes or notes) qualifies as a first response.
+        $responses = DB::table('morada_contact_leads as lead')
+            ->join('morada_lead_activities as activity', 'activity.lead_id', '=', 'lead.id')
+            ->where('lead.created_at', '>=', $windowStart)
+            ->whereIn('activity.type', ['call', 'email', 'whatsapp', 'meeting'])
+            ->select('lead.created_at')
+            ->selectRaw('MIN(activity.created_at) AS first_contact_at')
+            ->groupBy('lead.id', 'lead.created_at')
+            ->get();
+        $minutes = $responses->map(static fn ($row): int => (int) max(0,
+            Carbon::parse($row->created_at)->diffInMinutes(Carbon::parse($row->first_contact_at), false)
+        ));
+
+        return [
+            'newCount' => $this->countNewLeads(),
+            'overdue' => (clone $pending)->where('follow_up_date', '<', $today)->count(),
+            'today' => (clone $pending)->where('follow_up_date', '=', $today)->count(),
+            'nextSevenDays' => (clone $pending)->where('follow_up_date', '>', $today)->where('follow_up_date', '<=', $week)->count(),
+            'appointments' => $appointments,
+            'metrics' => [
+                'totalLast30Days' => $total,
+                'closedLast30Days' => $won,
+                'conversionPercent' => $total > 0 ? round(100 * $won / $total, 1) : null,
+                'averageFirstResponseMinutes' => $minutes->isEmpty() ? null : (int) round($minutes->avg()),
+                'responsesMeasured' => $minutes->count(),
+            ],
+        ];
     }
 
     /** @return list<array{name: string, email: string}> */
@@ -659,9 +726,11 @@ class CrmService
 
     public function listStaff(): array
     {
-        return DB::table('morada_staff_access')
-            ->orderByDesc('active')
-            ->orderBy('name')
+        return DB::table('morada_staff_access as staff')
+            ->leftJoin('morada_admin_users as admin_identity', 'admin_identity.open_id', '=', 'staff.open_id')
+            ->select('staff.*', 'admin_identity.last_login_at')
+            ->orderByDesc('staff.active')
+            ->orderBy('staff.name')
             ->get()
             ->map(fn ($row) => (array) $row)
             ->all();
@@ -757,6 +826,45 @@ class CrmService
         if (! is_array($definition)) {
             throw new RuntimeException('INVALID_FORM_TEMPLATE');
         }
+        // Existing JSON-only templates are opaque data. Enforce the structured
+        // contract only for templates authored by the new visual editor.
+        if (($definition['_editor'] ?? null) === 'visual-v1') {
+            if (! is_array($definition['fields'] ?? null) || ! array_is_list($definition['fields']) || count($definition['fields']) > 40) {
+                throw new RuntimeException('INVALID_FORM_TEMPLATE');
+            }
+            $names = [];
+            foreach ($definition['fields'] as $field) {
+                if (! is_array($field)
+                    || ! is_string($field['name'] ?? null)
+                    || preg_match('/^[a-z][a-z0-9_]{0,59}$/D', $field['name']) !== 1
+                    || ! in_array($field['type'] ?? null, ['text', 'email', 'tel', 'number', 'date', 'textarea', 'select', 'checkbox'], true)
+                    || ! is_string($field['label'] ?? null)
+                    || trim($field['label']) === ''
+                    || mb_strlen($field['label']) > 120
+                    || (isset($field['required']) && ! is_bool($field['required']))) {
+                    throw new RuntimeException('INVALID_FORM_TEMPLATE');
+                }
+                if (isset($names[$field['name']])) {
+                    throw new RuntimeException('INVALID_FORM_TEMPLATE');
+                }
+                $names[$field['name']] = true;
+                if (isset($field['options'])) {
+                    if ($field['type'] !== 'select' || ! is_array($field['options'])
+                        || ! array_is_list($field['options']) || count($field['options']) > 20
+                        || count($field['options']) === 0) {
+                        throw new RuntimeException('INVALID_FORM_TEMPLATE');
+                    }
+                    foreach ($field['options'] as $option) {
+                        if (! is_string($option) || trim($option) === '' || mb_strlen($option) > 80) {
+                            throw new RuntimeException('INVALID_FORM_TEMPLATE');
+                        }
+                    }
+                }
+                if ($field['type'] === 'select' && ! isset($field['options'])) {
+                    throw new RuntimeException('INVALID_FORM_TEMPLATE');
+                }
+            }
+        }
         $encoded = json_encode($definition, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         if (strlen($encoded) > 64 * 1024) {
             throw new RuntimeException('INVALID_FORM_TEMPLATE');
@@ -847,7 +955,15 @@ class CrmService
 
     public function removeStaff(string $email): bool
     {
-        return DB::table('morada_staff_access')->where('email', strtolower($email))->delete() > 0;
+        return DB::transaction(function () use ($email): bool {
+            $normalized = strtolower($email);
+            $removed = DB::table('morada_staff_access')->where('email', $normalized)->delete() > 0;
+            if ($removed) {
+                DB::table('morada_panel_notifications')->where('recipient_email', $normalized)->delete();
+            }
+
+            return $removed;
+        });
     }
 
     public function createInvitation(array $data): void
@@ -1090,6 +1206,7 @@ class CrmService
             'active' => (bool) ($member['active'] ?? false),
             'is_self' => $openId !== '' && $openId === (string) ($actor['openId'] ?? ''),
             'is_bootstrap' => $access->isBootstrapIdentity($openId, (string) ($member['email'] ?? '')),
+            'last_login_at' => $member['last_login_at'] ?? null,
         ];
     }
 

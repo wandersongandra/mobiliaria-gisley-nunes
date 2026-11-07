@@ -5,7 +5,7 @@
     @else
       <span class="listing-image-placeholder" aria-hidden="true">GN</span>
     @endif
-    <span class="listing-tag">{{ $property['is_featured'] ? 'destaque' : strtolower($property['purpose']) }}</span>
+    <span class="listing-tag">{{ ($property['availability'] ?? 'available') === 'reserved' ? 'reservado' : ($property['is_featured'] ? 'destaque' : strtolower($property['purpose'])) }}</span>
     <span class="listing-arrow" aria-hidden="true">↗</span>
     <span class="listing-image-shade" aria-hidden="true"></span>
   </a>

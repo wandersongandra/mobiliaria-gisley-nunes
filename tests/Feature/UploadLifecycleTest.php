@@ -412,13 +412,21 @@ class UploadLifecycleTest extends TestCase
 
             $this->get('/media/'.$storagePath)
                 ->assertOk()
-                ->assertHeader('Content-Type', 'image/jpeg');
+                ->assertHeader('Content-Type', 'image/jpeg')
+                ->assertHeader('Cache-Control', 'max-age=300, must-revalidate, public');
 
             $this->withSession($session)
                 ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
                 ->get('/api/admin/photos/'.$photoId.'/media')
                 ->assertOk()
                 ->assertHeader('Content-Type', 'image/jpeg');
+
+            DB::table('morada_properties')->where('id', $propertyId)->update(['availability' => 'sold']);
+            $this->get('/media/'.$storagePath)->assertNotFound();
+            $this->withSession($session)
+                ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])
+                ->get('/api/admin/photos/'.$photoId.'/media')
+                ->assertOk();
         } finally {
             File::deleteDirectory($root);
         }

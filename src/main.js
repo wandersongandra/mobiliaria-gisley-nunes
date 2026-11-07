@@ -54,7 +54,7 @@ function normalizeProperty(item) {
       areaM2 > 0 ? `${areaM2} m²` : null
     ].filter(Boolean),
     image: String(item.cover_url ?? item.coverUrl ?? ''),
-    tag: item.is_featured ? 'destaque' : String(item.purpose || 'Comprar').toLowerCase()
+    tag: item.availability === 'reserved' ? 'reservado' : item.is_featured ? 'destaque' : String(item.purpose || 'Comprar').toLowerCase()
   };
 }
 
@@ -614,7 +614,7 @@ function renderPropertyDetail(property) {
     <section class="property-hero">
       <div class="property-gallery">${gallery}</div>
       <div class="property-summary">
-        <div class="property-summary-topline"><span>${escapeHTML(property.purpose)}</span><span>${escapeHTML(property.type)}</span></div>
+        <div class="property-summary-topline"><span>${escapeHTML(property.purpose)}</span><span>${escapeHTML(property.type)}</span>${property.availability === 'reserved' ? '<span>Reservado</span>' : ''}</div>
         <h1>${escapeHTML(property.title)}</h1>
         <p class="property-location">${escapeHTML(property.location)}</p>
         <strong class="property-price">${escapeHTML(property.price_label)}</strong>

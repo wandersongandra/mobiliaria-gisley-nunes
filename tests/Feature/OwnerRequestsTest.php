@@ -132,6 +132,24 @@ class OwnerRequestsTest extends TestCase
             ->assertJsonPath('form.definition.fields.0.name', 'nome');
     }
 
+    public function test_form_builder_rejects_duplicate_or_unsupported_field_definitions(): void
+    {
+        $manager = $this->createAdminSession('manager');
+        $headers = ['Origin' => 'https://test.local', 'Host' => 'test.local'];
+        foreach ([
+            [['name' => 'nome', 'type' => 'text'], ['name' => 'nome', 'type' => 'email']],
+            [['name' => 'script', 'type' => 'html']],
+            [['name' => 'choices', 'type' => 'select', 'options' => ['']]],
+        ] as $fields) {
+            $this->withSession($manager)->withHeaders($headers)
+                ->postJson('/api/admin/forms', [
+                    'slug' => 'teste-modelo', 'title' => 'Teste Modelo',
+                    'definition' => ['_editor' => 'visual-v1', 'fields' => $fields],
+                ])->assertStatus(400)->assertJsonPath('error', 'INVALID_FORM_TEMPLATE');
+        }
+        $this->assertDatabaseCount('morada_form_templates', 0);
+    }
+
     private function propertyInput(string $title): array
     {
         return [

@@ -2,10 +2,13 @@
 
 namespace App\Console\Commands;
 
+use App\Mail\OperationsNotice;
 use App\Support\Clock;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class MonitorSecurityOperations extends Command
 {
@@ -51,6 +54,7 @@ class MonitorSecurityOperations extends Command
 
         $configured = config('gisley.security.monitor', []);
         $alerts = 0;
+        $alertMetrics = [];
         foreach ($metrics as $metric => $value) {
             $limit = in_array($metric, ['inactive_staff_sessions', 'invalid_staff_roles'], true)
                 ? 0
@@ -60,6 +64,7 @@ class MonitorSecurityOperations extends Command
 
             if ($exceeded) {
                 $alerts++;
+                $alertMetrics[] = sprintf('%s=%d (limite=%d)', $metric, $value, $limit);
                 // Aggregate counts only: never log client data, session IDs or emails.
                 Log::warning('security.monitor.threshold_exceeded', [
                     'metric' => $metric,
@@ -71,6 +76,35 @@ class MonitorSecurityOperations extends Command
 
         $this->line(sprintf('Security monitor: %d alert(s) in the current check.', $alerts));
 
+        if ($alerts > 0) {
+            $this->notifyByEmail($alertMetrics);
+        }
+
         return $alerts > 0 && $this->option('fail-on-alert') ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** @param list<string> $metrics */
+    private function notifyByEmail(array $metrics): void
+    {
+        $recipient = (string) config('gisley.security.alert_email', '');
+        if (! filter_var($recipient, FILTER_VALIDATE_EMAIL) || config('mail.default') !== 'smtp') {
+            return;
+        }
+
+        $key = 'gisley-security-monitor:'.now()->format('Y-m-d-H');
+        if (! Cache::add($key, 1, now()->addHours(2))) {
+            return;
+        }
+
+        try {
+            Mail::to($recipient)->send(new OperationsNotice(
+                'Gisley Nunes — alerta operacional',
+                "O monitor de segurança detectou indicadores acima do limite:\n".implode("\n", $metrics)."\nVerifique os logs protegidos do servidor.",
+            ));
+        } catch (\Throwable $error) {
+            Cache::forget($key);
+            Log::error('security.monitor.email_failed', ['exception' => $error::class]);
+            $this->warn('Could not deliver security monitor email.');
+        }
     }
 }
