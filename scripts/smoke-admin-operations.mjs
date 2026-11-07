@@ -63,6 +63,8 @@ if (process.argv.includes('--serve-fixtures')) {
 const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 const temporaryProfile = await mkdtemp(join(tmpdir(), 'gisley-admin-smoke-'));
 let chromium;
+let chromiumExit;
+let chromiumStderr = '';
 let ws;
 let nextId = 1;
 const requests = new Map();
@@ -72,16 +74,19 @@ try {
   const port = server.address().port;
   chromium = spawn(process.env.CHROMIUM_BIN || '/usr/bin/chromium', [
     '--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
+    '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
     '--remote-debugging-port=0', `--user-data-dir=${temporaryProfile}`,
     `http://127.0.0.1:${port}/admin/`,
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  chromium.once('exit', (code, signal) => { chromiumExit = `${code ?? 'null'}/${signal ?? 'none'}`; });
+  chromium.stderr.on('data', (chunk) => { chromiumStderr = (chromiumStderr + String(chunk)).slice(-1200); });
 
   let debugPort;
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     try { debugPort = Number((await readFile(join(temporaryProfile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); break; }
     catch { await delay(50); }
   }
-  assert.ok(debugPort, 'Chromium DevTools did not start');
+  assert.ok(debugPort, `Chromium DevTools did not start (exit=${chromiumExit ?? 'running'}, ${chromiumStderr.trim().slice(-600)})`);
   let target;
   for (let attempt = 0; attempt < 80; attempt++) {
     const tabs = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((r) => r.json());
