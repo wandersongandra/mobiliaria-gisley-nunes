@@ -413,7 +413,7 @@ class UploadLifecycleTest extends TestCase
             $this->get('/media/'.$storagePath)
                 ->assertOk()
                 ->assertHeader('Content-Type', 'image/jpeg')
-                ->assertHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+                ->assertHeader('Cache-Control', 'max-age=300, must-revalidate, public');
 
             $this->withSession($session)
                 ->withHeaders(['Origin' => 'https://test.local', 'Host' => 'test.local'])

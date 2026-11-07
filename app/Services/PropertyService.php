@@ -424,7 +424,7 @@ class PropertyService
                 throw new RuntimeException('CAPABILITY_REQUIRED');
             }
 
-            $effectiveAvailability = (string) ($data['availability'] ?? $existing?->availability ?? 'available');
+            $effectiveAvailability = (string) ($data['availability'] ?? ($existing !== null ? $existing->availability : 'available'));
             if (($effectiveAvailability === 'sold' && $data['purpose'] !== 'Comprar')
                 || ($effectiveAvailability === 'rented' && $data['purpose'] !== 'Alugar')) {
                 throw new RuntimeException('INVALID_PROPERTY');

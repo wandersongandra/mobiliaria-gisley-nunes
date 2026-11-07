@@ -132,8 +132,13 @@ class PropertyManagementTest extends TestCase
         DB::table('morada_property_photos')->insert([
             'id' => (string) Str::uuid(),
             'property_id' => $property['id'],
-            'storage_path' => 'test/media/completed-property.jpg',
-            'url' => '/media/test/media/completed-property.jpg',
+            'storage_provider' => 'local',
+            'storage_path' => 'gisley/properties/test/completed-property.jpg',
+            'url' => '/media/gisley/properties/test/completed-property.jpg',
+            'mime_type' => 'image/jpeg',
+            'file_size' => 1024,
+            'width' => 100,
+            'height' => 100,
             'alt_text' => 'Foto ilustrativa',
             'is_cover' => true,
             'created_at' => now(),
@@ -141,10 +146,10 @@ class PropertyManagementTest extends TestCase
         DB::table('morada_properties')->where('id', $property['id'])->update([
             'status' => 'published', 'availability' => 'available',
         ]);
-        $this->assertNotNull($service->findPublishedPhotoByStoragePath('test/media/completed-property.jpg'));
+        $this->assertNotNull($service->findPublishedPhotoByStoragePath('gisley/properties/test/completed-property.jpg'));
 
         DB::table('morada_properties')->where('id', $property['id'])->update(['availability' => 'sold']);
-        $this->assertNull($service->findPublishedPhotoByStoragePath('test/media/completed-property.jpg'));
+        $this->assertNull($service->findPublishedPhotoByStoragePath('gisley/properties/test/completed-property.jpg'));
     }
 
     private function createProperty(string $title, string $status): void
