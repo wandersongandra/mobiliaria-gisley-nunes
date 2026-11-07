@@ -93,6 +93,8 @@ class LeadManagementTest extends TestCase
             ->patchJson('/api/admin/notifications/'.$id.'/read')->assertNotFound();
         $this->withSession($manager)->withHeader('Origin', 'https://test.local')
             ->patchJson('/api/admin/notifications/'.$id.'/read')->assertOk();
+        $this->withSession($manager)->withHeader('Origin', 'https://test.local')
+            ->patchJson('/api/admin/notifications/'.$id.'/read')->assertOk();
         $this->withSession($manager)->getJson('/api/admin/notifications')->assertJsonPath('unread', 0);
 
         $this->withSession($manager)->getJson('/api/admin/attention')

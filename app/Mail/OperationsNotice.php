@@ -2,13 +2,16 @@
 
 namespace App\Mail;
 
+use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
-use Illuminate\Mail\Mailable;
 
 class OperationsNotice extends Mailable
 {
-    public function __construct(public string $heading, public string $messageText) {}
+    public function __construct(
+        public string $heading,
+        public string $messageText,
+    ) {}
 
     public function envelope(): Envelope
     {

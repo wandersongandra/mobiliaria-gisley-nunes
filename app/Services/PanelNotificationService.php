@@ -70,10 +70,15 @@ class PanelNotificationService
 
     public function markRead(string $email, string $id): bool
     {
-        return DB::table('morada_panel_notifications')
+        $query = DB::table('morada_panel_notifications')
             ->where('recipient_email', strtolower($email))
-            ->where('id', $id)
-            ->update(['read_at' => now()]) > 0;
+            ->where('id', $id);
+
+        if ((clone $query)->whereNull('read_at')->update(['read_at' => now()]) > 0) {
+            return true;
+        }
+
+        return $query->exists();
     }
 
     private function insert(string $email, string $leadId, string $kind, string $reference): int

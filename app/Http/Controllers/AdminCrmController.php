@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\AdminRequestContext;
 use App\Services\AdminAccessService;
 use App\Services\CriticalAuditService;
 use App\Services\CrmService;
+use App\Services\PanelNotificationService;
 use App\Support\Clock;
 use App\Support\Tokens;
 use Illuminate\Http\JsonResponse;
@@ -162,14 +163,14 @@ class AdminCrmController extends Controller
         return response()->json($this->crm->leadAttention())->header('Cache-Control', 'no-store');
     }
 
-    public function notifications(Request $request, \App\Services\PanelNotificationService $notifications): JsonResponse
+    public function notifications(Request $request, PanelNotificationService $notifications): JsonResponse
     {
         $admin = $this->access->requireCurrent($request);
 
         return response()->json($notifications->inbox((string) $admin['email']))->header('Cache-Control', 'no-store');
     }
 
-    public function readNotification(Request $request, string $id, \App\Services\PanelNotificationService $notifications): JsonResponse
+    public function readNotification(Request $request, string $id, PanelNotificationService $notifications): JsonResponse
     {
         $this->assertId($id);
         $admin = $this->access->requireCurrent($request);
