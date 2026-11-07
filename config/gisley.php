@@ -28,11 +28,15 @@ return [
     ],
 
     'security' => [
+        'alert_email' => env('GISELY_SECURITY_ALERT_EMAIL', ''),
         'monitor' => [
             'logins_per_hour' => (int) env('GISELY_SECURITY_LOGIN_ALERT_THRESHOLD', 20),
             'exports_per_hour' => (int) env('GISELY_SECURITY_EXPORT_ALERT_THRESHOLD', 5),
             'destructive_per_hour' => (int) env('GISELY_SECURITY_DESTRUCTIVE_ALERT_THRESHOLD', 5),
             'team_changes_per_hour' => (int) env('GISELY_SECURITY_TEAM_ALERT_THRESHOLD', 3),
         ],
+    ],
+    'crm' => [
+        'alert_email' => env('GISELY_CRM_ALERT_EMAIL', ''),
     ],
 ];

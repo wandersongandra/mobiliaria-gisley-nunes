@@ -28,6 +28,8 @@ class PropertyService
 
     private const STATUSES = ['draft', 'published', 'archived'];
 
+    public const AVAILABILITIES = ['available', 'reserved', 'sold', 'rented'];
+
     private const PURPOSES = ['Comprar', 'Alugar'];
 
     private const TYPES = ['Casa', 'Apartamento', 'Cobertura', 'Terreno', 'Comercial', 'Lote'];
@@ -60,6 +62,7 @@ class PropertyService
 
         if ($publicOnly) {
             $query->where('p.status', 'published')
+                ->whereIn('p.availability', ['available', 'reserved'])
                 ->orderByDesc('p.is_featured')
                 ->orderByDesc('p.updated_at');
         } else {
@@ -78,6 +81,7 @@ class PropertyService
                 $join->on('ph.property_id', '=', 'p.id')->where('ph.is_cover', '=', 1);
             })
             ->where('p.status', 'published')
+            ->whereIn('p.availability', ['available', 'reserved'])
             ->select('p.*', DB::raw("COALESCE(ph.url, '') AS cover_url"));
 
         if (isset($filters['purpose'])) {
@@ -130,6 +134,7 @@ class PropertyService
             fn (): array => [
                 'locations' => DB::table('morada_properties')
                     ->where('status', 'published')
+                    ->whereIn('availability', ['available', 'reserved'])
                     ->selectRaw("COALESCE(NULLIF(neighborhood, ''), location) AS facet_location")
                     ->distinct()
                     ->orderBy('facet_location')
@@ -141,6 +146,7 @@ class PropertyService
                     ->all(),
                 'types' => DB::table('morada_properties')
                     ->where('status', 'published')
+                    ->whereIn('availability', ['available', 'reserved'])
                     ->distinct()
                     ->orderBy('type')
                     ->pluck('type')
@@ -160,6 +166,10 @@ class PropertyService
 
         if (isset($filters['status'])) {
             $query->where('p.status', $filters['status']);
+        }
+
+        if (isset($filters['availability'])) {
+            $query->where('p.availability', $filters['availability']);
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {
@@ -191,9 +201,11 @@ class PropertyService
     {
         $counts = DB::table('morada_properties')
             ->selectRaw('COUNT(*) AS total')
-            ->selectRaw("SUM(CASE WHEN status <> 'archived' THEN 1 ELSE 0 END) AS active")
-            ->selectRaw("SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) AS published")
+            ->selectRaw("SUM(CASE WHEN status <> 'archived' AND availability IN ('available', 'reserved') THEN 1 ELSE 0 END) AS active")
+            ->selectRaw("SUM(CASE WHEN status = 'published' AND availability IN ('available', 'reserved') THEN 1 ELSE 0 END) AS published")
             ->selectRaw("SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft")
+            ->selectRaw("SUM(CASE WHEN availability = 'reserved' AND status <> 'archived' THEN 1 ELSE 0 END) AS reserved")
+            ->selectRaw("SUM(CASE WHEN availability IN ('sold', 'rented') AND status <> 'archived' THEN 1 ELSE 0 END) AS completed")
             ->first();
 
         return [
@@ -201,6 +213,8 @@ class PropertyService
             'active' => (int) ($counts->active ?? 0),
             'published' => (int) ($counts->published ?? 0),
             'draft' => (int) ($counts->draft ?? 0),
+            'reserved' => (int) ($counts->reserved ?? 0),
+            'completed' => (int) ($counts->completed ?? 0),
         ];
     }
 
@@ -235,6 +249,7 @@ class PropertyService
             ->select('p.*', DB::raw("COALESCE(ph.url, '') AS cover_url"))
             ->where('p.slug', $slug)
             ->where('p.status', 'published')
+            ->whereIn('p.availability', ['available', 'reserved'])
             ->first();
 
         if (! $row) {
@@ -298,13 +313,14 @@ class PropertyService
             'title', 'slug', 'location', 'neighborhood', 'city', 'purpose', 'type', 'price', 'priceLabel',
             'bedrooms', 'bathrooms', 'areaM2', 'suites', 'parkingSpots', 'condoFee', 'iptu',
             'description', 'status', 'featured',
+            'availability',
         ];
 
         if (array_diff(array_keys($input), $allowed)) {
             throw new RuntimeException('INVALID_PROPERTY');
         }
 
-        foreach (['purpose', 'type', 'status', 'slug'] as $field) {
+        foreach (['purpose', 'type', 'status', 'slug', 'availability'] as $field) {
             if (array_key_exists($field, $input) && ! is_string($input[$field])) {
                 throw new RuntimeException('INVALID_PROPERTY');
             }
@@ -324,10 +340,14 @@ class PropertyService
         $purpose = (string) ($input['purpose'] ?? 'Comprar');
         $type = (string) ($input['type'] ?? 'Apartamento');
         $status = (string) ($input['status'] ?? 'draft');
+        $availability = (string) ($input['availability'] ?? 'available');
 
         if (! in_array($purpose, self::PURPOSES, true)
             || ! in_array($type, self::TYPES, true)
-            || ! in_array($status, self::STATUSES, true)) {
+            || ! in_array($status, self::STATUSES, true)
+            || ! in_array($availability, self::AVAILABILITIES, true)
+            || ($availability === 'sold' && $purpose !== 'Comprar')
+            || ($availability === 'rented' && $purpose !== 'Alugar')) {
             throw new RuntimeException('INVALID_PROPERTY');
         }
 
@@ -364,6 +384,7 @@ class PropertyService
             'iptu' => $this->number($input['iptu'] ?? 0, 9999999999.99),
             'description' => $this->text($input['description'] ?? '', 6000, false),
             'status' => $status,
+            'availability' => $availability,
             'is_featured' => $this->boolean($input['featured'] ?? false) ? 1 : 0,
         ];
 
@@ -378,6 +399,11 @@ class PropertyService
     public function saveProperty(array $input, ?string $id = null, bool $requireDraft = false, ?string $createdByOpenId = null): array
     {
         $data = $this->normalizeInput($input);
+
+        // Older administrative clients must never reset a commercial decision.
+        if ($id !== null && ! array_key_exists('availability', $input)) {
+            unset($data['availability']);
+        }
 
         if ($requireDraft && ($data['status'] !== 'draft' || $data['is_featured'] === 1)) {
             throw new RuntimeException('CAPABILITY_REQUIRED');
@@ -396,6 +422,12 @@ class PropertyService
 
             if ($requireDraft && $existing && (string) $existing->status !== 'draft') {
                 throw new RuntimeException('CAPABILITY_REQUIRED');
+            }
+
+            $effectiveAvailability = (string) ($data['availability'] ?? $existing?->availability ?? 'available');
+            if (($effectiveAvailability === 'sold' && $data['purpose'] !== 'Comprar')
+                || ($effectiveAvailability === 'rented' && $data['purpose'] !== 'Alugar')) {
+                throw new RuntimeException('INVALID_PROPERTY');
             }
 
             if ($data['status'] === 'published'
@@ -654,6 +686,7 @@ class PropertyService
             ->join('morada_properties as p', 'p.id', '=', 'ph.property_id')
             ->where('ph.storage_path', $path)
             ->where('p.status', 'published')
+            ->whereIn('p.availability', ['available', 'reserved'])
             ->select('ph.*')
             ->first();
 
@@ -707,6 +740,7 @@ class PropertyService
             'iptu' => (float) ($row['iptu'] ?? 0),
             'description' => (string) ($row['description'] ?? ''),
             'is_featured' => (bool) ($row['is_featured'] ?? false),
+            'availability' => (string) ($row['availability'] ?? 'available'),
             'cover_url' => $this->safeMediaUrl($row['cover_url'] ?? ''),
             'updated_at' => $row['updated_at'] ?? null,
             'photos' => array_map(fn (array $photo, int $index): array => [
@@ -773,6 +807,7 @@ class PropertyService
             'iptu' => (float) ($row['iptu'] ?? 0),
             'description' => (string) ($row['description'] ?? ''),
             'status' => (string) ($row['status'] ?? 'draft'),
+            'availability' => (string) ($row['availability'] ?? 'available'),
             'is_featured' => (bool) ($row['is_featured'] ?? false),
             'cover_url' => $cover['url'] ?? '',
             'created_at' => $row['created_at'] ?? null,

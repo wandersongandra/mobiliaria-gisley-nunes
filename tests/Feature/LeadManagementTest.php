@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Mail\OperationsNotice;
+use App\Services\CrmService;
 use App\Support\Clock;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Tests\Concerns\CreatesAdminIdentity;
 use Tests\TestCase;
@@ -56,6 +59,69 @@ class LeadManagementTest extends TestCase
             ->assertOk()
             ->assertJsonCount(0, 'leads')
             ->assertJsonPath('pagination.current_page', 3);
+    }
+
+    public function test_new_lead_notifications_and_follow_up_reminders_respect_recipient_and_dedupe(): void
+    {
+        $manager = $this->createAdminSession('manager');
+        $editor = $this->createAdminSession('editor');
+        $managerEmail = (string) DB::table('morada_staff_access')->where('open_id', $manager['admin_open_id'])->value('email');
+        $editorEmail = (string) DB::table('morada_staff_access')->where('open_id', $editor['admin_open_id'])->value('email');
+        $leadId = app(CrmService::class)->createContactLead([
+            'name' => 'Interessado Teste', 'email' => 'interessado@example.test',
+            'interest' => 'Quero comprar um imóvel', 'message' => 'Gostaria de conhecer o imóvel.',
+        ]);
+
+        $this->withSession($manager)->getJson('/api/admin/notifications')
+            ->assertOk()->assertJsonPath('unread', 1)->assertJsonPath('items.0.kind', 'new_lead');
+        $this->withSession($editor)->getJson('/api/admin/notifications')
+            ->assertOk()->assertJsonPath('unread', 0);
+
+        $this->withSession($manager)->withHeader('Origin', 'https://test.local')
+            ->patchJson('/api/admin/leads/'.$leadId, [
+                'assigned_to_email' => $editorEmail, 'follow_up_date' => now()->subDay()->toDateString(),
+            ])->assertOk();
+
+        $this->artisan('gisley:crm-reminders')->assertSuccessful();
+        $this->artisan('gisley:crm-reminders')->assertSuccessful();
+        $this->withSession($editor)->getJson('/api/admin/notifications')
+            ->assertOk()->assertJsonPath('unread', 1)->assertJsonPath('items.0.kind', 'follow_up');
+        $this->assertDatabaseCount('morada_panel_notifications', 2);
+
+        $id = (string) DB::table('morada_panel_notifications')->where('recipient_email', $managerEmail)->value('id');
+        $this->withSession($editor)->withHeader('Origin', 'https://test.local')
+            ->patchJson('/api/admin/notifications/'.$id.'/read')->assertNotFound();
+        $this->withSession($manager)->withHeader('Origin', 'https://test.local')
+            ->patchJson('/api/admin/notifications/'.$id.'/read')->assertOk();
+        $this->withSession($manager)->getJson('/api/admin/notifications')->assertJsonPath('unread', 0);
+
+        $this->withSession($manager)->getJson('/api/admin/attention')
+            ->assertOk()->assertJsonPath('overdue', 1)->assertJsonPath('appointments.0.id', $leadId);
+    }
+
+    public function test_daily_email_reminder_is_optional_sanitized_and_sent_once(): void
+    {
+        Mail::fake();
+        config(['mail.default' => 'smtp', 'gisley.crm.alert_email' => 'comercial@example.test']);
+        $this->createAdminSession('manager');
+        $leadId = $this->createLead([
+            'name' => 'Dado pessoal que não pode sair por email',
+            'email' => 'private-client@example.test',
+        ]);
+        DB::table('morada_contact_leads')->where('id', $leadId)->update([
+            'follow_up_date' => now()->subDay()->toDateString(),
+        ]);
+
+        $this->artisan('gisley:crm-reminders')->assertSuccessful();
+        $this->artisan('gisley:crm-reminders')->assertSuccessful();
+
+        Mail::assertSent(OperationsNotice::class, function (OperationsNotice $notice): bool {
+            return $notice->hasTo('comercial@example.test')
+                && str_contains($notice->messageText, 'retornos de atendimento')
+                && ! str_contains($notice->messageText, 'private-client@example.test')
+                && ! str_contains($notice->messageText, 'Dado pessoal');
+        });
+        Mail::assertSentCount(1);
     }
 
     public function test_status_and_date_filters_return_only_matching_leads(): void

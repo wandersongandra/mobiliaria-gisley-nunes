@@ -109,6 +109,18 @@ for (const line of tracked.split('\n')) {
   }));
 }
 
+if (process.argv.includes('--head-only')) {
+  if (findings.length) {
+    console.error('Potential secrets in HEAD (values redacted):');
+    for (const finding of findings) {
+      console.error(`- [${finding.scope}] ${finding.location} ${finding.type}: ${finding.preview}`);
+    }
+    process.exit(1);
+  }
+  console.log('Secret scan (HEAD only): PASS; full git history not scanned.');
+  process.exit(0);
+}
+
 const history = git([
   'log',
   '-p',

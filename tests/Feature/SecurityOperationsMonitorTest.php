@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Mail\OperationsNotice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -59,5 +61,33 @@ class SecurityOperationsMonitorTest extends TestCase
         $this->artisan('gisley:security-monitor', ['--fail-on-alert' => true])
             ->expectsOutputToContain('[OK] exports_per_hour=0 threshold=1')
             ->assertSuccessful();
+    }
+
+    public function test_monitor_can_send_aggregate_email_without_personal_information(): void
+    {
+        Mail::fake();
+        config([
+            'mail.default' => 'smtp',
+            'gisley.security.alert_email' => 'security@example.test',
+            'gisley.security.monitor.exports_per_hour' => 1,
+        ]);
+        foreach (range(1, 2) as $index) {
+            DB::table('morada_audit_log')->insert([
+                'id' => (string) Str::uuid(),
+                'actor_email' => 'private-'.$index.'@example.test',
+                'action' => 'lead.export',
+                'entity_type' => 'lead',
+                'created_at' => now(),
+            ]);
+        }
+
+        $this->artisan('gisley:security-monitor', ['--fail-on-alert' => true])->assertFailed();
+        $this->artisan('gisley:security-monitor', ['--fail-on-alert' => true])->assertFailed();
+        Mail::assertSent(OperationsNotice::class, function (OperationsNotice $notice): bool {
+            return $notice->hasTo('security@example.test')
+                && str_contains($notice->messageText, 'exports_per_hour=2')
+                && ! str_contains($notice->messageText, 'private-1@example.test');
+        });
+        Mail::assertSentCount(1);
     }
 }

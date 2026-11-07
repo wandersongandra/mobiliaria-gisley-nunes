@@ -72,6 +72,81 @@ class PropertyManagementTest extends TestCase
         $this->withSession($session)->getJson('/api/admin/properties?page=1001')->assertUnprocessable();
     }
 
+    public function test_commercial_availability_is_separate_from_publication_and_preserved_by_legacy_updates(): void
+    {
+        $session = $this->createAdminSession();
+        $property = app(PropertyService::class)->saveProperty([
+            'title' => 'Apartamento reservado',
+            'location' => 'Centro',
+            'purpose' => 'Comprar',
+            'type' => 'Apartamento',
+            'availability' => 'reserved',
+            'status' => 'draft',
+        ]);
+        $service = app(PropertyService::class);
+
+        $this->withSession($session)->getJson('/api/admin/properties?availability=reserved')
+            ->assertOk()->assertJsonCount(1, 'properties')
+            ->assertJsonPath('properties.0.availability', 'reserved');
+
+        $service->saveProperty([
+            'title' => 'Apartamento reservado atualizado',
+            'location' => 'Centro',
+            'purpose' => 'Comprar',
+            'type' => 'Apartamento',
+            'status' => 'draft',
+        ], $property['id']);
+
+        $this->assertSame('reserved', DB::table('morada_properties')->where('id', $property['id'])->value('availability'));
+
+        DB::table('morada_properties')->where('id', $property['id'])->update(['status' => 'published']);
+        $this->assertNotNull($service->getPropertyBySlug($property['slug']));
+
+        DB::table('morada_properties')->where('id', $property['id'])->update(['availability' => 'sold']);
+        $this->assertNull($service->getPropertyBySlug($property['slug']));
+        $this->assertSame(0, $service->paginatePublicProperties(1, 20)->total());
+        $this->assertSame(1, $service->propertySummary()['completed']);
+    }
+
+    public function test_commercial_status_cannot_conflict_with_property_purpose(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('INVALID_PROPERTY');
+        app(PropertyService::class)->saveProperty([
+            'title' => 'Finalidade incompatível',
+            'location' => 'Centro',
+            'purpose' => 'Comprar',
+            'type' => 'Apartamento',
+            'availability' => 'rented',
+            'status' => 'draft',
+        ]);
+    }
+
+    public function test_completed_property_photos_are_no_longer_publicly_resolvable(): void
+    {
+        $service = app(PropertyService::class);
+        $property = $service->saveProperty([
+            'title' => 'Imóvel negociado', 'location' => 'Centro',
+            'purpose' => 'Comprar', 'type' => 'Apartamento', 'status' => 'draft',
+        ]);
+        DB::table('morada_property_photos')->insert([
+            'id' => (string) Str::uuid(),
+            'property_id' => $property['id'],
+            'storage_path' => 'test/media/completed-property.jpg',
+            'url' => '/media/test/media/completed-property.jpg',
+            'alt_text' => 'Foto ilustrativa',
+            'is_cover' => true,
+            'created_at' => now(),
+        ]);
+        DB::table('morada_properties')->where('id', $property['id'])->update([
+            'status' => 'published', 'availability' => 'available',
+        ]);
+        $this->assertNotNull($service->findPublishedPhotoByStoragePath('test/media/completed-property.jpg'));
+
+        DB::table('morada_properties')->where('id', $property['id'])->update(['availability' => 'sold']);
+        $this->assertNull($service->findPublishedPhotoByStoragePath('test/media/completed-property.jpg'));
+    }
+
     private function createProperty(string $title, string $status): void
     {
         $property = app(PropertyService::class)->saveProperty([

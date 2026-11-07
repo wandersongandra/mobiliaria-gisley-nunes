@@ -139,6 +139,12 @@ Route::prefix('api/admin')
             ->middleware(['capability:lead.export', 'throttle:export']);
         Route::get('/leads', [AdminCrmController::class, 'leads'])
             ->middleware('capability:lead.read');
+        Route::get('/attention', [AdminCrmController::class, 'attention'])
+            ->middleware('capability:lead.read');
+        Route::get('/notifications', [AdminCrmController::class, 'notifications'])
+            ->middleware('capability:lead.read');
+        Route::patch('/notifications/{id}/read', [AdminCrmController::class, 'readNotification'])
+            ->middleware('capability:lead.read');
         Route::get('/leads/assignees', [AdminCrmController::class, 'leadAssignees'])
             ->middleware('capability:lead.assign');
         Route::patch('/leads/{id}', [AdminCrmController::class, 'updateLead'])
