@@ -21,6 +21,7 @@
 3. Executar `php artisan migrate --force`, `php artisan app:assert-migrations-current`, `php artisan app:production-check` e os testes PHP na mesma versão de PHP da HostGator.
 4. Confirmar login real Google de gestor e editor, leitura isolada dos avisos, nova mensagem de contato, lembrete agendado, gravação das situações comerciais e que imóveis vendidos/alugados não apareçam no site público.
 5. Confirmar visualmente desktop/tablet/mobile, com foco e mensagens de erro.
+   O fluxo de CI inclui um smoke de interação com Chromium e API simulada, sem tocar em dados reais; a revisão visual humana do staging continua obrigatória.
 6. Só então publicar/atualizar a versão de produção, executar smoke tests de páginas públicas e rotas administrativas, além de verificar o scheduler existente.
 
 ## Configuração de e-mail opcional
