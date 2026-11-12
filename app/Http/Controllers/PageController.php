@@ -240,8 +240,8 @@ class PageController extends Controller
     public function sobre(Request $request)
     {
         return view('sobre', $this->pageData(
-            'Sobre | Gisley Nunes Imóveis',
-            'Conheça a Gisley Nunes e sua forma de trabalhar com imóveis em Belo Horizonte e região.',
+            'Sobre a Gisley Nunes Imóveis em Belo Horizonte | Gisley Nunes',
+            'Conheça a Gisley Nunes Imóveis, o atendimento direto e a forma de trabalhar com compra, locação e anúncio de imóveis em Belo Horizonte e região.',
             '/sobre'
         ));
     }
@@ -249,8 +249,8 @@ class PageController extends Controller
     public function contato(Request $request)
     {
         return view('contato', $this->pageData(
-            'Contato | Gisley Nunes Imóveis',
-            'Fale com a Gisley Nunes por WhatsApp, e-mail ou formulário sobre comprar, alugar ou anunciar um imóvel.',
+            'Contato e atendimento imobiliário em Belo Horizonte | Gisley Nunes',
+            'Fale com a Gisley Nunes por WhatsApp, e-mail ou formulário para comprar, alugar ou anunciar um imóvel em Belo Horizonte e receber orientação sobre os próximos passos.',
             '/contato'
         ));
     }
@@ -280,7 +280,7 @@ class PageController extends Controller
         $property = $this->properties->publicProperty($row);
         $data = $this->pageData(
             $property['title'].' | Gisley Nunes Imóveis',
-            $property['description'] ?: 'Conheça '.$property['title'].' em '.$property['location'].'.',
+            $property['description'] ?: 'Conheça '.$property['title'].' em '.$property['location'].'. Veja as características do imóvel, o valor informado e as condições de atendimento com a Gisley Nunes Imóveis.',
             '/imoveis/'.$property['slug'],
             $property['cover_url'] ?: null,
             'article'
@@ -380,7 +380,7 @@ class PageController extends Controller
             'testimonials' => $this->crm->listTestimonials(),
             'page' => [
                 'title' => $title,
-                'description' => $description,
+                'description' => $this->seoDescription($description),
                 'canonical' => $this->origin().$path,
                 'ogImage' => $ogImage ?: $this->origin().'/images/gisley-nunes-imoveis-logo.jpeg',
                 'ogImageAlt' => $title,
@@ -393,6 +393,20 @@ class PageController extends Controller
             ]),
             'pageLd' => null,
         ];
+    }
+
+    private function seoDescription(string $description): string
+    {
+        $cleaned = trim((string) preg_replace('/\s+/u', ' ', $description));
+        if (mb_strlen($cleaned) >= 120) {
+            return $cleaned;
+        }
+
+        return Str::limit(
+            $cleaned.' Consulte os detalhes e fale com a Gisley Nunes Imóveis para confirmar disponibilidade e atendimento.',
+            158,
+            '...'
+        );
     }
 
     /**

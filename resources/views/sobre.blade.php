@@ -14,7 +14,7 @@
       </section>
 
       <section class="about-visual shell" aria-label="Arquitetura e estilo de vida em Belo Horizonte">
-        <div class="about-visual-image"><img src="https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=85" alt="Interior contemporâneo com luz natural" loading="lazy" decoding="async" /></div>
+        <div class="about-visual-image"><img src="https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1600&q=85" alt="Interior contemporâneo com luz natural" width="1600" height="1067" loading="lazy" decoding="async" /></div>
         <div class="about-visual-copy"><span>Como trabalhamos</span><p>Apresentamos as informações do imóvel para você comparar as opções e decidir.</p></div>
       </section>
 

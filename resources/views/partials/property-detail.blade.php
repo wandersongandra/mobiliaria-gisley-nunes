@@ -35,7 +35,7 @@
       @if(count($photos) > 1)
         <div class="gallery-thumbs" aria-label="Galeria de fotos">
           @foreach($photos as $index => $photo)
-            <button class="gallery-thumb{{ $index === $primaryIndex ? ' is-active' : '' }}" type="button" data-index="{{ $index }}" data-image="{{ $photo['url'] }}" data-alt="{{ $photo['alt_text'] ?: $property['title'] }}" aria-label="Ver foto {{ $index + 1 }} de {{ count($photos) }}" aria-pressed="{{ $index === $primaryIndex ? 'true' : 'false' }}"><img src="{{ $photo['url'] }}" alt="" loading="lazy" decoding="async" /><span>{{ str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) }}</span></button>
+            <button class="gallery-thumb{{ $index === $primaryIndex ? ' is-active' : '' }}" type="button" data-index="{{ $index }}" data-image="{{ $photo['url'] }}" data-alt="{{ $photo['alt_text'] ?: $property['title'] }}" aria-label="Ver foto {{ $index + 1 }} de {{ count($photos) }}" aria-pressed="{{ $index === $primaryIndex ? 'true' : 'false' }}"><img src="{{ $photo['url'] }}" alt="{{ $photo['alt_text'] ?: $property['title'].' — foto '.($index + 1) }}" width="1200" height="800" loading="lazy" decoding="async" /><span>{{ str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT) }}</span></button>
           @endforeach
         </div>
       @endif
@@ -59,7 +59,10 @@
 <a class="property-mobile-cta" href="#contato" aria-label="Demonstrar interesse por este imóvel"><span>Tenho interesse</span><span aria-hidden="true">↗</span></a>
 <section class="property-description">
   <div><p class="eyebrow">descrição</p><span class="property-description-index">01</span></div>
-  <p class="property-description-copy">{{ $property['description'] }}</p>
+  <div class="property-description-copy">
+    <p>{{ $property['description'] }}</p>
+    <p>Consulte nesta página as características, a área, o valor informado e as condições de atendimento. Para confirmar disponibilidade ou agendar uma visita, fale com a equipe da Gisley Nunes Imóveis.</p>
+  </div>
 </section>
 <dialog class="gallery-lightbox" data-gallery-lightbox aria-label="Galeria de {{ $property['title'] }}">
   <button class="gallery-lightbox-close" type="button" data-gallery-lightbox-close aria-label="Fechar galeria">×</button>

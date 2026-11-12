@@ -22,8 +22,8 @@ class PublicPageRenderTest extends TestCase
             'imoveis' => ['/imoveis', 'Imóveis para comprar ou alugar em Belo Horizonte | Gisley Nunes'],
             'servicos' => ['/servicos', 'Comprar, alugar ou anunciar imóveis | Gisley Nunes'],
             'bairros' => ['/bairros', 'Bairros com imóveis em Belo Horizonte | Gisley Nunes'],
-            'sobre' => ['/sobre', 'Sobre | Gisley Nunes Imóveis'],
-            'contato' => ['/contato', 'Contato | Gisley Nunes Imóveis'],
+            'sobre' => ['/sobre', 'Sobre a Gisley Nunes Imóveis em Belo Horizonte | Gisley Nunes'],
+            'contato' => ['/contato', 'Contato e atendimento imobiliário em Belo Horizonte | Gisley Nunes'],
             'privacidade' => ['/privacidade', 'Política de privacidade | Gisley Nunes Imóveis'],
         ];
     }
